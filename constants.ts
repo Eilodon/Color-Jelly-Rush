@@ -1,0 +1,141 @@
+import { Faction } from './types';
+
+// World Settings
+export const WORLD_WIDTH = 2500; 
+export const WORLD_HEIGHT = 2500;
+export const MAP_RADIUS = 1200; 
+export const INITIAL_ZONE_RADIUS = 1200;
+export const CENTER_RADIUS = 300; 
+export const GAME_DURATION = 480; 
+export const SPAWN_PROTECTION_TIME = 5;
+export const GRID_CELL_SIZE = 300; // Optimization: Spatial Grid Cell Size
+
+// Entity Settings
+export const PLAYER_START_RADIUS = 40; 
+
+// PHYSICS 4.0: NEURAL-LINK RESPONSIVENESS
+// High Acceleration + High Drag = Snappy Controls
+export const TURN_SPEED_BASE = 0.25; // Faster visual turning
+export const ACCELERATION_BASE = 2.0; // Explosion of speed (was 0.8)
+export const FRICTION_BASE = 0.88; // High grip (was 0.94) - Lower number means more drag
+export const MAX_SPEED_BASE = 9.0; // Higher top speed (was 7.0)
+
+export const FOOD_COUNT = 300; 
+export const BOT_COUNT = 24; 
+export const FOOD_RADIUS = 10;
+export const TRAIL_LENGTH = 12; // Shorter trail for cleaner look at high speeds
+
+// THE HOLY TRINITY RULES
+export const EAT_THRESHOLD_RATIO = 0.90; 
+export const DANGER_THRESHOLD_RATIO = 1.10; 
+
+// Mechanics
+export const EJECT_MASS_COST = 8;
+export const EJECT_SPEED = 18;
+export const SKILL_COOLDOWN_BASE = 8; 
+
+// Elemental Counters 
+export const ELEMENTAL_ADVANTAGE: Record<Faction, Faction> = {
+  [Faction.Metal]: Faction.Wood, 
+  [Faction.Wood]: Faction.Earth, 
+  [Faction.Earth]: Faction.Water, 
+  [Faction.Water]: Faction.Fire,  
+  [Faction.Fire]: Faction.Metal,  
+};
+
+// GDD Color Palette - EXACT HEX CODES & LORE
+export const FACTION_CONFIG = {
+  [Faction.Fire]: {
+    name: 'NHAM HỎA XÍCH CÁP', 
+    transformName: 'Cóc Đỏ → Nham Hỏa Xích Cáp',
+    color: '#ea580c', // Orange-600
+    secondary: '#fed7aa', // Orange-200
+    stroke: '#9a3412', // Orange-800
+    icon: '🐸',
+    desc: 'DOT Mage: Sát thương thiêu đốt, kiểm soát vùng.',
+    skillName: 'Nham Phún',
+    stats: { 
+      speed: 0.9,      // Slow
+      health: 1.1,     // Medium HP
+      damage: 1.2,     // High damage (burn)
+      defense: 1.0 
+    }
+  },
+  [Faction.Earth]: {
+    name: 'KIM CANG ĐỘC HẠT', 
+    transformName: 'Bò Cạp → Kim Cang Độc Hạt',
+    color: '#713f12', // Yellow-900 (Brownish)
+    secondary: '#fde047', // Yellow-300
+    stroke: '#422006',
+    icon: '🦂',
+    desc: 'Tank: Giáp siêu dày, phản sát thương.',
+    skillName: 'Đuôi Quật',
+    stats: { 
+      speed: 0.7,      // Slowest
+      health: 1.6,     // Highest HP
+      damage: 0.8,     // Low damage
+      defense: 1.5     // Highest defense
+    }
+  },
+  [Faction.Metal]: {
+    name: 'BẠO VŨ THIẾT PHONG', 
+    transformName: 'Ong Vàng → Bạo Vũ Thiết Phong',
+    color: '#e2e8f0', // Slate-200 (Silver)
+    secondary: '#3b82f6', // Blue-500
+    stroke: '#475569',
+    icon: '🐝', 
+    desc: 'Assassin: Sát thương chí mạng, áp sát nhanh.',
+    skillName: 'Liên Châm',
+    stats: { 
+      speed: 1.3,      // Fast
+      health: 0.8,     // Low HP (glass cannon)
+      damage: 1.4,     // Highest damage
+      defense: 0.7     // Low defense
+    }
+  },
+  [Faction.Wood]: {
+    name: 'THANH PHƯỢC YÊU XÀ', 
+    transformName: 'Rắn Lục → Thanh Phược Yêu Xà',
+    color: '#16a34a', // Green-600
+    secondary: '#86efac', // Green-300
+    stroke: '#14532d',
+    icon: '🐍',
+    desc: 'Sustain: Hồi máu, trói buộc, kháng phép.',
+    skillName: 'Quấn Siết',
+    stats: { 
+      speed: 1.0,      // Medium
+      health: 1.3,     // High HP
+      damage: 0.9,     // Medium damage
+      defense: 1.2     // Good defense
+    }
+  },
+  [Faction.Water]: {
+    name: 'HÀN BĂNG CỔ TẰM', 
+    transformName: 'Tằm Xanh → Hàn Băng Cổ Tằm',
+    color: '#0ea5e9', // Sky-500
+    secondary: '#e0f2fe', // Sky-100
+    stroke: '#0369a1',
+    icon: '🐛',
+    desc: 'Speed Demon: Tốc độ tối thượng, làm chậm diện rộng.',
+    skillName: 'Tơ Băng',
+    stats: { 
+      speed: 1.5,      // Fastest!
+      health: 0.75,    // Lowest HP
+      damage: 1.0,     // Medium damage
+      defense: 0.8     // Low defense
+    }
+  },
+};
+
+export const COLOR_PALETTE = {
+  background: '#020617', // Void color
+  grid: 'rgba(255,255,255,0.05)',
+  zone: 'rgba(20, 0, 20, 0.5)', 
+  zoneBorder: '#ef4444',
+  text: '#ffffff',
+  indicatorSafe: '#22c55e', 
+  indicatorDanger: '#ef4444', 
+  indicatorCombat: '#eab308', 
+  indicatorCounter: '#3b82f6', 
+  indicatorCountered: '#f97316', 
+};

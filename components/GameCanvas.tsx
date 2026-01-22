@@ -1,0 +1,826 @@
+import React, { useRef, useEffect } from 'react';
+import { GameState, Faction, Player, Bot, SizeTier } from '../types';
+import { COLOR_PALETTE, WORLD_WIDTH, WORLD_HEIGHT, MAP_RADIUS, EAT_THRESHOLD_RATIO, DANGER_THRESHOLD_RATIO, ELEMENTAL_ADVANTAGE, FACTION_CONFIG, CENTER_RADIUS } from '../constants';
+
+interface GameCanvasProps {
+  gameState: GameState;
+  onMouseMove: (x: number, y: number) => void;
+  onMouseDown: () => void;
+  onMouseUp: () => void;
+}
+
+const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouseDown, onMouseUp }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mapCacheRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const offscreen = document.createElement('canvas');
+    offscreen.width = WORLD_WIDTH;
+    offscreen.height = WORLD_HEIGHT;
+    const ctx = offscreen.getContext('2d');
+    
+    if (ctx) {
+        prerenderStaticMap(ctx);
+        mapCacheRef.current = offscreen;
+    }
+  }, []); 
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let frameCount = 0;
+
+    const render = () => {
+      frameCount++;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const { camera, player, food, bots, particles, projectiles, zoneRadius, floatingTexts, kingId, lavaZones } = gameState;
+      const width = canvas.width;
+      const height = canvas.height;
+
+      // Clear
+      ctx.fillStyle = COLOR_PALETTE.background;
+      ctx.fillRect(0, 0, width, height);
+
+      // A. Draw Cached Map
+      if (mapCacheRef.current) {
+          ctx.save();
+          const camOffsetX = -camera.x + width / 2;
+          const camOffsetY = -camera.y + height / 2;
+          ctx.translate(camOffsetX, camOffsetY);
+          
+          ctx.drawImage(mapCacheRef.current, 0, 0);
+
+          drawAbyss(ctx, frameCount);
+          
+          // Draw Lava Zones (On top of map, below entities)
+          if (lavaZones) {
+             lavaZones.forEach(zone => {
+                 ctx.save();
+                 ctx.globalAlpha = 0.5 + Math.sin(frameCount * 0.1) * 0.2;
+                 ctx.fillStyle = '#f97316';
+                 ctx.beginPath();
+                 ctx.arc(zone.position.x, zone.position.y, zone.radius, 0, Math.PI * 2);
+                 ctx.fill();
+                 
+                 ctx.strokeStyle = '#7c2d12';
+                 ctx.lineWidth = 3;
+                 ctx.beginPath();
+                 ctx.arc(zone.position.x, zone.position.y, zone.radius * (0.5 + Math.random()*0.5), 0, Math.PI*2);
+                 ctx.stroke();
+
+                 // Bubbles
+                 if (frameCount % 10 === 0 && Math.random() > 0.5) {
+                    ctx.fillStyle = '#fef08a';
+                    ctx.beginPath();
+                    ctx.arc(zone.position.x + (Math.random()-0.5)*zone.radius*1.5, zone.position.y + (Math.random()-0.5)*zone.radius*1.5, zone.radius * 0.1, 0, Math.PI*2);
+                    ctx.fill();
+                 }
+                 ctx.restore();
+             });
+          }
+
+          drawZone(ctx, zoneRadius);
+
+          ctx.restore();
+      }
+
+      // B. Draw Objects
+      ctx.save();
+      ctx.translate(-camera.x + width / 2, -camera.y + height / 2);
+
+      // 1. Food
+      const viewBuffer = 100;
+      food.forEach(f => {
+         if (f.position.x < camera.x - width/2 - viewBuffer || f.position.x > camera.x + width/2 + viewBuffer ||
+             f.position.y < camera.y - height/2 - viewBuffer || f.position.y > camera.y + height/2 + viewBuffer) return;
+
+         ctx.fillStyle = f.color;
+         ctx.beginPath();
+         ctx.arc(f.position.x, f.position.y, f.radius, 0, Math.PI * 2);
+         ctx.fill();
+         ctx.fillStyle = 'rgba(255,255,255,0.4)';
+         ctx.beginPath();
+         ctx.arc(f.position.x - f.radius*0.3, f.position.y - f.radius*0.3, f.radius*0.2, 0, Math.PI*2);
+         ctx.fill();
+      });
+
+      // 2. Trails
+      [player, ...bots].forEach(entity => {
+          if (entity.isDead || !entity.trail.length) return;
+          const config = FACTION_CONFIG[entity.faction];
+          ctx.beginPath();
+          ctx.strokeStyle = config.color;
+          ctx.globalAlpha = 0.2;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          entity.trail.forEach((pos, i) => {
+              const radius = entity.radius * (0.2 + (0.5 * (i / entity.trail.length)));
+              ctx.lineWidth = radius * 2;
+              if (i === 0) ctx.moveTo(pos.x, pos.y);
+              else ctx.lineTo(pos.x, pos.y);
+          });
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+      });
+
+      // 3. Projectiles
+      projectiles.forEach(p => {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.position.x, p.position.y, 10, 0, Math.PI*2);
+          ctx.fill();
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.arc(p.position.x, p.position.y, 16, 0, Math.PI*2);
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+      });
+
+      // 4. Entities
+      const entities = [player, ...bots].sort((a, b) => a.radius - b.radius);
+      entities.forEach(entity => {
+          if (entity.isDead) return;
+          if (entity.position.x < camera.x - width/2 - entity.radius*3 || entity.position.x > camera.x + width/2 + entity.radius*3 ||
+              entity.position.y < camera.y - height/2 - entity.radius*3 || entity.position.y > camera.y + height/2 + entity.radius*3) return;
+
+          drawEntity(
+            ctx, 
+            entity, 
+            entity.id === 'player', 
+            player.radius, player.faction, 
+            frameCount,
+            entity.id === kingId
+          );
+      });
+
+      // 5. Particles
+      particles.forEach(p => {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+      });
+      ctx.globalAlpha = 1.0;
+
+      // 6. Floating Texts (Damage Numbers)
+      ctx.font = 'bold 20px "Roboto", sans-serif';
+      ctx.textAlign = 'center';
+      floatingTexts.forEach(t => {
+          ctx.globalAlpha = Math.min(1, t.life * 2);
+          ctx.fillStyle = t.color;
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 2;
+          
+          const scale = 1 + (1 - t.life) * 0.5; // Slight grow effect
+          ctx.save();
+          ctx.translate(t.position.x, t.position.y);
+          ctx.scale(scale, scale);
+          ctx.strokeText(t.text, 0, 0);
+          ctx.fillText(t.text, 0, 0);
+          ctx.restore();
+      });
+      ctx.globalAlpha = 1.0;
+
+      ctx.restore(); 
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [gameState]);
+
+  // --- MAP GENERATION LOGIC ---
+
+  const prerenderStaticMap = (ctx: CanvasRenderingContext2D) => {
+      const cx = WORLD_WIDTH / 2;
+      const cy = WORLD_HEIGHT / 2;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, MAP_RADIUS, 0, Math.PI * 2);
+      ctx.clip(); 
+
+      const SECTOR = (Math.PI * 2) / 5;
+      const START_ANGLE = -Math.PI / 2 - (SECTOR / 2); 
+
+      const zones = [
+          { id: Faction.Wood, label: 'MỘC', base: '#064e3b', light: '#10b981' }, 
+          { id: Faction.Water, label: 'THỦY', base: '#1e3a8a', light: '#93c5fd' }, 
+          { id: Faction.Earth, label: 'THỔ', base: '#451a03', light: '#b45309' }, 
+          { id: Faction.Metal, label: 'KIM', base: '#1c1917', light: '#a8a29e' }, 
+          { id: Faction.Fire, label: 'HỎA', base: '#450a0a', light: '#ef4444' }, 
+      ];
+
+      zones.forEach((z, i) => {
+          const start = START_ANGLE + i * SECTOR;
+          const end = START_ANGLE + (i + 1) * SECTOR;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, MAP_RADIUS, start, end);
+          ctx.closePath();
+          ctx.clip(); 
+
+          ctx.fillStyle = z.base;
+          ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+          if (z.id === Faction.Wood) {
+               ctx.fillStyle = '#065f46';
+               for(let k=0; k<200; k++) {
+                   const x = Math.random() * WORLD_WIDTH;
+                   const y = Math.random() * WORLD_HEIGHT;
+                   ctx.beginPath(); ctx.arc(x, y, 15 + Math.random()*20, 0, Math.PI*2); ctx.fill();
+               }
+               ctx.strokeStyle = '#10b981';
+               ctx.lineWidth = 2;
+               ctx.globalAlpha = 0.3;
+               for(let k=0; k<50; k++) {
+                   ctx.beginPath();
+                   ctx.moveTo(Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT);
+                   ctx.bezierCurveTo(Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT, Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT, Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT);
+                   ctx.stroke();
+               }
+          } 
+          else if (z.id === Faction.Fire) {
+               ctx.strokeStyle = '#dc2626';
+               ctx.lineWidth = 3;
+               for(let k=0; k<80; k++) {
+                   const x = Math.random() * WORLD_WIDTH;
+                   const y = Math.random() * WORLD_HEIGHT;
+                   ctx.beginPath();
+                   ctx.moveTo(x, y);
+                   ctx.lineTo(x + Math.random()*60 - 30, y + Math.random()*60 - 30);
+                   ctx.stroke();
+               }
+               ctx.fillStyle = '#7f1d1d';
+               for(let k=0; k<50; k++) {
+                   ctx.beginPath(); ctx.arc(Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT, 40, 0, Math.PI*2); ctx.fill();
+               }
+          } 
+          else if (z.id === Faction.Water) {
+               ctx.fillStyle = '#3b82f6';
+               ctx.globalAlpha = 0.2;
+               for(let k=0; k<100; k++) {
+                   const x = Math.random() * WORLD_WIDTH;
+                   const y = Math.random() * WORLD_HEIGHT;
+                   ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+40, y+10); ctx.lineTo(x+20, y+50); ctx.fill();
+               }
+               ctx.fillStyle = 'white';
+               ctx.globalAlpha = 0.4;
+               for(let k=0; k<50; k++) {
+                   ctx.beginPath(); ctx.arc(Math.random()*WORLD_WIDTH, Math.random()*WORLD_HEIGHT, 2, 0, Math.PI*2); ctx.fill();
+               }
+          } 
+          else if (z.id === Faction.Metal) {
+               ctx.strokeStyle = '#57534e';
+               ctx.lineWidth = 4;
+               for(let k=0; k<150; k++) {
+                   const x = Math.random() * WORLD_WIDTH;
+                   const y = Math.random() * WORLD_HEIGHT;
+                   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y-40); ctx.stroke();
+                   ctx.fillStyle = '#78716c';
+                   ctx.fillRect(x-5, y-30, 10, 4);
+               }
+          } 
+          else if (z.id === Faction.Earth) {
+               ctx.fillStyle = '#78350f';
+               for(let k=0; k<100; k++) {
+                   const x = Math.random() * WORLD_WIDTH;
+                   const y = Math.random() * WORLD_HEIGHT;
+                   const s = 20 + Math.random() * 30;
+                   ctx.fillRect(x, y, s, s);
+               }
+          }
+
+          ctx.restore(); 
+
+          const midAngle = start + SECTOR / 2;
+          const textDist = MAP_RADIUS * 0.8;
+          const tx = cx + Math.cos(midAngle) * textDist;
+          const ty = cy + Math.sin(midAngle) * textDist;
+          ctx.fillStyle = 'rgba(255,255,255,0.2)';
+          ctx.font = '900 60px "Cinzel", serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(z.label, tx, ty);
+      });
+
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 20;
+      ctx.beginPath();
+      ctx.arc(cx, cy, MAP_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore(); 
+  };
+
+  const drawAbyss = (ctx: CanvasRenderingContext2D, frameCount: number) => {
+    const cx = WORLD_WIDTH / 2;
+    const cy = WORLD_HEIGHT / 2;
+    
+    const abyssGradient = ctx.createRadialGradient(cx, cy, 50, cx, cy, CENTER_RADIUS);
+    abyssGradient.addColorStop(0, '#000000');
+    abyssGradient.addColorStop(0.5, '#4c1d95'); 
+    abyssGradient.addColorStop(1, 'rgba(76, 29, 149, 0)');
+
+    ctx.fillStyle = abyssGradient;
+    ctx.beginPath();
+    ctx.arc(cx, cy, CENTER_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(frameCount * 0.005);
+    ctx.strokeStyle = 'rgba(167, 139, 250, 0.3)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([20, 15]);
+    ctx.beginPath();
+    ctx.arc(0, 0, CENTER_RADIUS * 0.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = 'bold 24px "Cinzel", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText("VỰC VẠN CỔ", cx, cy + 10);
+  };
+
+  const drawZone = (ctx: CanvasRenderingContext2D, radius: number) => {
+      const cx = WORLD_WIDTH / 2;
+      const cy = WORLD_HEIGHT / 2;
+      
+      ctx.fillStyle = COLOR_PALETTE.zone;
+      ctx.beginPath();
+      ctx.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT); 
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2, true); 
+      ctx.fill();
+
+      ctx.strokeStyle = COLOR_PALETTE.zoneBorder;
+      ctx.lineWidth = 6;
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+  };
+
+  // --- ENTITY VISUAL EVOLUTION LOGIC ---
+  const drawTransformation = (ctx: CanvasRenderingContext2D, entity: Player | Bot, layer: 'under' | 'over', frameCount: number) => {
+    const config = FACTION_CONFIG[entity.faction];
+    const r = entity.radius;
+
+    switch(entity.faction) {
+      case Faction.Metal: // Bạo Vũ Thiết Phong
+        if (layer === 'under') {
+            const wingFlap = Math.sin(frameCount * 0.2) * 0.2;
+            ctx.fillStyle = config.secondary;
+            
+            // Left Wing
+            ctx.save();
+            ctx.rotate(-0.2 + wingFlap); // Slight angle + animation
+            ctx.beginPath();
+            ctx.moveTo(-r * 0.5, 0);
+            ctx.quadraticCurveTo(-r * 1.8, -r * 0.8, -r * 2.2, -r * 0.2); // Wing tip
+            ctx.quadraticCurveTo(-r * 1.5, r * 0.2, -r * 0.5, 0);
+            ctx.fill();
+            // Mechanical Details
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+
+            // Right Wing (Mirror)
+            ctx.save();
+            ctx.scale(1, -1); // Mirror Y
+            ctx.rotate(-0.2 + wingFlap);
+            ctx.beginPath();
+            ctx.moveTo(-r * 0.5, 0);
+            ctx.quadraticCurveTo(-r * 1.8, -r * 0.8, -r * 2.2, -r * 0.2);
+            ctx.quadraticCurveTo(-r * 1.5, r * 0.2, -r * 0.5, 0);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+        break;
+        
+      case Faction.Wood: // Thanh Phược Yêu Xà
+        if (layer === 'under') {
+            // Draw undulating energy tails
+            ctx.strokeStyle = config.secondary; // Light green
+            ctx.lineWidth = r * 0.15;
+            ctx.lineCap = 'round';
+            const tailCount = 5;
+            
+            for(let i=0; i<tailCount; i++) {
+                const sway = Math.sin(frameCount * 0.1 + i) * 0.2;
+                const spread = (Math.PI / 3) * ((i - (tailCount-1)/2) / tailCount); // Fan out back
+                
+                ctx.save();
+                ctx.rotate(Math.PI + spread + sway); // Face backwards
+                
+                ctx.beginPath();
+                ctx.moveTo(r * 0.5, 0);
+                // Bezier curve for organic tail look
+                ctx.bezierCurveTo(r * 1.5, r * 0.5, r * 2.5, -r * 0.5, r * 3.5, 0);
+                
+                // Glow effect
+                ctx.shadowColor = config.color;
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.restore();
+            }
+        }
+        break;
+        
+      case Faction.Fire: // Nham Hỏa Xích Cáp
+        if (layer === 'over') {
+            // Magma Veins
+            ctx.strokeStyle = '#fbbf24'; // Hot yellow/orange
+            ctx.lineWidth = r * 0.08;
+            ctx.lineCap = 'round';
+            const pulse = 0.5 + Math.sin(frameCount * 0.1) * 0.5; // 0 to 1
+            ctx.globalAlpha = 0.6 + (pulse * 0.4);
+
+            const veins = 6;
+            for(let i=0; i<veins; i++) {
+                const angle = (Math.PI * 2 / veins) * i;
+                ctx.save();
+                ctx.rotate(angle);
+                ctx.beginPath();
+                ctx.moveTo(r * 0.2, 0);
+                ctx.lineTo(r * 0.5, r * 0.1);
+                ctx.lineTo(r * 0.7, -r * 0.1);
+                ctx.lineTo(r * 0.9, 0);
+                ctx.stroke();
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+        break;
+        
+      case Faction.Water: // Hàn Băng Cổ Tằm
+        if (layer === 'over') {
+            // Orbiting Ice Crystals
+            ctx.fillStyle = '#bae6fd';
+            const crystals = 5;
+            const orbitSpeed = frameCount * 0.03;
+            
+            for(let i=0; i<crystals; i++) {
+                const angle = (Math.PI * 2 / crystals) * i + orbitSpeed;
+                const dist = r * 1.3;
+                
+                ctx.save();
+                // We are in Local Entity Space.
+                // Translate to orbit position
+                ctx.translate(Math.cos(angle) * dist, Math.sin(angle) * dist);
+                // Rotate crystal to point outward
+                ctx.rotate(angle);
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -r * 0.15);
+                ctx.lineTo(r * 0.1, 0);
+                ctx.lineTo(0, r * 0.15);
+                ctx.lineTo(-r * 0.1, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Shine
+                ctx.fillStyle = 'white';
+                ctx.globalAlpha = 0.6;
+                ctx.beginPath();
+                ctx.arc(0, -r*0.05, r*0.02, 0, Math.PI*2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+                ctx.fillStyle = '#bae6fd'; // Reset
+                
+                ctx.restore();
+            }
+        }
+        break;
+        
+      case Faction.Earth: // Kim Cang Độc Hạt
+        if (layer === 'over') {
+            // Heavy Plated Armor
+            ctx.fillStyle = '#fde047';
+            ctx.strokeStyle = '#713f12';
+            ctx.lineWidth = 2;
+            const plates = 6;
+            
+            for(let i=0; i<plates; i++) {
+                const angle = (Math.PI * 2 / plates) * i;
+                ctx.save();
+                ctx.rotate(angle);
+                ctx.translate(r * 0.75, 0); // Move to edge
+                
+                // Draw Rectangular Plate
+                ctx.beginPath();
+                ctx.rect(-r*0.15, -r*0.15, r*0.3, r*0.3);
+                ctx.fill();
+                ctx.stroke();
+                
+                // Rivet
+                ctx.fillStyle = '#451a03';
+                ctx.beginPath();
+                ctx.arc(0, 0, r*0.03, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#fde047'; // Reset
+                
+                ctx.restore();
+            }
+        }
+        break;
+    }
+  };
+
+  const drawTierFeatures = (ctx: CanvasRenderingContext2D, entity: Player | Bot, type: 'elder', frameCount: number) => {
+      const r = entity.radius;
+      if (type === 'elder') {
+        // Draw Spikes / Horns
+        ctx.fillStyle = FACTION_CONFIG[entity.faction].stroke;
+        const spikeCount = 3;
+        
+        for(let i=0; i<spikeCount; i++) { 
+            // -1 to 1 spread
+            const spikeAngle = -0.8 + (i * 0.8); 
+            ctx.save();
+            ctx.rotate(spikeAngle);
+            
+            ctx.beginPath();
+            ctx.moveTo(r * 0.7, -r * 0.15);
+            ctx.lineTo(r * 1.25, 0); // Stick out further
+            ctx.lineTo(r * 0.7, r * 0.15);
+            ctx.fill();
+            
+            // Highlight on spike
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(r * 0.7, 0);
+            ctx.lineTo(r * 1.2, 0);
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+      }
+  };
+
+  const drawEntity = (
+      ctx: CanvasRenderingContext2D, 
+      entity: Player | Bot, 
+      isPlayer: boolean, 
+      playerR: number, playerFaction: Faction,
+      frameCount: number,
+      isKing: boolean
+  ) => {
+      const config = FACTION_CONFIG[entity.faction as Faction];
+      const r = entity.radius;
+      const x = entity.position.x;
+      const y = entity.position.y;
+
+      // --- 1. DETERMINE VISUAL TIER ---
+      let visualMultiplier = 1.0;
+      let glowColor = '';
+      let glowBlur = 0;
+      
+      switch(entity.tier) {
+        case SizeTier.Larva:       // 0-20%
+          visualMultiplier = 1.0;
+          break;
+        case SizeTier.Juvenile:    // 20-40%
+          visualMultiplier = 1.1;
+          glowColor = 'rgba(255,255,255,0.15)';
+          glowBlur = 10;
+          break;
+        case SizeTier.Adult:       // 40-60%
+          visualMultiplier = 1.15;
+          glowColor = 'rgba(100,200,255,0.25)';
+          glowBlur = 15;
+          break;
+        case SizeTier.Elder:       // 60-80%
+          visualMultiplier = 1.2;
+          glowColor = 'rgba(200,100,255,0.35)';
+          glowBlur = 20;
+          break;
+        case SizeTier.AncientKing: // 80-100%
+          visualMultiplier = 1.3;
+          glowColor = 'rgba(255,215,0,0.6)'; // Strong Gold aura
+          glowBlur = 30;
+          break;
+      }
+
+      // Poison indicator (Green Bubble)
+      if (entity.statusEffects.poisoned) {
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = '#84cc16';
+          ctx.beginPath();
+          ctx.arc(x, y, r * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+      }
+
+      // --- 2. DRAW GLOW (World Space) ---
+      if (glowColor) {
+        ctx.shadowBlur = glowBlur;
+        ctx.shadowColor = glowColor;
+        ctx.fillStyle = glowColor;
+        ctx.beginPath();
+        ctx.arc(x, y, r * visualMultiplier * 1.1, 0, Math.PI*2);
+        ctx.fill();
+        ctx.shadowBlur = 0; // Reset
+      }
+
+      // --- SETUP LOCAL COORDINATE SYSTEM ---
+      // Move to entity center and rotate to face velocity
+      const angle = Math.atan2(entity.velocity.y, entity.velocity.x);
+      ctx.save();
+      ctx.translate(x, y);
+      
+      // FIRE JUMP VISUAL (Scaling)
+      if (entity.statusEffects.airborne) {
+         const scale = 1.5 + Math.sin(frameCount * 0.2) * 0.2;
+         ctx.scale(scale, scale);
+         ctx.shadowColor = 'black';
+         ctx.shadowBlur = 30; // High elevation shadow
+      }
+
+      ctx.rotate(angle);
+      
+      // Optional: Squash and Stretch based on speed
+      const speed = Math.sqrt(entity.velocity.x**2 + entity.velocity.y**2);
+      const stretch = Math.min(1.15, 1 + speed * 0.005);
+      const squash = 1 / stretch;
+      ctx.scale(stretch, squash);
+
+      // --- 3. TRANSFORMATION UNDERLAY (Wings/Tails) ---
+      if (entity.tier === SizeTier.AncientKing) {
+          drawTransformation(ctx, entity, 'under', frameCount);
+      }
+
+      // --- 4. BODY RENDERING (Local Space 0,0) ---
+      
+      // Main Body
+      ctx.fillStyle = config.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r, r*0.9, 0, 0, Math.PI*2);
+      ctx.fill();
+      
+      // Faction Details
+      ctx.fillStyle = config.secondary;
+      if (entity.faction === Faction.Fire) {
+          ctx.beginPath(); ctx.arc(-r*0.4, -r*0.4, r*0.2, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(r*0.2, -r*0.6, r*0.15, 0, Math.PI*2); ctx.fill();
+      } else if (entity.faction === Faction.Metal) {
+          ctx.fillRect(-r*0.2, -r*0.8, r*0.2, r*1.6);
+          ctx.fillRect(-r*0.6, -r*0.7, r*0.2, r*1.4);
+      } else if (entity.faction === Faction.Water) {
+          ctx.strokeStyle = 'white';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(0, 0, r*0.6, 0, Math.PI); ctx.stroke();
+      }
+
+      // Eyes
+      const eyeX = r * 0.35;
+      const eyeY = r * 0.3;
+      const eyeSize = r * 0.28;
+
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.ellipse(eyeX, -eyeY, eyeSize, eyeSize*1.1, 0, 0, Math.PI*2); 
+      ctx.ellipse(eyeX, eyeY, eyeSize, eyeSize*1.1, 0, 0, Math.PI*2);  
+      ctx.fill();
+
+      // Pupils
+      ctx.fillStyle = config.stroke;
+      ctx.beginPath();
+      ctx.arc(eyeX + 2, -eyeY, eyeSize*0.6, 0, Math.PI*2);
+      ctx.arc(eyeX + 2, eyeY, eyeSize*0.6, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.arc(eyeX + 2, -eyeY, eyeSize*0.3, 0, Math.PI*2);
+      ctx.arc(eyeX + 2, eyeY, eyeSize*0.3, 0, Math.PI*2);
+      ctx.fill();
+      
+      // Eye Shine
+      ctx.fillStyle = 'white'; 
+      ctx.beginPath();
+      ctx.arc(eyeX + eyeSize*0.4, -eyeY - eyeSize*0.3, eyeSize*0.2, 0, Math.PI*2);
+      ctx.arc(eyeX + eyeSize*0.4, eyeY - eyeSize*0.3, eyeSize*0.2, 0, Math.PI*2);
+      ctx.fill();
+
+      // --- 5. TRANSFORMATION OVERLAY (Armor/Cracks/Crystals) ---
+      if (entity.tier === SizeTier.AncientKing) {
+          drawTransformation(ctx, entity, 'over', frameCount);
+      } else if (entity.tier === SizeTier.Elder) {
+          // Elder Spikes
+          drawTierFeatures(ctx, entity, 'elder', frameCount);
+      }
+
+      // Shield Effect (Overlay)
+      if (entity.statusEffects?.shielded) {
+          ctx.strokeStyle = '#eab308';
+          ctx.lineWidth = 5;
+          ctx.globalAlpha = 0.6 + Math.sin(frameCount * 0.2) * 0.2;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 5, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+      }
+
+      // Restore coordinate system for Text/UI elements
+      ctx.restore(); 
+
+      // --- 6. INDICATOR RING (World Space) ---
+      if (!isPlayer && !entity.isDead) {
+          const ratio = entity.radius / playerR;
+          let ringColor = '';
+          if (ratio >= DANGER_THRESHOLD_RATIO) ringColor = COLOR_PALETTE.indicatorDanger;
+          else if (ratio <= EAT_THRESHOLD_RATIO) ringColor = COLOR_PALETTE.indicatorSafe;
+          else {
+              if (ELEMENTAL_ADVANTAGE[playerFaction] === entity.faction) ringColor = COLOR_PALETTE.indicatorCounter;
+              else if (ELEMENTAL_ADVANTAGE[entity.faction] === playerFaction) ringColor = COLOR_PALETTE.indicatorCountered;
+              else ringColor = COLOR_PALETTE.indicatorCombat;
+          }
+
+          if (ringColor) {
+              ctx.strokeStyle = ringColor;
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.arc(x, y, r + 8, 0, Math.PI*2);
+              ctx.stroke();
+          }
+      }
+
+      // --- 7. KING CROWN (Top UI) ---
+      if (isKing) {
+          ctx.save();
+          ctx.translate(x, y - r - 25);
+          ctx.fillStyle = '#f59e0b'; // Gold
+          ctx.strokeStyle = '#78350f';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          // Crown shape
+          ctx.moveTo(-15, 0);
+          ctx.lineTo(-15, -15);
+          ctx.lineTo(-5, -5);
+          ctx.lineTo(0, -20);
+          ctx.lineTo(5, -5);
+          ctx.lineTo(15, -15);
+          ctx.lineTo(15, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+      }
+
+      // --- 8. NAME TAG ---
+      if (entity.radius > 20) {
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.font = `bold ${Math.max(12, entity.radius * 0.35)}px "Roboto", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(entity.name || 'Bot', x, y - entity.radius - 8);
+        ctx.shadowBlur = 0;
+      }
+  };
+
+  const handleInput = (e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    onMouseMove(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  return (
+    <canvas 
+      ref={canvasRef}
+      className="block cursor-crosshair"
+      onMouseMove={handleInput}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onTouchStart={onMouseDown}
+      onTouchEnd={onMouseUp}
+      onTouchMove={(e) => {
+         const touch = e.touches[0];
+         onMouseMove(touch.clientX, touch.clientY);
+      }}
+    />
+  );
+};
+
+export default GameCanvas;
