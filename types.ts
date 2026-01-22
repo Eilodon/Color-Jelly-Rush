@@ -104,6 +104,7 @@ export interface Bot extends Player {
 export interface Food extends Entity {
   value: number;
   isEjected?: boolean; // Created by player W key
+  kind?: 'normal' | 'ejected' | 'relic';
 }
 
 export interface Particle extends Entity {
@@ -138,6 +139,8 @@ export interface GameState {
   camera: Vector2;
   shakeIntensity: number; 
   kingId: string | null; 
+  relicId: string | null;
+  relicTimer: number;
   
   // Input State
   inputs: {

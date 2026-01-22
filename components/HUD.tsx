@@ -4,9 +4,10 @@ import { GAME_DURATION, FACTION_CONFIG, SPAWN_PROTECTION_TIME } from '../constan
 
 interface HUDProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
+  isTouchInput?: boolean;
 }
 
-const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
+const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
   // Direct DOM refs to bypass React render cycle for high-frequency updates
   const hpBarRef = useRef<HTMLDivElement>(null);
   const hpTextRef = useRef<HTMLSpanElement>(null);
@@ -18,6 +19,7 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
   const roundRef = useRef<HTMLSpanElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const leaderBoardRef = useRef<HTMLDivElement>(null);
+  const lastStatsUpdateRef = useRef(0);
   
   // We only render the static parts once.
   // Dynamic parts are updated via a lightweight loop.
@@ -28,10 +30,11 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
   useEffect(() => {
     let animationFrameId: number;
 
-    const updateHUD = () => {
+    const updateHUD = (time: number) => {
       const state = gameStateRef.current;
       if (!state) return;
-      const { player, bots, gameTime, currentRound, zoneRadius } = state;
+      const { player, bots, gameTime, currentRound } = state;
+      const now = time || performance.now();
 
       // 1. Update HP
       if (hpBarRef.current && hpTextRef.current) {
@@ -48,13 +51,14 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
         timerRef.current.innerText = `${m}:${s.toString().padStart(2, '0')}`;
       }
 
-      // 3. Update Score & Kills
-      if (scoreRef.current) {
-         scoreRef.current.innerHTML = `
-            <div class="text-slate-400 text-xs uppercase tracking-wider">Score</div>
-            <div class="text-2xl font-bold text-white">${Math.floor(player.score)}</div>
-            <div class="text-slate-400 text-xs mt-2">Kills: <span class="text-red-400 font-bold">${player.kills}</span></div>
-         `;
+      // 3. Update Score & Kills (throttled)
+      const shouldUpdateStats = now - lastStatsUpdateRef.current > 150;
+      if (shouldUpdateStats && scoreRef.current) {
+        scoreRef.current.innerHTML = `
+           <div class="text-slate-400 text-xs uppercase tracking-wider">Score</div>
+           <div class="text-2xl font-bold text-white">${Math.floor(player.score)}</div>
+           <div class="text-slate-400 text-xs mt-2">Kills: <span class="text-red-400 font-bold">${player.kills}</span></div>
+        `;
       }
 
       // 4. Update Cooldown UI
@@ -88,21 +92,23 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
          }
       }
 
-      // 7. Leaderboard (Throttled update could be better, but doing it here is fine for < 30 bots)
-      if (leaderBoardRef.current) {
-         const allEntities = [player, ...bots].sort((a, b) => b.radius - a.radius).slice(0, 5);
-         let html = '';
-         allEntities.forEach((e, idx) => {
-             const isMe = e.id === player.id;
-             html += `
-                <div class="flex justify-between text-xs ${isMe ? 'text-white font-bold' : 'text-slate-400'}">
-                    <span>#${idx + 1} ${e.name}</span>
-                    <span class="text-yellow-600 font-mono">${Math.floor(e.score)}</span>
-                </div>
-             `;
-         });
-         leaderBoardRef.current.innerHTML = html;
+      // 7. Leaderboard (throttled)
+      if (shouldUpdateStats && leaderBoardRef.current) {
+        const allEntities = [player, ...bots].sort((a, b) => b.radius - a.radius).slice(0, 5);
+        let html = '';
+        allEntities.forEach((e, idx) => {
+          const isMe = e.id === player.id;
+          html += `
+             <div class="flex justify-between text-xs ${isMe ? 'text-white font-bold' : 'text-slate-400'}">
+                 <span>#${idx + 1} ${e.name}</span>
+                 <span class="text-yellow-600 font-mono">${Math.floor(e.score)}</span>
+             </div>
+          `;
+        });
+        leaderBoardRef.current.innerHTML = html;
       }
+
+      if (shouldUpdateStats) lastStatsUpdateRef.current = now;
 
       animationFrameId = requestAnimationFrame(updateHUD);
     };
@@ -195,7 +201,7 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
                 <div className="absolute top-0 left-[80%] w-0.5 h-full bg-black opacity-30"></div>
             </div>
             <div className="text-center text-[10px] text-slate-500 mt-1">
-                PRESS 'W' TO EJECT MASS • PRESS 'SPACE' FOR SKILL
+                {isTouchInput ? 'TAP EJECT • TAP SKILL' : "PRESS 'W' TO EJECT MASS • PRESS 'SPACE' FOR SKILL"}
             </div>
           </div>
 

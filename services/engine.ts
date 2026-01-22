@@ -6,7 +6,9 @@ import {
   FOOD_RADIUS, EAT_THRESHOLD_RATIO, DANGER_THRESHOLD_RATIO, 
   FACTION_CONFIG, INITIAL_ZONE_RADIUS, TRAIL_LENGTH,
   EJECT_MASS_COST, EJECT_SPEED, SPAWN_PROTECTION_TIME, ELEMENTAL_ADVANTAGE,
-  TURN_SPEED_BASE, ACCELERATION_BASE, FRICTION_BASE, MAX_SPEED_BASE, CENTER_RADIUS, GRID_CELL_SIZE
+  TURN_SPEED_BASE, ACCELERATION_BASE, FRICTION_BASE, MAX_SPEED_BASE, CENTER_RADIUS, GRID_CELL_SIZE,
+  RELIC_RESPAWN_TIME, RELIC_VALUE, RELIC_RADIUS, RELIC_GROWTH, RELIC_HEAL, RELIC_REGEN,
+  KING_DAMAGE_TAKEN_MULTIPLIER, KING_DAMAGE_DEALT_MULTIPLIER, KING_BOUNTY_SCORE, KING_BOUNTY_RADIUS
 } from '../constants';
 import { audioManager } from './audioManager';
 
@@ -111,6 +113,17 @@ const randomRange = (min: number, max: number) => Math.random() * (max - min) + 
 const randomPos = (): Vector2 => {
     const angle = Math.random() * Math.PI * 2;
     const r = Math.sqrt(Math.random()) * (MAP_RADIUS - 200) + 200; 
+    return {
+        x: WORLD_WIDTH / 2 + Math.cos(angle) * r,
+        y: WORLD_HEIGHT / 2 + Math.sin(angle) * r
+    };
+};
+
+const randomRelicPos = (): Vector2 => {
+    const angle = Math.random() * Math.PI * 2;
+    const minR = CENTER_RADIUS * 1.2;
+    const maxR = MAP_RADIUS * 0.6;
+    const r = Math.sqrt(Math.random()) * (maxR - minR) + minR;
     return {
         x: WORLD_WIDTH / 2 + Math.cos(angle) * r,
         y: WORLD_HEIGHT / 2 + Math.sin(angle) * r
@@ -222,6 +235,19 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => (
   value: isEjected ? 5 : 1,
   trail: [],
   isEjected,
+  kind: isEjected ? 'ejected' : 'normal',
+});
+
+export const createRelic = (): Food => ({
+  id: `relic-${Math.random().toString(36).slice(2, 10)}`,
+  position: randomRelicPos(),
+  velocity: { x: 0, y: 0 },
+  radius: RELIC_RADIUS,
+  color: '#facc15',
+  isDead: false,
+  value: RELIC_VALUE,
+  trail: [],
+  kind: 'relic',
 });
 
 export const createParticle = (x: number, y: number, color: string, speed: number = 8): Particle => {
@@ -431,6 +457,22 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
 
   newState.zoneRadius = updateZoneRadius(newState.gameTime);
 
+  // --- Relic Objective ---
+  if (newState.relicId) {
+    const relicExists = newState.food.some(f => f.id === newState.relicId && !f.isDead);
+    if (!relicExists) newState.relicId = null;
+  }
+  if (!newState.relicId) {
+    newState.relicTimer -= dt;
+    if (newState.relicTimer <= 0) {
+      const relic = createRelic();
+      newState.food.push(relic);
+      newState.relicId = relic.id;
+      newState.relicTimer = RELIC_RESPAWN_TIME;
+      newState.floatingTexts.push(createFloatingText(relic.position, "ANCIENT RELIC!", '#facc15', 24));
+    }
+  }
+
   // --- Process Delayed Actions (Skills) ---
   for (let i = newState.delayedActions.length - 1; i >= 0; i--) {
     const action = newState.delayedActions[i];
@@ -619,11 +661,20 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
              const dSq = distSq(entity.position, f.position);
              if (dSq < rSq) {
                  f.isDead = true; 
-                 const growth = f.value * 0.15;
-                 entity.radius += growth;
-                 entity.score += f.value;
-                 if (entity.id === 'player') audioManager.playEat();
-                 if (f.value > 2) newState.floatingTexts.push(createFloatingText(entity.position, `+${f.value}`, '#4ade80', 16));
+                 if (f.kind === 'relic') {
+                     entity.radius += RELIC_GROWTH;
+                     entity.score += RELIC_VALUE * 2;
+                     entity.currentHealth = Math.min(entity.maxHealth, entity.currentHealth + RELIC_HEAL);
+                     entity.statusEffects.regen += RELIC_REGEN;
+                     newState.floatingTexts.push(createFloatingText(entity.position, "RELIC!", '#facc15', 24));
+                     newState.relicId = null;
+                 } else {
+                     const growth = f.value * 0.15;
+                     entity.radius += growth;
+                     entity.score += f.value;
+                     if (entity.id === 'player') audioManager.playEat();
+                     if (f.value > 2) newState.floatingTexts.push(createFloatingText(entity.position, `+${f.value}`, '#4ade80', 16));
+                 }
              }
         } 
         else if ('faction' in neighbor) {
@@ -834,7 +885,11 @@ const applyProjectileEffect = (proj: Projectile, target: Player | Bot, state: Ga
     }
 
     const owner = state.player.id === proj.ownerId ? state.player : state.bots.find(b => b.id === proj.ownerId);
-    const damageDealt = proj.damage / target.defense;
+    const isTargetKing = target.id === state.kingId;
+    const isOwnerKing = owner?.id === state.kingId;
+    let damageDealt = proj.damage / target.defense;
+    if (isTargetKing) damageDealt *= KING_DAMAGE_TAKEN_MULTIPLIER;
+    if (isOwnerKing) damageDealt *= KING_DAMAGE_DEALT_MULTIPLIER;
     target.currentHealth -= damageDealt;
     
     state.floatingTexts.push(createFloatingText(target.position, `-${Math.floor(damageDealt)}`, '#93c5fd', 18));
@@ -871,6 +926,12 @@ const consume = (predator: Player | Bot, prey: Player | Bot, state: GameState) =
     predator.kills++;
     predator.score += prey.radius * 10;
     predator.currentHealth = Math.min(predator.maxHealth, predator.currentHealth + 40);
+
+    if (prey.id === state.kingId) {
+        predator.score += KING_BOUNTY_SCORE;
+        predator.radius += KING_BOUNTY_RADIUS;
+        state.floatingTexts.push(createFloatingText(predator.position, "KING SLAYER!", '#f59e0b', 26));
+    }
     
     state.floatingTexts.push(createFloatingText(predator.position, "DEVOUR!", '#ef4444', 30));
     if (predator.id === 'player') state.shakeIntensity = 0.8;
@@ -903,6 +964,17 @@ const resolveCombat = (e1: Player | Bot, e2: Player | Bot, dt: number, state: Ga
 
     if (c1) e2Dmg += 20 * (1 / e2.defense); 
     if (c2) e1Dmg += 20 * (1 / e1.defense);
+
+    const e1IsKing = e1.id === state.kingId;
+    const e2IsKing = e2.id === state.kingId;
+    if (e1IsKing) {
+        e1Dmg *= KING_DAMAGE_TAKEN_MULTIPLIER;
+        e2Dmg *= KING_DAMAGE_DEALT_MULTIPLIER;
+    }
+    if (e2IsKing) {
+        e2Dmg *= KING_DAMAGE_TAKEN_MULTIPLIER;
+        e1Dmg *= KING_DAMAGE_DEALT_MULTIPLIER;
+    }
 
     if (e1Shield) { 
         e1Dmg = 0; 

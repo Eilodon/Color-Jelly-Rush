@@ -34,6 +34,20 @@ export const EJECT_MASS_COST = 8;
 export const EJECT_SPEED = 18;
 export const SKILL_COOLDOWN_BASE = 8; 
 
+// Objective: Ancient Relic
+export const RELIC_RESPAWN_TIME = 35;
+export const RELIC_VALUE = 25;
+export const RELIC_RADIUS = 18;
+export const RELIC_GROWTH = 8;
+export const RELIC_HEAL = 20;
+export const RELIC_REGEN = 12;
+
+// King Bounty (Anti-snowball)
+export const KING_DAMAGE_TAKEN_MULTIPLIER = 1.15;
+export const KING_DAMAGE_DEALT_MULTIPLIER = 0.9;
+export const KING_BOUNTY_SCORE = 200;
+export const KING_BOUNTY_RADIUS = 8;
+
 // Elemental Counters 
 export const ELEMENTAL_ADVANTAGE: Record<Faction, Faction> = {
   [Faction.Metal]: Faction.Wood, 

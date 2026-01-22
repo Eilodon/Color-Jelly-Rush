@@ -6,9 +6,11 @@ import { WORLD_WIDTH, WORLD_HEIGHT, INITIAL_ZONE_RADIUS, BOT_COUNT, FOOD_COUNT }
 import GameCanvas from './components/GameCanvas';
 import MainMenu from './components/MainMenu';
 import HUD from './components/HUD';
+import MobileControls from './components/MobileControls';
 
 const App: React.FC = () => {
   const [phase, setPhase] = useState<GamePhase>(GamePhase.Menu);
+  const [isTouchInput, setIsTouchInput] = useState(false);
   // GameStateRef holds the TRUTH. We do not sync this to React state every frame.
   const gameStateRef = useRef<GameState | null>(null);
   
@@ -40,6 +42,8 @@ const App: React.FC = () => {
       camera: player.position,
       shakeIntensity: 0,
       kingId: null,
+      relicId: null,
+      relicTimer: 8,
       inputs: { space: false, w: false }
     };
     
@@ -118,6 +122,47 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const detectTouch = () => {
+      const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const hasTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+      setIsTouchInput(hasCoarsePointer || hasTouch || window.innerWidth < 900);
+    };
+    detectTouch();
+    window.addEventListener('resize', detectTouch);
+    return () => window.removeEventListener('resize', detectTouch);
+  }, []);
+
+  const handleStickMove = (x: number, y: number) => {
+    if (!gameStateRef.current) return;
+    const player = gameStateRef.current.player;
+    if (x === 0 && y === 0) {
+      player.targetPosition = { ...player.position };
+      return;
+    }
+    const targetDistance = 240;
+    player.targetPosition = {
+      x: player.position.x + x * targetDistance,
+      y: player.position.y + y * targetDistance,
+    };
+  };
+
+  const handleSkillStart = () => {
+    if (gameStateRef.current) gameStateRef.current.inputs.space = true;
+  };
+
+  const handleSkillEnd = () => {
+    if (gameStateRef.current) gameStateRef.current.inputs.space = false;
+  };
+
+  const handleEjectStart = () => {
+    if (gameStateRef.current) gameStateRef.current.inputs.w = true;
+  };
+
+  const handleEjectEnd = () => {
+    if (gameStateRef.current) gameStateRef.current.inputs.w = false;
+  };
+
   return (
     <div className="w-full h-screen bg-slate-900 relative overflow-hidden select-none">
       {phase === GamePhase.Menu && (
@@ -135,9 +180,19 @@ const App: React.FC = () => {
             onMouseUp={() => { 
                 if (gameStateRef.current) gameStateRef.current.inputs.space = false; 
             }}
+            enablePointerInput={!isTouchInput}
           />
           {/* HUD now accepts the Ref, not a state object */}
-          <HUD gameStateRef={gameStateRef} />
+          <HUD gameStateRef={gameStateRef} isTouchInput={isTouchInput} />
+          {isTouchInput && (
+            <MobileControls
+              onMove={handleStickMove}
+              onSkillStart={handleSkillStart}
+              onSkillEnd={handleSkillEnd}
+              onEjectStart={handleEjectStart}
+              onEjectEnd={handleEjectEnd}
+            />
+          )}
         </>
       )}
 

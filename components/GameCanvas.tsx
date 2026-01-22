@@ -7,11 +7,13 @@ interface GameCanvasProps {
   onMouseMove: (x: number, y: number) => void;
   onMouseDown: () => void;
   onMouseUp: () => void;
+  enablePointerInput?: boolean;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouseDown, onMouseUp }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouseDown, onMouseUp, enablePointerInput = true }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapCacheRef = useRef<HTMLCanvasElement | null>(null);
+  const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
 
   useEffect(() => {
     const offscreen = document.createElement('canvas');
@@ -32,17 +34,30 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const updateSize = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      sizeRef.current = { width, height, dpr };
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+
     let animationFrameId: number;
     let frameCount = 0;
 
     const render = () => {
       frameCount++;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const { width, height, dpr } = sizeRef.current;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const { camera, player, food, bots, particles, projectiles, zoneRadius, floatingTexts, kingId, lavaZones } = gameState;
-      const width = canvas.width;
-      const height = canvas.height;
 
       // Clear
       ctx.fillStyle = COLOR_PALETTE.background;
@@ -101,14 +116,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
          if (f.position.x < camera.x - width/2 - viewBuffer || f.position.x > camera.x + width/2 + viewBuffer ||
              f.position.y < camera.y - height/2 - viewBuffer || f.position.y > camera.y + height/2 + viewBuffer) return;
 
-         ctx.fillStyle = f.color;
-         ctx.beginPath();
-         ctx.arc(f.position.x, f.position.y, f.radius, 0, Math.PI * 2);
-         ctx.fill();
-         ctx.fillStyle = 'rgba(255,255,255,0.4)';
-         ctx.beginPath();
-         ctx.arc(f.position.x - f.radius*0.3, f.position.y - f.radius*0.3, f.radius*0.2, 0, Math.PI*2);
-         ctx.fill();
+         const isRelic = f.kind === 'relic';
+         if (isRelic) {
+             ctx.save();
+             ctx.shadowColor = '#facc15';
+             ctx.shadowBlur = 20;
+             ctx.fillStyle = '#facc15';
+             ctx.beginPath();
+             ctx.arc(f.position.x, f.position.y, f.radius, 0, Math.PI * 2);
+             ctx.fill();
+             ctx.shadowBlur = 0;
+             ctx.strokeStyle = '#78350f';
+             ctx.lineWidth = 3;
+             ctx.beginPath();
+             ctx.arc(f.position.x, f.position.y, f.radius * 1.2, 0, Math.PI * 2);
+             ctx.stroke();
+             ctx.restore();
+         } else {
+             ctx.fillStyle = f.color;
+             ctx.beginPath();
+             ctx.arc(f.position.x, f.position.y, f.radius, 0, Math.PI * 2);
+             ctx.fill();
+             ctx.fillStyle = 'rgba(255,255,255,0.4)';
+             ctx.beginPath();
+             ctx.arc(f.position.x - f.radius*0.3, f.position.y - f.radius*0.3, f.radius*0.2, 0, Math.PI*2);
+             ctx.fill();
+         }
       });
 
       // 2. Trails
@@ -197,6 +230,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
     render();
 
     return () => {
+      window.removeEventListener('resize', updateSize);
       cancelAnimationFrame(animationFrameId);
     };
   }, [gameState]);
@@ -801,9 +835,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
   };
 
   const handleInput = (e: React.MouseEvent) => {
+    if (!enablePointerInput) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     onMouseMove(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!enablePointerInput) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    onMouseMove(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchStart = () => {
+    if (!enablePointerInput) return;
+    onMouseDown();
+  };
+
+  const handleTouchEnd = () => {
+    if (!enablePointerInput) return;
+    onMouseUp();
   };
 
   return (
@@ -813,12 +865,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
       onMouseMove={handleInput}
       onMouseDown={onMouseDown}
       onMouseUp={onMouseUp}
-      onTouchStart={onMouseDown}
-      onTouchEnd={onMouseUp}
-      onTouchMove={(e) => {
-         const touch = e.touches[0];
-         onMouseMove(touch.clientX, touch.clientY);
-      }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
     />
   );
 };
