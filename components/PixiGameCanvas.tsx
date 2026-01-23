@@ -1155,16 +1155,13 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
 	        if (zoneRadiusRef.current !== state.zoneRadius) {
 	          layers.zone.clear();
 	          const zoneFill = parsePixiColor(COLOR_PALETTE.zone);
-	          layers.zone.beginFill(zoneFill.tint, zoneFill.alpha);
-	          layers.zone.drawRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-	          layers.zone.beginHole();
-	          layers.zone.drawCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius);
-	          layers.zone.endHole();
-          layers.zone.endFill();
-          layers.zone.lineStyle(6, hexToNumber(COLOR_PALETTE.zoneBorder), 1);
-          layers.zone.drawCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius);
-          zoneRadiusRef.current = state.zoneRadius;
-        }
+	          layers.zone.rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT).fill({ color: zoneFill.tint, alpha: zoneFill.alpha });
+	          layers.zone.circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius).cut();
+	          layers.zone
+	            .circle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius)
+	            .stroke({ width: 6, color: hexToNumber(COLOR_PALETTE.zoneBorder), alpha: 1 });
+	          zoneRadiusRef.current = state.zoneRadius;
+	        }
 
         layers.lava.clear();
         if (state.lavaZones) {
