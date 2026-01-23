@@ -97,6 +97,29 @@ type LayerPack = {
 
 const hexToNumber = (hex: string) => Number.parseInt(hex.replace('#', ''), 16);
 
+const parsePixiColor = (value: string): { tint: number; alpha: number } => {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('#')) {
+    return { tint: hexToNumber(trimmed), alpha: 1 };
+  }
+
+  const rgbaMatch = trimmed.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*([0-9]*\.?[0-9]+)\s*)?\)$/i
+  );
+  if (rgbaMatch) {
+    const r = Math.max(0, Math.min(255, Number(rgbaMatch[1])));
+    const g = Math.max(0, Math.min(255, Number(rgbaMatch[2])));
+    const b = Math.max(0, Math.min(255, Number(rgbaMatch[3])));
+    const alphaRaw = rgbaMatch[4];
+    const alpha = alphaRaw == null ? 1 : Math.max(0, Math.min(1, Number(alphaRaw)));
+    const tint = (r << 16) | (g << 8) | b;
+    return { tint, alpha };
+  }
+
+  // Fallback: avoid crashing render loop on unexpected strings
+  return { tint: 0x000000, alpha: 1 };
+};
+
 const distSq = (v1: { x: number; y: number }, v2: { x: number; y: number }) => {
   const dx = v1.x - v2.x;
   const dy = v1.y - v2.y;
@@ -1129,13 +1152,14 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
         const inVision = (pos: { x: number; y: number }) =>
           visionRadiusSq === Infinity || distSq(pos, state.player.position) <= visionRadiusSq;
 
-        if (zoneRadiusRef.current !== state.zoneRadius) {
-          layers.zone.clear();
-          layers.zone.beginFill(hexToNumber(COLOR_PALETTE.zone), 0.5);
-          layers.zone.drawRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-          layers.zone.beginHole();
-          layers.zone.drawCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius);
-          layers.zone.endHole();
+	        if (zoneRadiusRef.current !== state.zoneRadius) {
+	          layers.zone.clear();
+	          const zoneFill = parsePixiColor(COLOR_PALETTE.zone);
+	          layers.zone.beginFill(zoneFill.tint, zoneFill.alpha);
+	          layers.zone.drawRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+	          layers.zone.beginHole();
+	          layers.zone.drawCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius);
+	          layers.zone.endHole();
           layers.zone.endFill();
           layers.zone.lineStyle(6, hexToNumber(COLOR_PALETTE.zoneBorder), 1);
           layers.zone.drawCircle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, state.zoneRadius);
