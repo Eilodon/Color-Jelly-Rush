@@ -4,11 +4,12 @@ import { FACTION_CONFIG } from '../constants';
 
 interface MainMenuProps {
   onStart: (name: string, faction: Faction) => void;
+  onPreload?: () => void;
   profile: PlayerProfile;
   totalMutations: number;
 }
 
-const MainMenu: React.FC<MainMenuProps> = ({ onStart, profile, totalMutations }) => {
+const MainMenu: React.FC<MainMenuProps> = ({ onStart, onPreload, profile, totalMutations }) => {
   const [name, setName] = useState('');
   const [selectedFaction, setSelectedFaction] = useState<Faction>(Faction.Metal);
   const mutationProgress = totalMutations > 0
@@ -125,6 +126,8 @@ const MainMenu: React.FC<MainMenuProps> = ({ onStart, profile, totalMutations })
 
              <button 
               onClick={() => name && onStart(name, selectedFaction)}
+              onMouseEnter={onPreload}
+              onFocus={onPreload}
               disabled={!name}
               className="w-full mt-8 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white font-bold py-4 rounded-lg shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
              >

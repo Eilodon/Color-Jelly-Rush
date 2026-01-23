@@ -22,6 +22,15 @@ export default defineConfig(({ mode }) => {
       test: {
         environment: 'node',
         include: ['tests/**/*.test.ts']
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (id.includes('pixi.js') || id.includes('@pixi')) return 'pixi';
+            }
+          }
+        }
       }
     };
 });

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, useState, useEffect, useMemo, useRef } from 'react';
 import { GamePhase, GameState, Faction, MutationChoice, MutationId, PlayerProfile } from './types';
 import { createPlayer, createBot, createFood, createCreeps, createLandmarks, createZoneHazards, updateGameState, createGameEngine } from './services/engine';
 import { audioManager } from './services/audioManager';
 import { WORLD_WIDTH, WORLD_HEIGHT, INITIAL_ZONE_RADIUS, BOT_COUNT, FOOD_COUNT, BOSS_RESPAWN_TIME, DUST_STORM_INTERVAL } from './constants';
-import GameCanvas from './components/GameCanvas';
 import MainMenu from './components/MainMenu';
 import HUD from './components/HUD';
 import MobileControls from './components/MobileControls';
@@ -12,6 +11,7 @@ import { applyMutation, getAllMutationIds, getMutationById } from './services/mu
 import { applyMatchResult, loadProfile, saveProfile } from './services/profile';
 
 const totalMutationCount = getAllMutationIds().length;
+const PixiGameCanvas = React.lazy(() => import('./components/PixiGameCanvas'));
 
 const App: React.FC = () => {
   const [phase, setPhase] = useState<GamePhase>(GamePhase.Menu);
@@ -30,6 +30,10 @@ const App: React.FC = () => {
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+
+  const preloadPixiCanvas = () => {
+    void import('./components/PixiGameCanvas');
+  };
 
   const initGame = (playerName: string, faction: Faction) => {
     setMutationChoices(null);
@@ -266,22 +270,24 @@ const App: React.FC = () => {
   return (
     <div className="w-full h-screen bg-slate-900 relative overflow-hidden select-none">
       {phase === GamePhase.Menu && (
-        <MainMenu onStart={initGame} profile={profile} totalMutations={totalMutationCount} />
+        <MainMenu onStart={initGame} onPreload={preloadPixiCanvas} profile={profile} totalMutations={totalMutationCount} />
       )}
 
       {phase === GamePhase.Playing && gameStateRef.current && (
         <>
-          <GameCanvas
-            gameState={gameStateRef.current}
-            onMouseMove={handleMouseMove}
-            onMouseDown={() => {
-              if (gameStateRef.current) gameStateRef.current.inputs.space = true;
-            }}
-            onMouseUp={() => {
-              if (gameStateRef.current) gameStateRef.current.inputs.space = false;
-            }}
-            enablePointerInput={!isTouchInput}
-          />
+          <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center text-white">Loading...</div>}>
+            <PixiGameCanvas
+              gameState={gameStateRef.current}
+              onMouseMove={handleMouseMove}
+              onMouseDown={() => {
+                if (gameStateRef.current) gameStateRef.current.inputs.space = true;
+              }}
+              onMouseUp={() => {
+                if (gameStateRef.current) gameStateRef.current.inputs.space = false;
+              }}
+              enablePointerInput={!isTouchInput}
+            />
+          </Suspense>
           {/* HUD now accepts the Ref, not a state object */}
           <HUD gameStateRef={gameStateRef} isTouchInput={isTouchInput} />
           {isTouchInput && (

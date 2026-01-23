@@ -21,6 +21,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
   const mapCacheRef = useRef<HTMLCanvasElement | null>(null);
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
   const gradientCacheRef = useRef(new Map<string, CanvasGradient>());
+  const abyssGradientRef = useRef<CanvasGradient | null>(null);
+  const renderEntitiesRef = useRef<Array<Player | Bot>>([]);
 
   const hexToRgb = (hex: string) => {
     const clean = hex.replace('#', '');
@@ -45,6 +47,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
     gradient.addColorStop(0.55, color);
     gradient.addColorStop(1, `rgb(${tint(r, -25)}, ${tint(g, -25)}, ${tint(b, -25)})`);
     cache.set(key, gradient);
+    return gradient;
+  };
+
+  const getAbyssGradient = (ctx: CanvasRenderingContext2D) => {
+    if (abyssGradientRef.current) return abyssGradientRef.current;
+    const cx = WORLD_WIDTH / 2;
+    const cy = WORLD_HEIGHT / 2;
+    const gradient = ctx.createRadialGradient(cx, cy, 50, cx, cy, CENTER_RADIUS);
+    gradient.addColorStop(0, '#000000');
+    gradient.addColorStop(0.5, '#4c1d95');
+    gradient.addColorStop(1, 'rgba(76, 29, 149, 0)');
+    abyssGradientRef.current = gradient;
     return gradient;
   };
 
@@ -92,6 +106,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
       const { camera, player, food, bots, creeps, boss, powerUps, hazards, landmarks, particles, projectiles, zoneRadius, floatingTexts, kingId, lavaZones, hazardTimers } = gameState;
       const playerZone = getZoneFromPosition(player.position);
+      const halfWidth = width / 2;
+      const halfHeight = height / 2;
+      const viewLeft = camera.x - halfWidth;
+      const viewRight = camera.x + halfWidth;
+      const viewTop = camera.y - halfHeight;
+      const viewBottom = camera.y + halfHeight;
+      const viewBuffer = 120;
+      const inView = (pos: { x: number; y: number }, radius: number = 0) =>
+        pos.x + radius >= viewLeft - viewBuffer &&
+        pos.x - radius <= viewRight + viewBuffer &&
+        pos.y + radius >= viewTop - viewBuffer &&
+        pos.y - radius <= viewBottom + viewBuffer;
       let visionRadius = Infinity;
       const visionFactor = player.visionMultiplier * player.statusEffects.visionBoost;
       if (playerZone === Faction.Wood && player.faction !== Faction.Wood) visionRadius = 380 * visionFactor;
@@ -111,17 +137,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
       // A. Draw Cached Map
       if (mapCacheRef.current) {
           ctx.save();
-          const camOffsetX = -camera.x + width / 2;
-          const camOffsetY = -camera.y + height / 2;
+          const camOffsetX = -camera.x + halfWidth;
+          const camOffsetY = -camera.y + halfHeight;
           ctx.translate(camOffsetX, camOffsetY);
-          
-          ctx.drawImage(mapCacheRef.current, 0, 0);
+
+          // Draw only the visible map slice to avoid unnecessary work.
+          const mapBuffer = 80;
+          const sx = Math.max(0, viewLeft - mapBuffer);
+          const sy = Math.max(0, viewTop - mapBuffer);
+          const sw = Math.min(WORLD_WIDTH - sx, width + mapBuffer * 2);
+          const sh = Math.min(WORLD_HEIGHT - sy, height + mapBuffer * 2);
+          if (sw > 0 && sh > 0) {
+            ctx.drawImage(mapCacheRef.current, sx, sy, sw, sh, sx, sy, sw, sh);
+          }
 
           drawAbyss(ctx, frameCount);
           
           // Draw Lava Zones (On top of map, below entities)
           if (lavaZones) {
              lavaZones.forEach(zone => {
+                 if (!inView(zone.position, zone.radius)) return;
                  ctx.save();
                  ctx.globalAlpha = 0.5 + Math.sin(frameCount * 0.1) * 0.2;
                  ctx.fillStyle = '#f97316';
@@ -150,6 +185,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
           if (landmarks) {
             landmarks.forEach(landmark => {
+              if (!inView(landmark.position, landmark.radius)) return;
               ctx.save();
               ctx.globalAlpha = 0.6;
               ctx.strokeStyle = '#facc15';
@@ -173,6 +209,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
           if (hazards) {
             hazards.forEach(hazard => {
               if (!hazard.active && hazard.duration <= 0 && (hazard.type === 'lightning' || hazard.type === 'geyser' || hazard.type === 'icicle')) return;
+              if (!inView(hazard.position, hazard.radius)) return;
               if (!inVision(hazard.position)) return;
               ctx.save();
               if (hazard.type === 'lightning') {
@@ -236,13 +273,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
       // B. Draw Objects
       ctx.save();
-      ctx.translate(-camera.x + width / 2, -camera.y + height / 2);
+      ctx.translate(-camera.x + halfWidth, -camera.y + halfHeight);
 
       // 1. Food
-      const viewBuffer = 100;
       food.forEach(f => {
-         if (f.position.x < camera.x - width/2 - viewBuffer || f.position.x > camera.x + width/2 + viewBuffer ||
-             f.position.y < camera.y - height/2 - viewBuffer || f.position.y > camera.y + height/2 + viewBuffer) return;
+         if (!inView(f.position, f.radius)) return;
          if (!inVision(f.position)) return;
 
          const isRelic = f.kind === 'relic';
@@ -275,8 +310,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
       // 1.5 Power-ups
       powerUps.forEach(p => {
-         if (p.position.x < camera.x - width/2 - viewBuffer || p.position.x > camera.x + width/2 + viewBuffer ||
-             p.position.y < camera.y - height/2 - viewBuffer || p.position.y > camera.y + height/2 + viewBuffer) return;
+         if (!inView(p.position, p.radius)) return;
          if (!inVision(p.position)) return;
 
          ctx.save();
@@ -290,11 +324,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
          ctx.restore();
       });
 
-      const renderEntities = [player, ...bots, ...creeps, ...(boss ? [boss] : [])];
+      const renderEntities = renderEntitiesRef.current;
+      renderEntities.length = 0;
+      renderEntities.push(player);
+      for (let i = 0; i < bots.length; i++) renderEntities.push(bots[i]);
+      for (let i = 0; i < creeps.length; i++) renderEntities.push(creeps[i]);
+      if (boss) renderEntities.push(boss);
 
       // 2. Trails
       renderEntities.forEach(entity => {
           if (entity.isDead || !entity.trail.length) return;
+          if (!inView(entity.position, entity.radius * 4)) return;
           if (!inVision(entity.position)) return;
           const config = FACTION_CONFIG[entity.faction];
           ctx.beginPath();
@@ -314,6 +354,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
       // 3. Projectiles
       projectiles.forEach(p => {
+          if (!inView(p.position, 20)) return;
           ctx.fillStyle = p.color;
           ctx.beginPath();
           ctx.arc(p.position.x, p.position.y, 10, 0, Math.PI*2);
@@ -327,11 +368,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
       });
 
       // 4. Entities
-      const entities = renderEntities.sort((a, b) => a.radius - b.radius);
-      entities.forEach(entity => {
+      renderEntities.sort((a, b) => a.radius - b.radius);
+      renderEntities.forEach(entity => {
           if (entity.isDead) return;
-          if (entity.position.x < camera.x - width/2 - entity.radius*3 || entity.position.x > camera.x + width/2 + entity.radius*3 ||
-              entity.position.y < camera.y - height/2 - entity.radius*3 || entity.position.y > camera.y + height/2 + entity.radius*3) return;
+          if (!inView(entity.position, entity.radius * 3)) return;
           if (!inVision(entity.position)) return;
 
           drawEntity(
@@ -347,6 +387,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
 
       // 5. Particles
       particles.forEach(p => {
+          if (!inView(p.position, p.radius * 2)) return;
           const lifeRatio = p.maxLife > 0 ? p.life / p.maxLife : p.life;
           if (p.style === 'ring') {
               const progress = 1 - Math.max(0, lifeRatio);
@@ -387,6 +428,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
       ctx.font = 'bold 20px "Roboto", sans-serif';
       ctx.textAlign = 'center';
       floatingTexts.forEach(t => {
+          if (!inView(t.position, 40)) return;
           ctx.globalAlpha = Math.min(1, t.life * 2);
           ctx.fillStyle = t.color;
           ctx.strokeStyle = 'black';
@@ -567,12 +609,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, onMouseMove, onMouse
     const cx = WORLD_WIDTH / 2;
     const cy = WORLD_HEIGHT / 2;
     
-    const abyssGradient = ctx.createRadialGradient(cx, cy, 50, cx, cy, CENTER_RADIUS);
-    abyssGradient.addColorStop(0, '#000000');
-    abyssGradient.addColorStop(0.5, '#4c1d95'); 
-    abyssGradient.addColorStop(1, 'rgba(76, 29, 149, 0)');
-
-    ctx.fillStyle = abyssGradient;
+    ctx.fillStyle = getAbyssGradient(ctx);
     ctx.beginPath();
     ctx.arc(cx, cy, CENTER_RADIUS, 0, Math.PI * 2);
     ctx.fill();
