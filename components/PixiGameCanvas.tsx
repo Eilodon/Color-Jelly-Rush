@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { AnimatedSprite, Application, Container, Graphics, ParticleContainer, Sprite, Text, Texture, Ticker } from 'pixi.js';
+import type { AnimatedSprite, Application, Container, Graphics, Particle, ParticleContainer, Sprite, Text, Texture, Ticker } from 'pixi.js';
 import { Bot, Faction, GameState, Player, SizeTier } from '../types';
 import { CENTER_RADIUS, COLOR_PALETTE, DANGER_THRESHOLD_RATIO, EAT_THRESHOLD_RATIO, ELEMENTAL_ADVANTAGE, FACTION_CONFIG, MAP_RADIUS, WORLD_HEIGHT, WORLD_WIDTH } from '../constants';
 import { getSettings, subscribeSettings, type GameSettings, type QualityMode } from '../services/settings';
@@ -911,7 +911,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
   const foodMapRef = useRef(new Map<string, ItemVisual>());
   const powerUpMapRef = useRef(new Map<string, ItemVisual>());
   const projectileMapRef = useRef(new Map<string, ProjectileVisual>());
-  const particleMapRef = useRef(new Map<string, Sprite>());
+  const particleMapRef = useRef(new Map<string, Particle>());
   const floatingTextMapRef = useRef(new Map<string, Text>());
   const labelMapRef = useRef(new Map<string, Text>());
   const crownMapRef = useRef(new Map<string, Sprite>());
@@ -1119,9 +1119,8 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
           if (featureVisibilityRef.current.particles !== particlesVisible) {
             featureVisibilityRef.current.particles = particlesVisible;
             if (!particlesVisible) {
-              particleMapRef.current.forEach((sprite) => sprite.destroy());
               particleMapRef.current.clear();
-              layers.particles.removeChildren();
+              layers.particles.removeParticles();
             }
           }
           if (featureVisibilityRef.current.particleLines !== particleLinesVisible) {
@@ -1670,26 +1669,24 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
             } else if (layers.particles.visible) {
               let sprite = particleMapRef.current.get(p.id);
               if (!sprite) {
-                sprite = new PIXI.Sprite(resources.softCircleTexture);
-                sprite.anchor.set(0.5);
-                layers.particles.addChild(sprite);
+                sprite = new PIXI.Particle({ texture: resources.softCircleTexture, anchorX: 0.5, anchorY: 0.5 });
+                layers.particles.addParticle(sprite);
                 particleMapRef.current.set(p.id, sprite);
               }
-              sprite.position.set(p.position.x, p.position.y);
+              sprite.x = p.position.x;
+              sprite.y = p.position.y;
               sprite.tint = hexToNumber(p.color);
               sprite.alpha = p.life;
               const scale = p.radius / (SOFT_TEXTURE_SIZE / 2);
-              sprite.scale.set(scale);
+              sprite.scaleX = scale;
+              sprite.scaleY = scale;
             }
           });
 
           particleMapRef.current.forEach((sprite, id) => {
             if (!particleActiveIds.has(id)) {
-              layers.particles.removeChild(sprite);
-              sprite.destroy();
+              layers.particles.removeParticle(sprite);
               particleMapRef.current.delete(id);
-            } else {
-              sprite.visible = particleVisibleIds.has(id);
             }
           });
         }
