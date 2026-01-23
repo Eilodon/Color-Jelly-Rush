@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [mutationChoices, setMutationChoices] = useState<MutationChoice[] | null>(null);
   const [profile, setProfile] = useState<PlayerProfile>(() => loadProfile());
   const [newUnlocks, setNewUnlocks] = useState<MutationId[]>([]);
+  const phaseRef = useRef<GamePhase>(phase);
   // GameStateRef holds the TRUTH. We do not sync this to React state every frame.
   const gameStateRef = useRef<GameState | null>(null);
   const profileRef = useRef<PlayerProfile>(profile);
@@ -26,10 +27,20 @@ const App: React.FC = () => {
   const requestRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const mutationKeyRef = useRef<string | null>(null);
+  const autoPausedRef = useRef(false);
 
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const setPhaseSafe = (next: GamePhase) => {
+    phaseRef.current = next;
+    setPhase(next);
+  };
 
   const preloadPixiCanvas = () => {
     void import('./components/PixiGameCanvas');
@@ -96,15 +107,16 @@ const App: React.FC = () => {
       engine: createGameEngine()
     };
 
-    setPhase(GamePhase.Playing);
+    setPhaseSafe(GamePhase.Playing);
     lastTimeRef.current = performance.now();
     requestRef.current = requestAnimationFrame(gameLoop);
   };
 
   const gameLoop = (time: number) => {
-    if (phase !== GamePhase.Playing && gameStateRef.current?.player.isDead) return;
+    if (phaseRef.current !== GamePhase.Playing) return;
 
-    const dt = (time - lastTimeRef.current) / 1000;
+    const dtRaw = (time - lastTimeRef.current) / 1000;
+    const dt = Math.min(0.05, Math.max(0, dtRaw));
     lastTimeRef.current = time;
 
     if (gameStateRef.current) {
@@ -137,7 +149,7 @@ const App: React.FC = () => {
         setProfile(result.profile);
         saveProfile(result.profile);
         setNewUnlocks(result.newlyUnlocked);
-        setPhase(GamePhase.GameOver);
+        setPhaseSafe(GamePhase.GameOver);
         if (requestRef.current) cancelAnimationFrame(requestRef.current);
         return;
       }
@@ -193,6 +205,41 @@ const App: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const pauseGame = () => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      if (!state.isPaused) autoPausedRef.current = true;
+      state.isPaused = true;
+      state.inputs.space = false;
+      state.inputs.w = false;
+    };
+
+    const resumeGame = () => {
+      const state = gameStateRef.current;
+      if (!state) return;
+      lastTimeRef.current = performance.now();
+      if (!autoPausedRef.current) return;
+      autoPausedRef.current = false;
+      if (!state.mutationChoices) state.isPaused = false;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) pauseGame();
+      else resumeGame();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', pauseGame);
+    window.addEventListener('focus', resumeGame);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', pauseGame);
+      window.removeEventListener('focus', resumeGame);
     };
   }, []);
 
@@ -327,7 +374,7 @@ const App: React.FC = () => {
               </div>
             )}
             <button
-              onClick={() => setPhase(GamePhase.Menu)}
+              onClick={() => setPhaseSafe(GamePhase.Menu)}
               className="px-8 py-3 bg-white text-black font-bold rounded hover:bg-gray-200"
             >
               RETURN TO MENU

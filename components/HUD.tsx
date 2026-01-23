@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { GameState, Faction } from '../types';
 import { GAME_DURATION, FACTION_CONFIG, SPAWN_PROTECTION_TIME } from '../constants';
 import { getMutationById } from '../services/mutations';
+import { getSettings, resetSettings, setSettings, subscribeSettings, type GameSettings, type QualityMode } from '../services/settings';
+import { getRuntimeStats } from '../services/runtimeStats';
 
 interface HUDProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
@@ -33,7 +35,16 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
   const progressRef = useRef<HTMLDivElement>(null);
   const leaderBoardRef = useRef<HTMLDivElement>(null);
   const mutationRef = useRef<HTMLDivElement>(null);
+  const debugRef = useRef<HTMLDivElement>(null);
   const lastStatsUpdateRef = useRef(0);
+  const settingsRef = useRef<GameSettings>(getSettings());
+  const settingsOpenRef = useRef(false);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const qualitySelectRef = useRef<HTMLSelectElement>(null);
+  const debugToggleRef = useRef<HTMLInputElement>(null);
+  const particlesToggleRef = useRef<HTMLInputElement>(null);
+  const particleLinesToggleRef = useRef<HTMLInputElement>(null);
+  const floatingTextsToggleRef = useRef<HTMLInputElement>(null);
 
   // We only render the static parts once.
   // Dynamic parts are updated via a lightweight loop.
@@ -42,6 +53,25 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
   const factionData = player ? FACTION_CONFIG[player.faction] : FACTION_CONFIG[Faction.Fire];
 
   useEffect(() => {
+    const syncSettingsControls = () => {
+      const s = settingsRef.current;
+      if (qualitySelectRef.current) qualitySelectRef.current.value = s.qualityMode;
+      if (debugToggleRef.current) debugToggleRef.current.checked = s.debugOverlay;
+      if (particlesToggleRef.current) particlesToggleRef.current.checked = s.showParticles;
+      if (particleLinesToggleRef.current) particleLinesToggleRef.current.checked = s.showParticleLines;
+      if (floatingTextsToggleRef.current) floatingTextsToggleRef.current.checked = s.showFloatingTexts;
+      if (settingsPanelRef.current) {
+        settingsPanelRef.current.style.display = settingsOpenRef.current ? 'block' : 'none';
+      }
+    };
+
+    const unsubscribe = subscribeSettings(() => {
+      settingsRef.current = getSettings();
+      syncSettingsControls();
+    });
+
+    syncSettingsControls();
+
     let animationFrameId: number;
 
     const updateHUD = (time?: number) => {
@@ -133,13 +163,30 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
           : `<div class="text-[10px] text-slate-500">No mutations</div>`;
       }
 
+      if (shouldUpdateStats && debugRef.current) {
+        const settings = settingsRef.current;
+        debugRef.current.style.display = settings.debugOverlay ? 'block' : 'none';
+        if (settings.debugOverlay) {
+          const stats = getRuntimeStats();
+          const entityCount = 1 + (state.bots?.length ?? 0) + (state.creeps?.length ?? 0) + (state.boss ? 1 : 0);
+          const particleCount = state.particles?.length ?? 0;
+          debugRef.current.innerText =
+            `FPS ${stats.fpsNow.toFixed(0)} (avg ${stats.fpsAvg.toFixed(0)})\n` +
+            `Quality ${settings.qualityMode.toUpperCase()} → ${stats.appliedQuality.toUpperCase()} (DPR ${stats.dpr.toFixed(2)})\n` +
+            `Entities ${entityCount} | Particles ${particleCount}`;
+        }
+      }
+
       if (shouldUpdateStats) lastStatsUpdateRef.current = now;
 
       animationFrameId = requestAnimationFrame(updateHUD);
     };
 
     updateHUD();
-    return () => cancelAnimationFrame(animationFrameId);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      unsubscribe();
+    };
   }, []);
 
   if (!player) return null;
@@ -190,6 +237,21 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
 
         {/* Leaderboard & Score */}
         <div className="flex flex-col gap-2 items-end">
+          <div className="pointer-events-auto flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                settingsOpenRef.current = !settingsOpenRef.current;
+                if (settingsPanelRef.current) {
+                  settingsPanelRef.current.style.display = settingsOpenRef.current ? 'block' : 'none';
+                }
+              }}
+              className="px-3 py-2 rounded-lg bg-slate-900/80 border border-slate-700 text-slate-200 text-xs hover:bg-slate-800"
+            >
+              SETTINGS
+            </button>
+          </div>
+
           <div className="bg-slate-900 bg-opacity-80 backdrop-blur-sm p-4 rounded-xl border border-slate-700 min-w-[200px]">
             <h4 className="text-yellow-500 font-bold text-xs uppercase tracking-widest mb-2 border-b border-slate-700 pb-1">Leaderboard</h4>
             <div ref={leaderBoardRef} className="flex flex-col gap-1"></div>
@@ -199,6 +261,99 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef, isTouchInput = false }) => {
           </div>
         </div>
       </div>
+
+      {/* Settings Panel */}
+      <div ref={settingsPanelRef} className="pointer-events-auto absolute top-20 right-4 w-[320px] hidden">
+        <div className="bg-slate-950/90 border border-slate-700 rounded-2xl p-4 shadow-2xl">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-bold text-slate-100">Settings</div>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700"
+              onClick={() => {
+                settingsOpenRef.current = false;
+                if (settingsPanelRef.current) settingsPanelRef.current.style.display = 'none';
+              }}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="space-y-3 text-sm text-slate-200">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-slate-300">Quality</span>
+              <select
+                ref={qualitySelectRef}
+                className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-sm"
+                defaultValue={settingsRef.current.qualityMode}
+                onChange={(e) => setSettings({ qualityMode: e.target.value as QualityMode })}
+              >
+                <option value="auto">Auto</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-slate-300">Debug overlay</span>
+              <input
+                ref={debugToggleRef}
+                type="checkbox"
+                defaultChecked={settingsRef.current.debugOverlay}
+                onChange={(e) => setSettings({ debugOverlay: e.target.checked })}
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-slate-300">Particles</span>
+              <input
+                ref={particlesToggleRef}
+                type="checkbox"
+                defaultChecked={settingsRef.current.showParticles}
+                onChange={(e) => setSettings({ showParticles: e.target.checked })}
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-slate-300">Particle lines</span>
+              <input
+                ref={particleLinesToggleRef}
+                type="checkbox"
+                defaultChecked={settingsRef.current.showParticleLines}
+                onChange={(e) => setSettings({ showParticleLines: e.target.checked })}
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-slate-300">Floating texts</span>
+              <input
+                ref={floatingTextsToggleRef}
+                type="checkbox"
+                defaultChecked={settingsRef.current.showFloatingTexts}
+                onChange={(e) => setSettings({ showFloatingTexts: e.target.checked })}
+              />
+            </label>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                className="text-xs px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700"
+                onClick={() => resetSettings()}
+              >
+                Reset defaults
+              </button>
+              <div className="text-[10px] text-slate-500">Saved locally</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Debug Overlay */}
+      <div
+        ref={debugRef}
+        className="pointer-events-none absolute bottom-4 left-4 bg-black/60 border border-slate-700 rounded-xl px-3 py-2 text-[11px] text-slate-100 whitespace-pre hidden"
+      />
 
       {/* Bottom Area */}
       <div className="w-full flex justify-between items-end pb-4">

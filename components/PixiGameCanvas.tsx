@@ -2,6 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import type { AnimatedSprite, Application, Container, Graphics, ParticleContainer, Sprite, Text, Texture } from 'pixi.js';
 import { Bot, Faction, GameState, Player, SizeTier } from '../types';
 import { CENTER_RADIUS, COLOR_PALETTE, DANGER_THRESHOLD_RATIO, EAT_THRESHOLD_RATIO, ELEMENTAL_ADVANTAGE, FACTION_CONFIG, MAP_RADIUS, WORLD_HEIGHT, WORLD_WIDTH } from '../constants';
+import { getSettings, subscribeSettings, type GameSettings, type QualityMode } from '../services/settings';
+import { setRuntimeStats } from '../services/runtimeStats';
 
 type PixiModule = typeof import('pixi.js');
 
@@ -852,6 +854,16 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
   const sizeRef = useRef({ width: 0, height: 0, dpr: 1 });
   const frameRef = useRef(0);
   const zoneRadiusRef = useRef<number | null>(null);
+  const settingsRef = useRef<GameSettings>(getSettings());
+  const appliedQualityRef = useRef<Exclude<QualityMode, 'auto'>>('high');
+  const lastQualityChangeRef = useRef(0);
+  const fpsAvgRef = useRef(60);
+  const lastStatsPublishRef = useRef(0);
+  const featureVisibilityRef = useRef({
+    particles: true,
+    particleLines: true,
+    floatingTexts: true,
+  });
 
   const entityMapRef = useRef(new Map<string, EntityVisual>());
   const foodMapRef = useRef(new Map<string, ItemVisual>());
@@ -864,9 +876,31 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
   const landmarkMapRef = useRef(new Map<string, LandmarkVisual>());
   const deathBurstRef = useRef<DeathBurst[]>([]);
 
+  const getQualityProfile = (quality: Exclude<QualityMode, 'auto'>) => {
+    if (quality === 'low') {
+      return { dprCap: 1, particles: false, particleLines: false, floatingTexts: false };
+    }
+    if (quality === 'medium') {
+      return { dprCap: 1.5, particles: true, particleLines: false, floatingTexts: true };
+    }
+    return { dprCap: 2, particles: true, particleLines: true, floatingTexts: true };
+  };
+
+  const computeEffectiveDpr = () => {
+    const settings = settingsRef.current;
+    const quality = appliedQualityRef.current;
+    const profile = getQualityProfile(quality);
+    const device = window.devicePixelRatio || 1;
+    const cap = settings.qualityMode === 'auto' ? profile.dprCap : getQualityProfile(settings.qualityMode as Exclude<QualityMode, 'auto'>).dprCap;
+    return Math.min(device, cap);
+  };
+
   useEffect(() => {
     let destroyed = false;
     let cleanupResize: (() => void) | null = null;
+    const unsubscribeSettings = subscribeSettings(() => {
+      settingsRef.current = getSettings();
+    });
 
     const setup = async () => {
       if (!containerRef.current) return;
@@ -987,7 +1021,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
       const updateSize = () => {
         const width = window.innerWidth;
         const height = window.innerHeight;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = computeEffectiveDpr();
         sizeRef.current = { width, height, dpr };
         app.renderer.resolution = dpr;
         app.renderer.resize(width, height);
@@ -998,8 +1032,67 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
       cleanupResize = () => window.removeEventListener('resize', updateSize);
 
       const updateScene = (delta: number) => {
-        const state = gameState;
+        const now = performance.now();
+        const fpsNow = delta > 0 ? 60 / delta : 60;
+        fpsAvgRef.current = fpsAvgRef.current * 0.92 + fpsNow * 0.08;
+
+        const settings = settingsRef.current;
+        if (settings.qualityMode === 'auto') {
+          const avg = fpsAvgRef.current;
+          const cooldownMs = 2500;
+          const canChange = now - lastQualityChangeRef.current > cooldownMs;
+          if (canChange && avg < 46 && appliedQualityRef.current !== 'low') {
+            appliedQualityRef.current = appliedQualityRef.current === 'high' ? 'medium' : 'low';
+            lastQualityChangeRef.current = now;
+          } else if (canChange && avg > 57 && appliedQualityRef.current !== 'high') {
+            appliedQualityRef.current = appliedQualityRef.current === 'low' ? 'medium' : 'high';
+            lastQualityChangeRef.current = now;
+          }
+        } else {
+          appliedQualityRef.current = settings.qualityMode as Exclude<QualityMode, 'auto'>;
+        }
+
+        const profile = getQualityProfile(appliedQualityRef.current);
+        const desiredDpr = Math.min(window.devicePixelRatio || 1, profile.dprCap);
+        if (Math.abs(desiredDpr - sizeRef.current.dpr) > 0.01) {
+          sizeRef.current.dpr = desiredDpr;
+          app.renderer.resolution = desiredDpr;
+          app.renderer.resize(sizeRef.current.width || window.innerWidth, sizeRef.current.height || window.innerHeight);
+        }
+
         const layers = layersRef.current;
+        if (layers) {
+          const particlesVisible = settings.showParticles && profile.particles;
+          const particleLinesVisible = settings.showParticleLines && profile.particleLines;
+          const floatingTextsVisible = settings.showFloatingTexts && profile.floatingTexts;
+
+          if (featureVisibilityRef.current.particles !== particlesVisible) {
+            featureVisibilityRef.current.particles = particlesVisible;
+            if (!particlesVisible) {
+              particleMapRef.current.forEach((sprite) => sprite.destroy());
+              particleMapRef.current.clear();
+              layers.particles.removeChildren();
+            }
+          }
+          if (featureVisibilityRef.current.particleLines !== particleLinesVisible) {
+            featureVisibilityRef.current.particleLines = particleLinesVisible;
+            if (!particleLinesVisible) layers.particleLines.clear();
+          }
+          if (featureVisibilityRef.current.floatingTexts !== floatingTextsVisible) {
+            featureVisibilityRef.current.floatingTexts = floatingTextsVisible;
+            if (!floatingTextsVisible) {
+              floatingTextMapRef.current.forEach((text) => text.destroy());
+              floatingTextMapRef.current.clear();
+              layers.floatingTexts.removeChildren();
+            }
+          }
+
+          layers.particles.visible = particlesVisible;
+          layers.particleLines.visible = particleLinesVisible;
+          layers.floatingTexts.visible = floatingTextsVisible;
+        }
+
+        const state = gameState;
         const resources = texturesRef.current;
         if (!layers || !resources) return;
 
@@ -1504,99 +1597,103 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
           }
         });
 
-        layers.particleLines.clear();
-        const particleActiveIds = new Set<string>();
-        const particleVisibleIds = new Set<string>();
+        if (layers.particleLines.visible || layers.particles.visible) {
+          if (layers.particleLines.visible) layers.particleLines.clear();
+          const particleActiveIds = new Set<string>();
+          const particleVisibleIds = new Set<string>();
 
-        state.particles.forEach((p) => {
-          if (!inView(p.position, p.radius * 2)) return;
-          particleActiveIds.add(p.id);
-          particleVisibleIds.add(p.id);
-          const lifeRatio = p.maxLife > 0 ? p.life / p.maxLife : p.life;
+          state.particles.forEach((p) => {
+            if (!inView(p.position, p.radius * 2)) return;
+            particleActiveIds.add(p.id);
+            particleVisibleIds.add(p.id);
+            const lifeRatio = p.maxLife > 0 ? p.life / p.maxLife : p.life;
 
-          if (p.style === 'ring') {
-            const progress = 1 - Math.max(0, lifeRatio);
-            const ringRadius = p.radius * (1 + progress * 1.6);
-            layers.particleLines.lineStyle(p.lineWidth ?? Math.max(2, p.radius * 0.15), hexToNumber(p.color), Math.max(0, lifeRatio));
-            layers.particleLines.drawCircle(p.position.x, p.position.y, ringRadius);
-          } else if (p.style === 'line') {
-            const angle = p.angle ?? Math.atan2(p.velocity.y, p.velocity.x);
-            const length = p.lineLength ?? p.radius * 4;
-            layers.particleLines.lineStyle(p.lineWidth ?? Math.max(2, p.radius * 0.2), hexToNumber(p.color), Math.max(0, lifeRatio));
-            layers.particleLines.moveTo(
-              p.position.x - Math.cos(angle) * length * 0.5,
-              p.position.y - Math.sin(angle) * length * 0.5
-            );
-            layers.particleLines.lineTo(
-              p.position.x + Math.cos(angle) * length * 0.5,
-              p.position.y + Math.sin(angle) * length * 0.5
-            );
-          } else {
-            let sprite = particleMapRef.current.get(p.id);
-            if (!sprite) {
-              sprite = new PIXI.Sprite(resources.softCircleTexture);
-              sprite.anchor.set(0.5);
-              layers.particles.addChild(sprite);
-              particleMapRef.current.set(p.id, sprite);
+            if (layers.particleLines.visible && p.style === 'ring') {
+              const progress = 1 - Math.max(0, lifeRatio);
+              const ringRadius = p.radius * (1 + progress * 1.6);
+              layers.particleLines.lineStyle(p.lineWidth ?? Math.max(2, p.radius * 0.15), hexToNumber(p.color), Math.max(0, lifeRatio));
+              layers.particleLines.drawCircle(p.position.x, p.position.y, ringRadius);
+            } else if (layers.particleLines.visible && p.style === 'line') {
+              const angle = p.angle ?? Math.atan2(p.velocity.y, p.velocity.x);
+              const length = p.lineLength ?? p.radius * 4;
+              layers.particleLines.lineStyle(p.lineWidth ?? Math.max(2, p.radius * 0.2), hexToNumber(p.color), Math.max(0, lifeRatio));
+              layers.particleLines.moveTo(
+                p.position.x - Math.cos(angle) * length * 0.5,
+                p.position.y - Math.sin(angle) * length * 0.5
+              );
+              layers.particleLines.lineTo(
+                p.position.x + Math.cos(angle) * length * 0.5,
+                p.position.y + Math.sin(angle) * length * 0.5
+              );
+            } else if (layers.particles.visible) {
+              let sprite = particleMapRef.current.get(p.id);
+              if (!sprite) {
+                sprite = new PIXI.Sprite(resources.softCircleTexture);
+                sprite.anchor.set(0.5);
+                layers.particles.addChild(sprite);
+                particleMapRef.current.set(p.id, sprite);
+              }
+              sprite.position.set(p.position.x, p.position.y);
+              sprite.tint = hexToNumber(p.color);
+              sprite.alpha = p.life;
+              const scale = p.radius / (SOFT_TEXTURE_SIZE / 2);
+              sprite.scale.set(scale);
             }
-            sprite.position.set(p.position.x, p.position.y);
-            sprite.tint = hexToNumber(p.color);
-            sprite.alpha = p.life;
-            const scale = p.radius / (SOFT_TEXTURE_SIZE / 2);
-            sprite.scale.set(scale);
-          }
-        });
+          });
 
-        particleMapRef.current.forEach((sprite, id) => {
-          if (!particleActiveIds.has(id)) {
-            layers.particles.removeChild(sprite);
-            sprite.destroy();
-            particleMapRef.current.delete(id);
-          } else {
-            sprite.visible = particleVisibleIds.has(id);
-          }
-        });
+          particleMapRef.current.forEach((sprite, id) => {
+            if (!particleActiveIds.has(id)) {
+              layers.particles.removeChild(sprite);
+              sprite.destroy();
+              particleMapRef.current.delete(id);
+            } else {
+              sprite.visible = particleVisibleIds.has(id);
+            }
+          });
+        }
 
-        const floatingActiveIds = new Set<string>();
-        const floatingVisibleIds = new Set<string>();
-        state.floatingTexts.forEach((t) => {
-          floatingActiveIds.add(t.id);
-          if (!inView(t.position, 40)) return;
-          floatingVisibleIds.add(t.id);
+        if (layers.floatingTexts.visible) {
+          const floatingActiveIds = new Set<string>();
+          const floatingVisibleIds = new Set<string>();
+          state.floatingTexts.forEach((t) => {
+            floatingActiveIds.add(t.id);
+            if (!inView(t.position, 40)) return;
+            floatingVisibleIds.add(t.id);
 
-          let text = floatingTextMapRef.current.get(t.id);
-          if (!text) {
-            text = new PIXI.Text(t.text, {
-              fontFamily: '"Roboto", sans-serif',
-              fontSize: t.size,
-              fontWeight: 'bold',
-              fill: t.color,
-              stroke: '#000000',
-              strokeThickness: 2,
-            });
-            text.anchor.set(0.5);
-            layers.floatingTexts.addChild(text);
-            floatingTextMapRef.current.set(t.id, text);
-          }
+            let text = floatingTextMapRef.current.get(t.id);
+            if (!text) {
+              text = new PIXI.Text(t.text, {
+                fontFamily: '"Roboto", sans-serif',
+                fontSize: t.size,
+                fontWeight: 'bold',
+                fill: t.color,
+                stroke: '#000000',
+                strokeThickness: 2,
+              });
+              text.anchor.set(0.5);
+              layers.floatingTexts.addChild(text);
+              floatingTextMapRef.current.set(t.id, text);
+            }
 
-          text.text = t.text;
-          text.style.fontSize = t.size;
-          text.style.fill = t.color;
-          text.position.set(t.position.x, t.position.y);
-          text.alpha = Math.min(1, t.life * 2);
-          const scale = 1 + (1 - t.life) * 0.5;
-          text.scale.set(scale);
-        });
+            text.text = t.text;
+            text.style.fontSize = t.size;
+            text.style.fill = t.color;
+            text.position.set(t.position.x, t.position.y);
+            text.alpha = Math.min(1, t.life * 2);
+            const scale = 1 + (1 - t.life) * 0.5;
+            text.scale.set(scale);
+          });
 
-        floatingTextMapRef.current.forEach((text, id) => {
-          if (!floatingActiveIds.has(id)) {
-            layers.floatingTexts.removeChild(text);
-            text.destroy();
-            floatingTextMapRef.current.delete(id);
-          } else {
-            text.visible = floatingVisibleIds.has(id);
-          }
-        });
+          floatingTextMapRef.current.forEach((text, id) => {
+            if (!floatingActiveIds.has(id)) {
+              layers.floatingTexts.removeChild(text);
+              text.destroy();
+              floatingTextMapRef.current.delete(id);
+            } else {
+              text.visible = floatingVisibleIds.has(id);
+            }
+          });
+        }
 
         const deathBursts = deathBurstRef.current;
         for (let i = deathBursts.length - 1; i >= 0; i--) {
@@ -1621,6 +1718,16 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
           layers.screenOverlay.drawRect(0, 0, width, height);
           layers.screenOverlay.endFill();
         }
+
+        if (now - lastStatsPublishRef.current > 250) {
+          lastStatsPublishRef.current = now;
+          setRuntimeStats({
+            fpsNow,
+            fpsAvg: fpsAvgRef.current,
+            appliedQuality: appliedQualityRef.current,
+            dpr: sizeRef.current.dpr,
+          });
+        }
       };
 
       app.ticker.add(updateScene);
@@ -1630,6 +1737,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({
 
     return () => {
       destroyed = true;
+      unsubscribeSettings();
       cleanupResize?.();
       if (appRef.current) {
         appRef.current.destroy(true, { children: true, texture: true, baseTexture: true });
