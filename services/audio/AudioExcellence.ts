@@ -3,6 +3,8 @@
  * Dynamic soundtrack, spatial audio, Web Audio API mastery
  */
 
+import { AUDIO_CONSTANTS } from '../../constants/audio';
+
 export interface AudioTheme {
   name: string;
   layers: AudioLayer[];
@@ -268,12 +270,19 @@ export class AudioExcellence {
     }
   }
 
-  stopTheme() {
+  private fadeOutLayer(nodes: AudioNode[], duration: number) {
+    const gainNode = nodes.find(node => node instanceof GainNode) as GainNode;
+    if (gainNode) {
+      gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + duration);
+    }
+  }
+
+  private stopTheme() {
     if (!this.currentTheme) return;
     
-    // Fade out and stop all layers
+    // Fade out and stop all layers using constants
     for (const [layerId, nodes] of this.activeLayers) {
-      this.fadeOutLayer(nodes, 1.0);
+      this.fadeOutLayer(nodes, AUDIO_CONSTANTS.FADE.LAYER_FADE_OUT);
       setTimeout(() => {
         nodes.forEach(node => {
           if ('stop' in node) {
@@ -281,18 +290,11 @@ export class AudioExcellence {
           }
           node.disconnect();
         });
-      }, 1000);
+      }, AUDIO_CONSTANTS.FADE.LAYER_FADE_OUT * 1000);
     }
     
     this.activeLayers.clear();
     this.currentTheme = null;
-  }
-
-  private fadeOutLayer(nodes: AudioNode[], duration: number) {
-    const gainNode = nodes.find(node => node instanceof GainNode) as GainNode;
-    if (gainNode) {
-      gainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + duration);
-    }
   }
 
   // Adaptive audio based on gameplay
@@ -304,11 +306,11 @@ export class AudioExcellence {
   }) {
     if (!this.adaptiveMode || !this.currentTheme) return;
     
-    // Adjust audio based on game intensity
-    const intensityGain = 0.5 + (gameState.intensity * 0.5);
+    // Adjust audio based on game intensity using constants
+    const intensityGain = AUDIO_CONSTANTS.INTENSITY.MIN_GAIN + (gameState.intensity * AUDIO_CONSTANTS.INTENSITY.BASE_INTENSITY);
     this.masterGain.gain.linearRampToValueAtTime(
       intensityGain,
-      this.audioContext.currentTime + 0.5
+      this.audioContext.currentTime + AUDIO_CONSTANTS.INTENSITY.TRANSITION_DURATION
     );
     
     // Add ring-specific audio layers
@@ -344,8 +346,8 @@ export class AudioExcellence {
   }
 
   private updateTempo(matchPercent: number) {
-    // Adjust tempo based on match percentage
-    const tempoMultiplier = 0.8 + (matchPercent * 0.4); // 0.8x to 1.2x
+    // Adjust tempo based on match percentage using constants
+    const tempoMultiplier = AUDIO_CONSTANTS.TEMPO.MIN_MULTIPLIER + (matchPercent * AUDIO_CONSTANTS.TEMPO.BASE_RANGE);
     
     for (const [layerId, nodes] of this.activeLayers) {
       const oscillator = nodes.find(node => node instanceof OscillatorNode) as OscillatorNode;
@@ -353,7 +355,7 @@ export class AudioExcellence {
         const baseFreq = oscillator.frequency.value;
         oscillator.frequency.linearRampToValueAtTime(
           baseFreq * tempoMultiplier,
-          this.audioContext.currentTime + 0.5
+          this.audioContext.currentTime + AUDIO_CONSTANTS.TEMPO.TRANSITION_DURATION
         );
       }
     }
@@ -373,16 +375,7 @@ export class AudioExcellence {
 
   // Game event sounds
   playGameSound(event: 'skill' | 'hit' | 'levelUp' | 'achievement' | 'death' | 'ringCommit') {
-    const soundConfigs = {
-      skill: { frequency: 800, duration: 0.2, type: 'square' as OscillatorType },
-      hit: { frequency: 200, duration: 0.1, type: 'sawtooth' as OscillatorType },
-      levelUp: { frequency: 400, duration: 0.5, type: 'sine' as OscillatorType },
-      achievement: { frequency: 600, duration: 0.8, type: 'triangle' as OscillatorType },
-      death: { frequency: 100, duration: 1.0, type: 'sawtooth' as OscillatorType },
-      ringCommit: { frequency: 1000, duration: 0.3, type: 'sine' as OscillatorType },
-    };
-    
-    const config = soundConfigs[event];
+    const config = AUDIO_CONSTANTS.GAME_SOUNDS[event];
     if (config) {
       this.playProceduralSound(config.frequency, config.duration, config.type);
     }
@@ -396,8 +389,10 @@ export class AudioExcellence {
     oscillator.frequency.value = frequency;
     
     const now = this.audioContext.currentTime;
-    gainNode.gain.setValueAtTime(0.3, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+    gainNode.gain.setValueAtTime(AUDIO_CONSTANTS.PROCEDURAL.BASE_VOLUME, now);
+    
+    // Apply envelope using constants
+    gainNode.gain.linearRampToValueAtTime(0, now + duration);
     
     oscillator.connect(gainNode);
     gainNode.connect(this.masterGain);

@@ -27,6 +27,8 @@ import { createPlayer } from '../../../services/engine/factories';
 import { GameRuntimeState } from '../../../types';
 import { getLevelConfig } from '../../../services/cjr/levels';
 import { vfxIntegrationManager } from '../../../services/vfx/vfxIntegration';
+// Import security validation
+import { serverValidator } from '../security/ServerValidator';
 
 export class GameRoom extends Room<GameRoomState> {
   maxClients = 50;
@@ -158,6 +160,8 @@ export class GameRoom extends Room<GameRoomState> {
 
   onDispose() {
     console.log('room disposed!');
+    // Clean up security validator
+    serverValidator.cleanup();
   }
 
   update(dt: number) {
@@ -176,9 +180,41 @@ export class GameRoom extends Room<GameRoomState> {
         player.inputs = { space: false, w: false };
         return;
       }
-      player.targetPosition = { x: input.targetX, y: input.targetY };
-      player.inputs = { space: input.space, w: input.w };
-      player.inputSeq = input.seq;
+
+      // Validate input before applying
+      const lastInput = this.inputsBySession.get(player.id);
+      const serverPlayer = this.state.players.get(player.id);
+      
+      if (serverPlayer) {
+        // Sanitize input
+        const sanitizedInput = serverValidator.sanitizeInput(input);
+        
+        // Validate input sequence and rules
+        const validation = serverValidator.validateInput(
+          player.id,
+          sanitizedInput,
+          lastInput || null,
+          serverPlayer
+        );
+        
+        if (!validation.isValid) {
+          console.warn(`Invalid input from ${player.id}: ${validation.reason}`);
+          // Skip this input but don't disconnect the player
+          return;
+        }
+
+        // Validate action rate limiting
+        const rateValidation = serverValidator.validateActionRate(player.id, 'movement', 20);
+        if (!rateValidation.isValid) {
+          console.warn(`Rate limit exceeded for ${player.id}: ${rateValidation.reason}`);
+          return;
+        }
+
+        // Apply validated input
+        player.targetPosition = { x: sanitizedInput.targetX, y: sanitizedInput.targetY };
+        player.inputs = { space: sanitizedInput.space, w: sanitizedInput.w };
+        player.inputSeq = sanitizedInput.seq;
+      }
     });
   }
 
@@ -193,6 +229,43 @@ export class GameRoom extends Room<GameRoomState> {
         serverPlayer.shape = player.shape;
         this.state.players.set(player.id, serverPlayer);
       }
+
+      // Validate position changes to prevent teleportation
+      const positionValidation = serverValidator.validatePosition(
+        player.id,
+        player.position,
+        { x: serverPlayer.position.x, y: serverPlayer.position.y },
+        1/60 // Assuming 60 FPS
+      );
+
+      if (!positionValidation.isValid) {
+        console.warn(`Invalid position from ${player.id}: ${positionValidation.reason}`);
+        // Use corrected position
+        if (positionValidation.correctedPosition) {
+          player.position.x = positionValidation.correctedPosition.x;
+          player.position.y = positionValidation.correctedPosition.y;
+        }
+      }
+
+      // Validate player stats
+      const statsValidation = serverValidator.validatePlayerStats(
+        {
+          ...serverPlayer,
+          score: player.score,
+          currentHealth: player.currentHealth,
+          radius: player.radius,
+          pigment: player.pigment
+        } as PlayerState,
+        serverPlayer,
+        1/60
+      );
+
+      if (!statsValidation.isValid) {
+        console.warn(`Invalid stats from ${player.id}: ${statsValidation.reason}`);
+        // Skip stats update but continue with position
+      }
+
+      // Apply validated state
       serverPlayer.position.x = player.position.x;
       serverPlayer.position.y = player.position.y;
       serverPlayer.velocity.x = player.velocity.x;
