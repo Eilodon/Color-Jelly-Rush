@@ -50,10 +50,19 @@ import { TattooId } from '../cjr/cjrTypes';
 import { getLevelConfig } from '../cjr/levels';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
+import { resetContributionLog } from '../cjr/contribution';
 
 // --- Main Game Loop ---
 export const updateGameState = (state: GameState, dt: number): GameState => {
   if (state.isPaused) return state;
+
+  const players = state.players?.length ? state.players : [state.player];
+  if (!state.players?.length) {
+    state.players = players;
+  }
+  if (players.length > 0 && state.player !== players[0]) {
+    state.player = players[0];
+  }
 
   // 1. Bind Engine Context & Grid Setup
   bindEngine(state.engine);
@@ -68,26 +77,28 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   }
 
   // 3. Batch Entity Insertion
-  const allEntities = [state.player, ...state.bots, ...state.food, ...state.projectiles];
+  const allEntities = [...players, ...state.bots, ...state.food, ...state.projectiles];
   allEntities.forEach(entity => grid.insert(entity));
 
   // 4. BATCHED ENTITY UPDATES (Player + Bots)
-  updatePlayer(state.player, state, dt);
+  players.forEach(player => updatePlayer(player, state, dt));
   state.bots.forEach(bot => updateBot(bot, state, dt));
 
   // 5. BATCHED PROJECTILE & PARTICLE UPDATES
   updateProjectiles(state, dt);
   updateParticles(state, dt);
+  updateFloatingTexts(state, dt);
+  cleanupTransientEntities(state);
 
   // 6. BATCHED CJR SYSTEMS (Wave + Ring + Boss + Win)
   updateWaveSpawner(state, dt);
-  updateRingLogic(state.player, dt, state.levelConfig, state);
+  players.forEach(player => updateRingLogic(player, dt, state.levelConfig, state));
   state.bots.forEach(b => updateRingLogic(b, dt, state.levelConfig, state));
   updateBossLogic(state, dt);
   updateWinCondition(state, dt, state.levelConfig);
 
   // 7. BATCHED EMOTION UPDATES (merged with camera)
-  if (state.player) updateEmotion(state.player, dt);
+  players.forEach(player => updateEmotion(player, dt));
   state.bots.forEach(b => updateEmotion(b, dt));
   updateCamera(state);
 
@@ -98,7 +109,7 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   vfxIntegrationManager.update(state, dt);
 
   // 10. Tattoo Synergy System Updates (Gameplay Depth)
-  tattooSynergyManager.checkSynergies(state.player, state);
+  players.forEach(player => tattooSynergyManager.checkSynergies(player, state));
   tattooSynergyManager.updateSynergies(state, dt);
 
   // 11. Apply screen shake to camera
@@ -113,7 +124,8 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
   if (player.isDead) return;
 
   // Input Handling
-  handleInput(player, state.inputs, dt, state);
+  const activeInputs = player.inputs ?? state.inputs;
+  handleInput(player, activeInputs, dt, state);
 
   // Physics
   applyPhysics(player, dt);
@@ -315,13 +327,73 @@ const updateParticles = (state: GameState, dt: number) => {
   const engine = state.engine;
   for (let i = state.particles.length - 1; i >= 0; i--) {
     const p = state.particles[i];
+    if (p.isDead) {
+      engine.particlePool.release(p);
+      state.particles.splice(i, 1);
+      continue;
+    }
     p.life -= dt;
+    if ((p as any).floatUpward) {
+      const floatSpeed = (p as any).floatSpeed ?? 20;
+      p.position.y -= floatSpeed * dt;
+    }
+    if ((p as any).expandSpeed) {
+      p.radius += (p as any).expandSpeed * dt;
+    }
+    if ((p as any).rotationSpeed) {
+      p.angle = (p.angle ?? 0) + (p as any).rotationSpeed * dt;
+    }
+    if ((p as any).isRipple) {
+      const rippleRadius = (p as any).rippleRadius ?? 0;
+      const rippleSpeed = (p as any).rippleSpeed ?? 0;
+      (p as any).rippleRadius = rippleRadius + rippleSpeed * dt;
+      if ((p as any).rippleMaxRadius && (p as any).rippleRadius >= (p as any).rippleMaxRadius) {
+        p.life = 0;
+      }
+    }
+    if ((p as any).isPulse) {
+      const pulseRadius = (p as any).pulseRadius ?? 0;
+      const pulseSpeed = (p as any).pulseSpeed ?? 0;
+      (p as any).pulseRadius = pulseRadius + pulseSpeed * dt;
+      if ((p as any).pulseMaxRadius && (p as any).pulseRadius >= (p as any).pulseMaxRadius) {
+        p.life = 0;
+      }
+    }
+    if ((p as any).isShockwave) {
+      const shockwaveRadius = (p as any).shockwaveRadius ?? 0;
+      const shockwaveSpeed = (p as any).shockwaveSpeed ?? 0;
+      (p as any).shockwaveRadius = shockwaveRadius + shockwaveSpeed * dt;
+      if ((p as any).shockwaveMaxRadius && (p as any).shockwaveRadius >= (p as any).shockwaveMaxRadius) {
+        p.life = 0;
+      }
+    }
     p.position.x += p.velocity.x * dt;
     p.position.y += p.velocity.y * dt;
     if (p.life <= 0) {
       engine.particlePool.release(p); // Return to pool
       state.particles.splice(i, 1);
     }
+  }
+};
+
+const updateFloatingTexts = (state: GameState, dt: number) => {
+  for (let i = state.floatingTexts.length - 1; i >= 0; i--) {
+    const t = state.floatingTexts[i];
+    t.life -= dt;
+    t.position.x += t.velocity.x * dt;
+    t.position.y += t.velocity.y * dt;
+    if (t.life <= 0) {
+      state.floatingTexts.splice(i, 1);
+    }
+  }
+};
+
+const cleanupTransientEntities = (state: GameState) => {
+  if (state.food.length > 0) {
+    state.food = state.food.filter(f => !f.isDead);
+  }
+  if (state.projectiles.length > 0) {
+    state.projectiles = state.projectiles.filter(p => !p.isDead);
   }
 };
 
@@ -370,13 +442,37 @@ export const createInitialState = (level: number = 1): GameState => {
   const player = createPlayer("Hero");
   const levelConfig = getLevelConfig(level);
 
-  resetWaveTimers(levelConfig);
-  resetBossState();
+  const runtime = {
+    wave: {
+      ring1: levelConfig.waveIntervals.ring1,
+      ring2: levelConfig.waveIntervals.ring2,
+      ring3: levelConfig.waveIntervals.ring3,
+    },
+    boss: {
+      bossDefeated: false,
+      rushWindowTimer: 0,
+      rushWindowRing: null,
+      currentBossActive: false,
+      attackCharging: false,
+      attackTarget: null,
+      attackChargeTimer: 0,
+    },
+    contribution: {
+      damageLog: new Map<string, number>(),
+      lastHitBy: new Map<string, string>(),
+    },
+  };
+
+  resetWaveTimers(runtime, levelConfig);
+  resetBossState(runtime);
+  resetContributionLog(runtime);
+  tattooSynergyManager.reset();
 
   const initialFood = Math.max(30, levelConfig.burstSizes.ring1 * 5);
 
   return {
     player,
+    players: [player],
     bots: Array.from({ length: levelConfig.botCount }, (_, i) => createBot(`${i}`)),
     creeps: [], // Deprecated
     boss: null,
@@ -386,6 +482,7 @@ export const createInitialState = (level: number = 1): GameState => {
     floatingTexts: [],
     delayedActions: [],
     engine,
+    runtime,
     worldSize: { x: WORLD_WIDTH, y: WORLD_HEIGHT },
     zoneRadius: MAP_RADIUS,
     gameTime: 0,

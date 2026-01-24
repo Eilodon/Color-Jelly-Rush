@@ -116,11 +116,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Particles
       gameState.particles.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.life / p.maxLife;
-        ctx.beginPath();
-        ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
-        ctx.fill();
+        drawParticle(ctx, p);
+      });
+
+      // Floating texts
+      gameState.floatingTexts.forEach(t => {
+        const alpha = Math.max(0, Math.min(1, t.life));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = t.color;
+        ctx.font = `${t.size}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText(t.text, t.position.x, t.position.y);
         ctx.globalAlpha = 1;
       });
 
@@ -189,6 +195,98 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   };
 
   return <canvas ref={canvasRef} width={width} height={height} className="block" />;
+};
+
+const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
+  if (p.isIcon && p.iconSymbol) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, (p.fadeOut ? p.life / p.maxLife : 1)));
+    ctx.fillStyle = p.iconColor || p.color || '#ffffff';
+    ctx.font = `${p.fontSize || 24}px serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(p.iconSymbol, p.position.x, p.position.y);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const baseAlpha = p.fadeOut ? p.life / p.maxLife : 1;
+  const opacity = p.bubbleOpacity ?? p.waveOpacity ?? p.auraIntensity ?? 1;
+  const alpha = Math.max(0, Math.min(1, baseAlpha * opacity));
+  const color =
+    p.color ||
+    p.rippleColor ||
+    p.pulseColor ||
+    p.shockwaveColor ||
+    p.waveColor ||
+    p.auraColor ||
+    p.bubbleColor ||
+    p.shieldColor ||
+    p.fieldColor ||
+    p.orbColor ||
+    '#ffffff';
+
+  ctx.globalAlpha = alpha;
+
+  if (p.style === 'line') {
+    const len = p.lineLength || p.radius * 2;
+    const angle = p.angle || 0;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = p.lineWidth || 2;
+    ctx.beginPath();
+    ctx.moveTo(p.position.x, p.position.y);
+    ctx.lineTo(
+      p.position.x + Math.cos(angle) * len,
+      p.position.y + Math.sin(angle) * len
+    );
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const ringRadius =
+    p.rippleRadius ||
+    p.pulseRadius ||
+    p.shockwaveRadius ||
+    (p.isCleansingWave ? p.radius : 0);
+
+  if (p.style === 'ring' || p.isRipple || p.isPulse || p.isShockwave || p.isCleansingWave) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = p.lineWidth || 2;
+    ctx.beginPath();
+    ctx.arc(p.position.x, p.position.y, ringRadius || p.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const sides = p.geometricSides || (p.isHexagonShield ? 6 : 0);
+  if (p.isGeometric || p.isHexagonShield || sides > 0) {
+    const radius = p.geometricRadius || p.radius;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const angle = (i / sides) * Math.PI * 2 - Math.PI / 2 + (p.angle || 0);
+      const px = p.position.x + Math.cos(angle) * radius;
+      const py = p.position.y + Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    if (p.isHexagonShield) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 };
 
 const drawPolygon = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, sides: number) => {

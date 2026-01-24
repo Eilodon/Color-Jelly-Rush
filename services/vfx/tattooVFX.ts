@@ -158,6 +158,70 @@ const TATTOO_VFX_CONFIGS: Record<TattooId, TattooVFXConfig> = {
       character: 'nature' as const
     },
     iconSymbol: '💧'
+  },
+  [TattooId.CatalystEcho]: {
+    id: TattooId.CatalystEcho,
+    name: 'Catalyst Echo',
+    primaryColor: '#10B981',
+    secondaryColor: '#6EE7B7',
+    particleCount: 45,
+    duration: 2.4,
+    pattern: 'wave',
+    specialEffects: ['cleansing_wave'],
+    soundProfile: {
+      pitch: 1.05,
+      volume: 0.7,
+      character: 'nature' as const
+    },
+    iconSymbol: '🧪'
+  },
+  [TattooId.PrismGuard]: {
+    id: TattooId.PrismGuard,
+    name: 'Prism Guard',
+    primaryColor: '#F59E0B',
+    secondaryColor: '#FDE68A',
+    particleCount: 70,
+    duration: 2.8,
+    pattern: 'geometric',
+    specialEffects: ['hexagon_shield', 'golden_aura'],
+    soundProfile: {
+      pitch: 0.9,
+      volume: 0.75,
+      character: 'cosmic' as const
+    },
+    iconSymbol: '🔶'
+  },
+  [TattooId.InkLeech]: {
+    id: TattooId.InkLeech,
+    name: 'Ink Leech',
+    primaryColor: '#7C3AED',
+    secondaryColor: '#E9D5FF',
+    particleCount: 65,
+    duration: 2.6,
+    pattern: 'spiral',
+    specialEffects: ['color_explosion', 'energy_aura'],
+    soundProfile: {
+      pitch: 0.95,
+      volume: 0.8,
+      character: 'shadow' as const
+    },
+    iconSymbol: '🩸'
+  },
+  [TattooId.GrimHarvest]: {
+    id: TattooId.GrimHarvest,
+    name: 'Grim Harvest',
+    primaryColor: '#111827',
+    secondaryColor: '#F97316',
+    particleCount: 80,
+    duration: 3.0,
+    pattern: 'burst',
+    specialEffects: ['color_explosion', 'shield_bubble'],
+    soundProfile: {
+      pitch: 0.75,
+      volume: 0.85,
+      character: 'shadow' as const
+    },
+    iconSymbol: '☠️'
   }
 };
 

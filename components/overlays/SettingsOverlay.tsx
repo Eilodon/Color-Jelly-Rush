@@ -2,11 +2,19 @@ import React from 'react';
 
 type Props = {
   usePixi: boolean;
+  useMultiplayer: boolean;
   onTogglePixi: (next: boolean) => void;
+  onToggleMultiplayer: (next: boolean) => void;
   onClose: () => void;
 };
 
-const SettingsOverlay: React.FC<Props> = ({ usePixi, onTogglePixi, onClose }) => {
+const SettingsOverlay: React.FC<Props> = ({
+  usePixi,
+  useMultiplayer,
+  onTogglePixi,
+  onToggleMultiplayer,
+  onClose
+}) => {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm text-white">
       <div className="w-full max-w-md rounded-2xl bg-slate-950/80 border border-slate-700 p-6 shadow-2xl">
@@ -27,10 +35,22 @@ const SettingsOverlay: React.FC<Props> = ({ usePixi, onTogglePixi, onClose }) =>
             {usePixi ? 'PIXI' : 'CANVAS'}
           </button>
         </div>
+
+        <div className="mt-6 flex items-center justify-between">
+          <div>
+            <div className="font-bold">Network</div>
+            <div className="text-xs text-slate-400">Authoritative server + prediction</div>
+          </div>
+          <button
+            onClick={() => onToggleMultiplayer(!useMultiplayer)}
+            className={`px-3 py-2 rounded border text-xs font-bold tracking-widest ${useMultiplayer ? 'bg-emerald-600/30 border-emerald-400/50 text-emerald-200' : 'bg-slate-800 border-slate-600 text-slate-200'}`}
+          >
+            {useMultiplayer ? 'ONLINE' : 'OFFLINE'}
+          </button>
+        </div>
       </div>
     </div>
   );
 };
 
 export default SettingsOverlay;
-

@@ -2,56 +2,53 @@
 import {
     RING_RADII
 } from './cjrConstants';
-import { GameState, Food, PickupKind } from '../../types';
+import { GameState, PickupKind } from '../../types';
 import { createFood } from '../engine/factories';
 import { randomRange } from '../engine/math';
 import { getRushWindowInfo } from './bossCjr';
 import { LevelConfig } from './levels';
 
-// Wave timers per ring
-let waveTimers = {
-    ring1: 8,
-    ring2: 10,
-    ring3: 13
-};
+const getWaveState = (state: GameState) => state.runtime.wave;
 
 export const updateWaveSpawner = (state: GameState, dt: number) => {
     if (!state.engine) return;
 
     const config = state.levelConfig;
+    const waveTimers = getWaveState(state);
+    const players = state.players?.length ? state.players : [state.player];
 
     const aliveCount = [
-        state.player,
+        ...players,
         ...state.bots.filter(b => !b.isDead)
     ].filter(Boolean).length || 1;
     const scale = Math.max(1, Math.round(aliveCount / 6));
 
-    const rush = getRushWindowInfo();
+    const rush = getRushWindowInfo(state);
 
     // Timer-based burst waves (Vision Doc PR5)
     waveTimers.ring1 -= dt;
     if (waveTimers.ring1 <= 0) {
-        spawnWaveBurst(state, 1, config.burstSizes.ring1 * scale, false, config);
+        spawnWaveBurst(state, players, 1, config.burstSizes.ring1 * scale, false, config);
         waveTimers.ring1 = config.waveIntervals.ring1;
     }
 
     waveTimers.ring2 -= dt;
     if (waveTimers.ring2 <= 0) {
         const rushSpecial = rush.ring === 2 && rush.timeLeft > 0;
-        spawnWaveBurst(state, 2, config.burstSizes.ring2 * scale, rushSpecial, config);
+        spawnWaveBurst(state, players, 2, config.burstSizes.ring2 * scale, rushSpecial, config);
         waveTimers.ring2 = config.waveIntervals.ring2;
     }
 
     waveTimers.ring3 -= dt;
     if (waveTimers.ring3 <= 0) {
         const rushSpecial = rush.ring === 2 && rush.timeLeft > 0; // Ring 3 uses Ring 2 rush window
-        spawnWaveBurst(state, 3, config.burstSizes.ring3 * scale, rushSpecial, config);
+        spawnWaveBurst(state, players, 3, config.burstSizes.ring3 * scale, rushSpecial, config);
         waveTimers.ring3 = config.waveIntervals.ring3;
     }
 };
 
-const spawnWaveBurst = (state: GameState, ring: 1 | 2 | 3, count: number, rushSpecial: boolean, config: LevelConfig) => {
-    const leader = getLeader(state);
+const spawnWaveBurst = (state: GameState, players: GameState['players'], ring: 1 | 2 | 3, count: number, rushSpecial: boolean, config: LevelConfig) => {
+    const leader = getLeader(state, players);
     const leaderAngle = leader ? Math.atan2(leader.position.y, leader.position.x) : null;
 
     for (let i = 0; i < count; i++) {
@@ -110,8 +107,8 @@ const pickSpecialKind = (rushSpecial: boolean): PickupKind => {
     return 'shield';
 };
 
-const getLeader = (state: GameState) => {
-    const all = [state.player, ...state.bots.filter(b => !b.isDead)].filter(Boolean) as any[];
+const getLeader = (state: GameState, players: GameState['players']) => {
+    const all = [...players, ...state.bots.filter(b => !b.isDead)].filter(Boolean) as any[];
     return all.sort((a, b) => b.score - a.score)[0];
 };
 
@@ -129,8 +126,8 @@ const pickAngleAwayFromLeader = (baseAngle: number, leaderAngle: number | null, 
     return angle;
 };
 
-export const resetWaveTimers = (config?: LevelConfig) => {
-    waveTimers = {
+export const resetWaveTimers = (runtime: GameState['runtime'], config?: LevelConfig) => {
+    runtime.wave = {
         ring1: config?.waveIntervals.ring1 ?? 8,
         ring2: config?.waveIntervals.ring2 ?? 10,
         ring3: config?.waveIntervals.ring3 ?? 13

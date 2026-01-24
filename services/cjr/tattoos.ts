@@ -115,6 +115,44 @@ const TATTOOS: TattooDefinition[] = [
             player.statusEffects.solventPower = 2.0;
             player.statusEffects.solventSpeedBoost = 1.2;
         }
+    },
+    {
+        id: TattooId.CatalystEcho,
+        name: 'Catalyst Echo',
+        tier: MutationTier.Common,
+        description: 'Catalysts last longer and grant extra mass.',
+        apply: (player: Player) => {
+            player.statusEffects.catalystEchoBonus = 1.3;
+            player.statusEffects.catalystEchoDuration = 2.0;
+        }
+    },
+    {
+        id: TattooId.PrismGuard,
+        name: 'Prism Guard',
+        tier: MutationTier.Rare,
+        description: 'Match ≥80% reduces incoming damage by 20%.',
+        apply: (player: Player) => {
+            player.statusEffects.prismGuardThreshold = 0.8;
+            player.statusEffects.prismGuardReduction = 0.8;
+        }
+    },
+    {
+        id: TattooId.InkLeech,
+        name: 'Ink Leech',
+        tier: MutationTier.Epic,
+        description: 'Deal damage to heal for 20% of it.',
+        apply: (player: Player) => {
+            player.lifesteal = Math.max(player.lifesteal || 0, 0.2);
+        }
+    },
+    {
+        id: TattooId.GrimHarvest,
+        name: 'Grim Harvest',
+        tier: MutationTier.Epic,
+        description: 'Killing enemies spawns neutral mass.',
+        apply: (player: Player) => {
+            player.statusEffects.grimHarvestDropCount = 2;
+        }
     }
 ];
 

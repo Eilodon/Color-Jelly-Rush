@@ -62,6 +62,7 @@ export class PlayerState extends Schema {
   @type('int32') score: number = 0;
   @type('int16') kills: number = 0;
   @type('float32') skillCooldown: number = 0;
+  @type('int32') lastProcessedInput: number = 0;
 
   // State flags
   @type('boolean') isDead: boolean = false;

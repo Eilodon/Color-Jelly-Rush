@@ -4,12 +4,13 @@
  */
 
 import { GameRoomState, PlayerState, FoodState } from '../schema/GameState';
-import { GameState, Player, Bot, Food, Entity } from '../../../types';
+import { GameState, Player, Bot, Food, Entity, GameRuntimeState } from '../../../types';
 import { createGameEngine } from '../../../services/engine/context';
+import { createPlayer } from '../../../services/engine/factories';
 import { getLevelConfig } from '../../../services/cjr/levels';
 import { WORLD_WIDTH, WORLD_HEIGHT, MAP_RADIUS, FOOD_RADIUS } from '../../../constants';
 
-export const createServerGameState = (serverState: GameRoomState): GameState => {
+export const createServerGameState = (serverState: GameRoomState, runtime: GameRuntimeState): GameState => {
   const engine = createGameEngine();
   const levelConfig = getLevelConfig(1); // Default level 1
 
@@ -125,7 +126,12 @@ export const createServerGameState = (serverState: GameRoomState): GameState => 
         catalystSenseActive: false,
         neutralMassBonus: 1,
         solventPower: 1,
-        solventSpeedBoost: 1
+        solventSpeedBoost: 1,
+        catalystEchoBonus: 1,
+        catalystEchoDuration: 0,
+        prismGuardThreshold: 0.8,
+        prismGuardReduction: 0.8,
+        grimHarvestDropCount: 0
       }
     };
     players.push(player);
@@ -150,8 +156,10 @@ export const createServerGameState = (serverState: GameRoomState): GameState => 
   });
 
   // Create game state
+  const fallbackPlayer = players[0] ?? createPlayer('Server');
   const gameState: GameState = {
-    player: players[0] || null, // First player as main player
+    player: fallbackPlayer,
+    players,
     bots: [], // No bots in multiplayer for now
     creeps: [],
     boss: null,
@@ -161,6 +169,7 @@ export const createServerGameState = (serverState: GameRoomState): GameState => 
     floatingTexts: [],
     delayedActions: [],
     engine,
+    runtime,
     worldSize: { x: serverState.worldWidth, y: serverState.worldHeight },
     zoneRadius: MAP_RADIUS || 500,
     gameTime: serverState.gameTime,

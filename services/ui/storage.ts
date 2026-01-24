@@ -1,6 +1,7 @@
 export type Settings = {
   version: 1;
   usePixi: boolean;
+  useMultiplayer: boolean;
 };
 
 export type Progression = {
@@ -15,6 +16,7 @@ const PROGRESSION_KEY = 'cjr:progression:v1';
 export const defaultSettings: Settings = {
   version: 1,
   usePixi: true,
+  useMultiplayer: false,
 };
 
 export const defaultProgression: Progression = {

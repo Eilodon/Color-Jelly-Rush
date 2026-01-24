@@ -7,6 +7,19 @@ export const getEmptyProfile = (): PlayerProfile => ({
   highScore: 0,
   unlockedSkins: [],
   unlockedTattoos: [],
+  cosmetics: {
+    ownedSkins: [],
+    ownedTrails: [],
+    ownedAuras: [],
+    ownedBadges: [],
+    active: {}
+  },
+  quests: {
+    daily: {},
+    weekly: {},
+    lastReset: Date.now()
+  },
+  guildId: null,
   lastUpdated: Date.now()
 });
 
@@ -16,6 +29,9 @@ export const saveProfile = (profile: PlayerProfile) => {
 
 export const loadProfile = (): PlayerProfile => {
   const data = localStorage.getItem('cjr_profile');
-  if (data) return JSON.parse(data);
+  if (data) {
+    const parsed = JSON.parse(data) as PlayerProfile;
+    return { ...getEmptyProfile(), ...parsed };
+  }
   return getEmptyProfile();
 };

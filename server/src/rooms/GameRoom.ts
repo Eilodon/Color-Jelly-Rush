@@ -22,12 +22,17 @@ import {
   FOOD_RADIUS
 } from '../constants';
 // Import shared game logic
-import { updateGameState } from '../../../services/engine/index';
-import { createServerGameState } from './serverGameState';
+import { updateGameState, createInitialState } from '../../../services/engine/index';
+import { createPlayer } from '../../../services/engine/factories';
+import { GameRuntimeState } from '../../../types';
+import { getLevelConfig } from '../../../services/cjr/levels';
 
 export class GameRoom extends Room<GameRoomState> {
   maxClients = 50;
   private gameLoop!: Delayed;
+  private runtime!: GameRuntimeState;
+  private simState!: ReturnType<typeof createInitialState>;
+  private inputsBySession: Map<string, { seq: number; targetX: number; targetY: number; space: boolean; w: boolean }> = new Map();
 
   onCreate(options: any) {
     console.log('GameRoom created!', options);
@@ -37,11 +42,47 @@ export class GameRoom extends Room<GameRoomState> {
     this.state.worldWidth = WORLD_WIDTH;
     this.state.worldHeight = WORLD_HEIGHT;
 
+    const levelConfig = getLevelConfig(1);
+    this.runtime = {
+      wave: {
+        ring1: levelConfig.waveIntervals.ring1,
+        ring2: levelConfig.waveIntervals.ring2,
+        ring3: levelConfig.waveIntervals.ring3
+      },
+      boss: {
+        bossDefeated: false,
+        rushWindowTimer: 0,
+        rushWindowRing: null,
+        currentBossActive: false,
+        attackCharging: false,
+        attackTarget: null,
+        attackChargeTimer: 0
+      },
+      contribution: {
+        damageLog: new Map(),
+        lastHitBy: new Map()
+      }
+    };
+
+    this.simState = createInitialState(1);
+    this.simState.runtime = this.runtime;
+    this.simState.players = [this.simState.player];
+
+    this.syncSimStateToServer();
+
     // Start Game Loop (20 FPS or 60 FPS)
     this.setSimulationInterval((dt) => this.update(dt), 1000 / 20);
 
-    // Initial Spawn
-    this.spawnFoodInitial();
+    this.onMessage('input', (client, message: any) => {
+      if (!message) return;
+      this.inputsBySession.set(client.sessionId, {
+        seq: message.seq || 0,
+        targetX: message.targetX ?? 0,
+        targetY: message.targetY ?? 0,
+        space: !!message.skill,
+        w: !!message.eject
+      });
+    });
   }
 
   onJoin(client: Client, options: { name?: string; shape?: string; pigment?: any }) {
@@ -76,11 +117,41 @@ export class GameRoom extends Room<GameRoomState> {
     player.targetPigment.b = Math.random();
 
     this.state.players.set(client.sessionId, player);
+
+    const simPlayer = this.simState.players.length === 1 && this.state.players.size === 1
+      ? this.simState.players[0]
+      : undefined;
+
+    if (simPlayer) {
+      simPlayer.id = client.sessionId;
+      simPlayer.name = player.name;
+      simPlayer.shape = player.shape as any;
+      simPlayer.position.x = player.position.x;
+      simPlayer.position.y = player.position.y;
+      simPlayer.targetPosition = { x: player.position.x, y: player.position.y };
+      simPlayer.pigment = { r: player.pigment.r, g: player.pigment.g, b: player.pigment.b };
+      simPlayer.targetPigment = { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b };
+      simPlayer.isDead = false;
+      this.simState.player = simPlayer;
+    } else {
+      const newPlayer = createPlayer(player.name, player.shape as any);
+      newPlayer.id = client.sessionId;
+      newPlayer.position = { x: player.position.x, y: player.position.y };
+      newPlayer.targetPosition = { x: player.position.x, y: player.position.y };
+      newPlayer.pigment = { r: player.pigment.r, g: player.pigment.g, b: player.pigment.b };
+      newPlayer.targetPigment = { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b };
+      this.simState.players.push(newPlayer);
+    }
   }
 
   onLeave(client: Client, consented: boolean) {
     console.log(client.sessionId, 'left!');
     this.state.players.delete(client.sessionId);
+    this.inputsBySession.delete(client.sessionId);
+    this.simState.players = this.simState.players.filter(p => p.id !== client.sessionId);
+    if (this.simState.players.length > 0) {
+      this.simState.player = this.simState.players[0];
+    }
   }
 
   onDispose() {
@@ -88,77 +159,116 @@ export class GameRoom extends Room<GameRoomState> {
   }
 
   update(dt: number) {
-    this.state.gameTime += dt;
+    const dtSec = dt / 1000;
+    this.state.gameTime += dtSec;
 
-    // Convert server state to game engine format
-    const gameState = createServerGameState(this.state);
-    
-    // Run authoritative physics simulation
-    const updatedState = updateGameState(gameState, dt);
-    
-    // Sync results back to server state
-    this.syncGameStateToServer(updatedState);
+    this.applyInputsToSimState();
+    updateGameState(this.simState, dtSec);
+    this.syncSimStateToServer();
   }
 
-  spawnFoodInitial() {
-    for (let i = 0; i < 200; i++) { // Reduced for initial load
-      const food = new FoodState();
-      food.id = Math.random().toString(36).substr(2, 9);
-
-      const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * MAP_RADIUS;
-      food.x = Math.cos(angle) * r;
-      food.y = Math.sin(angle) * r;
-
-      food.kind = 'pigment';
-      food.pigment.r = Math.random();
-      food.pigment.g = Math.random();
-      food.pigment.b = Math.random();
-
-      this.state.food.set(food.id, food);
-    }
-  }
-
-  private syncGameStateToServer(gameState: any) {
-    // Sync player positions and states
-    gameState.players?.forEach((player: any) => {
-      const serverPlayer = this.state.players.get(player.id);
-      if (serverPlayer) {
-        serverPlayer.position.x = player.position.x;
-        serverPlayer.position.y = player.position.y;
-        serverPlayer.radius = player.radius;
-        serverPlayer.score = player.score;
-        serverPlayer.currentHealth = player.currentHealth;
-        // Sync other essential properties
+  private applyInputsToSimState() {
+    this.simState.players.forEach(player => {
+      const input = this.inputsBySession.get(player.id);
+      if (!input) {
+        player.inputs = { space: false, w: false };
+        return;
       }
+      player.targetPosition = { x: input.targetX, y: input.targetY };
+      player.inputs = { space: input.space, w: input.w };
+      player.inputSeq = input.seq;
+    });
+  }
+
+  private syncSimStateToServer() {
+    this.simState.players.forEach((player) => {
+      let serverPlayer = this.state.players.get(player.id);
+      if (!serverPlayer) {
+        serverPlayer = new PlayerState();
+        serverPlayer.id = player.id;
+        serverPlayer.sessionId = player.id;
+        serverPlayer.name = player.name;
+        serverPlayer.shape = player.shape;
+        this.state.players.set(player.id, serverPlayer);
+      }
+      serverPlayer.position.x = player.position.x;
+      serverPlayer.position.y = player.position.y;
+      serverPlayer.velocity.x = player.velocity.x;
+      serverPlayer.velocity.y = player.velocity.y;
+      serverPlayer.radius = player.radius;
+      serverPlayer.score = player.score;
+      serverPlayer.currentHealth = player.currentHealth;
+      serverPlayer.kills = player.kills;
+      serverPlayer.matchPercent = player.matchPercent;
+      serverPlayer.ring = player.ring as any;
+      serverPlayer.emotion = player.emotion;
+      serverPlayer.isDead = player.isDead;
+      serverPlayer.skillCooldown = player.skillCooldown;
+      serverPlayer.lastProcessedInput = player.inputSeq || 0;
+      serverPlayer.pigment.r = player.pigment.r;
+      serverPlayer.pigment.g = player.pigment.g;
+      serverPlayer.pigment.b = player.pigment.b;
+      serverPlayer.targetPigment.r = player.targetPigment.r;
+      serverPlayer.targetPigment.g = player.targetPigment.g;
+      serverPlayer.targetPigment.b = player.targetPigment.b;
     });
 
-    // Sync food states
-    gameState.food?.forEach((food: any) => {
+    this.simState.bots.forEach((bot) => {
+      let serverBot = this.state.bots.get(bot.id);
+      if (!serverBot) {
+        serverBot = new BotState();
+        serverBot.id = bot.id;
+        serverBot.name = bot.name;
+        serverBot.shape = bot.shape as any;
+        serverBot.isBoss = !!bot.isBoss;
+        this.state.bots.set(bot.id, serverBot);
+      }
+      serverBot.position.x = bot.position.x;
+      serverBot.position.y = bot.position.y;
+      serverBot.velocity.x = bot.velocity.x;
+      serverBot.velocity.y = bot.velocity.y;
+      serverBot.radius = bot.radius;
+      serverBot.currentHealth = bot.currentHealth;
+      serverBot.score = bot.score;
+      serverBot.isDead = bot.isDead;
+    });
+
+    this.simState.food.forEach((food) => {
       if (food.isDead) {
         this.state.food.delete(food.id);
-      } else {
-        const serverFood = this.state.food.get(food.id);
-        if (!serverFood) {
-          // Spawn new food if needed
-          const newFood = new FoodState();
-          newFood.id = food.id;
-          newFood.x = food.position.x;
-          newFood.y = food.position.y;
-          newFood.kind = food.kind;
-          newFood.pigment = food.pigment;
-          this.state.food.set(food.id, newFood);
-        }
+        return;
+      }
+      let serverFood = this.state.food.get(food.id);
+      if (!serverFood) {
+        serverFood = new FoodState();
+        serverFood.id = food.id;
+        this.state.food.set(food.id, serverFood);
+      }
+      serverFood.x = food.position.x;
+      serverFood.y = food.position.y;
+      serverFood.radius = food.radius;
+      serverFood.kind = food.kind;
+      if (food.pigment) {
+        serverFood.pigment.r = food.pigment.r;
+        serverFood.pigment.g = food.pigment.g;
+        serverFood.pigment.b = food.pigment.b;
       }
     });
 
-    // Handle dead entities cleanup
-    this.state.players.forEach((player, sessionId) => {
-      const gamePlayer = gameState.players?.find((p: any) => p.id === sessionId);
-      if (gamePlayer?.isDead) {
-        // Handle player death (respawn logic etc.)
-        this.handlePlayerDeath(player, sessionId);
+    this.simState.projectiles.forEach((proj) => {
+      let serverProj = this.state.projectiles.get(proj.id);
+      if (!serverProj) {
+        serverProj = new ProjectileState();
+        serverProj.id = proj.id;
+        serverProj.ownerId = proj.ownerId;
+        serverProj.type = proj.type;
+        this.state.projectiles.set(proj.id, serverProj);
       }
+      serverProj.x = proj.position.x;
+      serverProj.y = proj.position.y;
+      serverProj.vx = proj.velocity.x;
+      serverProj.vy = proj.velocity.y;
+      serverProj.damage = proj.damage;
     });
   }
 

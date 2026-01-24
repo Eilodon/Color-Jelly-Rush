@@ -14,6 +14,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
   const appRef = useRef<Application | null>(null);
   const entitiesRef = useRef<Map<string, Container>>(new Map());
   const inputEnabledRef = useRef(inputEnabled);
+  const entitiesLayerRef = useRef<Container | null>(null);
+  const particlesGraphicsRef = useRef<Graphics | null>(null);
+  const floatingTextLayerRef = useRef<Container | null>(null);
+  const floatingTextMapRef = useRef<Map<string, Text>>(new Map());
+  const iconTextMapRef = useRef<Map<string, Text>>(new Map());
   useEffect(() => {
     inputEnabledRef.current = inputEnabled;
   }, [inputEnabled]);
@@ -98,6 +103,22 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
       // Draw Map Static
       drawMap(map);
 
+      // Entities + VFX layers
+      const entitiesLayer = new Container();
+      entitiesLayer.label = 'Entities';
+      world.addChild(entitiesLayer);
+      entitiesLayerRef.current = entitiesLayer;
+
+      const particlesGraphics = new Graphics();
+      particlesGraphics.label = 'Particles';
+      world.addChild(particlesGraphics);
+      particlesGraphicsRef.current = particlesGraphics;
+
+      const floatingTextLayer = new Container();
+      floatingTextLayer.label = 'FloatingText';
+      world.addChild(floatingTextLayer);
+      floatingTextLayerRef.current = floatingTextLayer;
+
       // Render Loop
       app.ticker.add(() => {
         const currentGameState = gameStateRef.current;
@@ -114,8 +135,18 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         // VFX POLISH: Update membrane pulse
         updateMembranes(world, currentGameState.gameTime);
 
+        // VFX: Draw particles + floating texts
+        if (particlesGraphicsRef.current) {
+          drawParticles(particlesGraphicsRef.current, currentGameState);
+        }
+        if (floatingTextLayerRef.current) {
+          syncFloatingTexts(floatingTextLayerRef.current, currentGameState);
+          syncIconParticles(floatingTextLayerRef.current, currentGameState);
+        }
+
         // Sync Entities
-        syncEntities(world, currentGameState);
+        const entityLayer = entitiesLayerRef.current || world;
+        syncEntities(entityLayer, currentGameState);
       });
     });
 
@@ -402,6 +433,172 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         g.lineTo(eyeOffset, mouthY).stroke({ width: 2, color: '#000' });
         break;
     }
+  };
+
+  const drawParticles = (g: Graphics, state: GameState) => {
+    g.clear();
+
+    state.particles.forEach((p: any) => {
+      if (p.isDead || p.isIcon) return;
+
+      const baseAlpha = p.fadeOut ? (p.life / p.maxLife) : 1;
+      const opacity = p.bubbleOpacity ?? p.waveOpacity ?? p.auraIntensity ?? 1;
+      const alpha = Math.max(0, Math.min(1, baseAlpha * opacity));
+      const color = toPixiColor(
+        p.color ||
+          p.rippleColor ||
+          p.pulseColor ||
+          p.shockwaveColor ||
+          p.waveColor ||
+          p.auraColor ||
+          p.bubbleColor ||
+          p.shieldColor ||
+          p.fieldColor ||
+          p.orbColor
+      );
+
+      if (p.style === 'line') {
+        const len = p.lineLength || p.radius * 2;
+        const angle = p.angle || 0;
+        g.moveTo(p.position.x, p.position.y);
+        g.lineTo(
+          p.position.x + Math.cos(angle) * len,
+          p.position.y + Math.sin(angle) * len
+        );
+        g.stroke({ width: p.lineWidth || 2, color, alpha });
+        return;
+      }
+
+      const ringRadius =
+        p.rippleRadius ||
+        p.pulseRadius ||
+        p.shockwaveRadius ||
+        (p.isCleansingWave ? p.radius : 0);
+
+      if (p.style === 'ring' || p.isRipple || p.isPulse || p.isShockwave || p.isCleansingWave) {
+        g.circle(p.position.x, p.position.y, ringRadius || p.radius).stroke({
+          width: p.lineWidth || 2,
+          color,
+          alpha
+        });
+        return;
+      }
+
+      const sides = p.geometricSides || (p.isHexagonShield ? 6 : 0);
+      if (p.isGeometric || p.isHexagonShield || sides > 0) {
+        const radius = p.geometricRadius || p.radius;
+        const points = getPolygonPointsAt(sides, radius, p.position.x, p.position.y, p.angle || 0);
+        if (p.isHexagonShield) {
+          g.poly(points).stroke({ width: 2, color, alpha });
+        } else {
+          g.poly(points).fill({ color, alpha });
+        }
+        return;
+      }
+
+      g.circle(p.position.x, p.position.y, p.radius).fill({ color, alpha });
+    });
+  };
+
+  const syncFloatingTexts = (layer: Container, state: GameState) => {
+    const map = floatingTextMapRef.current;
+    const alive = new Set<string>();
+
+    state.floatingTexts.forEach((t) => {
+      alive.add(t.id);
+      let text = map.get(t.id);
+      if (!text) {
+        const style = new TextStyle({
+          fontFamily: 'Arial',
+          fontSize: t.size,
+          fill: t.color,
+          align: 'center',
+        });
+        text = new Text({ text: t.text, style });
+        text.anchor.set(0.5);
+        layer.addChild(text);
+        map.set(t.id, text);
+      }
+      text.text = t.text;
+      text.style.fill = t.color;
+      text.style.fontSize = t.size;
+      text.x = t.position.x;
+      text.y = t.position.y;
+      text.alpha = Math.max(0, Math.min(1, t.life));
+    });
+
+    for (const [id, text] of map.entries()) {
+      if (!alive.has(id)) {
+        layer.removeChild(text);
+        text.destroy();
+        map.delete(id);
+      }
+    }
+  };
+
+  const syncIconParticles = (layer: Container, state: GameState) => {
+    const map = iconTextMapRef.current;
+    const alive = new Set<string>();
+
+    state.particles.forEach((p: any) => {
+      if (!p.isIcon || !p.iconSymbol) return;
+      alive.add(p.id);
+      let text = map.get(p.id);
+      if (!text) {
+        const style = new TextStyle({
+          fontFamily: 'serif',
+          fontSize: p.fontSize || 24,
+          fill: p.iconColor || '#ffffff',
+          align: 'center',
+        });
+        text = new Text({ text: p.iconSymbol, style });
+        text.anchor.set(0.5);
+        layer.addChild(text);
+        map.set(p.id, text);
+      }
+      text.text = p.iconSymbol;
+      text.style.fill = p.iconColor || '#ffffff';
+      text.style.fontSize = p.fontSize || 24;
+      text.x = p.position.x;
+      text.y = p.position.y;
+      const baseAlpha = p.fadeOut ? (p.life / p.maxLife) : 1;
+      text.alpha = Math.max(0, Math.min(1, baseAlpha));
+    });
+
+    for (const [id, text] of map.entries()) {
+      if (!alive.has(id)) {
+        layer.removeChild(text);
+        text.destroy();
+        map.delete(id);
+      }
+    }
+  };
+
+  const toPixiColor = (color?: string): number => {
+    if (!color) return 0xffffff;
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      return Number.parseInt(hex.length === 3
+        ? hex.split('').map(c => c + c).join('')
+        : hex, 16);
+    }
+    const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (match) {
+      const r = Number.parseInt(match[1], 10);
+      const g = Number.parseInt(match[2], 10);
+      const b = Number.parseInt(match[3], 10);
+      return (r << 16) + (g << 8) + b;
+    }
+    return 0xffffff;
+  };
+
+  const getPolygonPointsAt = (sides: number, radius: number, cx: number, cy: number, rotation: number = 0): number[] => {
+    const points = [];
+    for (let i = 0; i < sides; i++) {
+      const angle = (i / sides) * Math.PI * 2 - Math.PI / 2 + rotation;
+      points.push(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    }
+    return points;
   };
 
   const getPolygonPoints = (sides: number, radius: number): number[] => {

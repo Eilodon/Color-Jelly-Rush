@@ -132,6 +132,11 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
       colorBoostMultiplier: 1,
       overdriveTimer: 0,
       magnetTimer: 0,
+      catalystEchoBonus: 1,
+      catalystEchoDuration: 0,
+      prismGuardThreshold: 0.8,
+      prismGuardReduction: 0.8,
+      grimHarvestDropCount: 0,
     },
   };
 };

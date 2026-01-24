@@ -15,6 +15,10 @@ export enum TattooId {
     CatalystSense = 'catalyst_sense',
     NeutralMastery = 'neutral_mastery',
     SolventExpert = 'solvent_expert',
+    CatalystEcho = 'catalyst_echo',
+    PrismGuard = 'prism_guard',
+    InkLeech = 'ink_leech',
+    GrimHarvest = 'grim_harvest',
 }
 
 // Ring progression (1 → 2 → 3)

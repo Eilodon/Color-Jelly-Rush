@@ -1,4 +1,4 @@
-export type Screen = 'boot' | 'menu' | 'levelSelect' | 'playing' | 'gameOver';
+export type Screen = 'boot' | 'menu' | 'levelSelect' | 'matchmaking' | 'tournament' | 'playing' | 'gameOver';
 
 export type Overlay =
   | { type: 'pause' }
@@ -39,4 +39,3 @@ export const isInputBlocked = (state: UiState): boolean => {
   if (!top) return false;
   return top.type !== 'tutorial';
 };
-

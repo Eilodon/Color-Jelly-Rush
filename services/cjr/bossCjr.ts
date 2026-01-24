@@ -11,10 +11,10 @@
 
 import { RING_RADII } from './cjrConstants';
 import { GameState, Bot, Player, Vector2 } from '../../types';
-import { createBoss, createProjectile } from '../engine/factories';
+import { createBoss, createParticle, createProjectile } from '../engine/factories';
 import { getCurrentSpatialGrid } from '../engine/context';
 import { distance, normalize } from '../engine/math';
-import { applyContributionBuffs, resetContributionLog, getContributionRanking, getLastHitter, getPlayerDamage } from './contribution';
+import { applyContributionBuffs, resetContributionLog, getLastHitter } from './contribution';
 import { createFloatingText } from '../engine/effects';
 import { LevelConfig } from './levels';
 
@@ -48,29 +48,13 @@ const BOSS_CONFIG: BossConfig = {
     telegraphDuration: 1.0,
 };
 
-// State tracking (simplified)
-interface BossState {
-    bossDefeated: boolean;
-    rushWindowTimer: number;
-    rushWindowRing: 2 | null;
-    currentBossActive: boolean;
-    attackCharging: boolean;
-    attackTarget: Vector2 | null;
-}
-
-let bossState: BossState = {
-    bossDefeated: false,
-    rushWindowTimer: 0,
-    rushWindowRing: null,
-    currentBossActive: false,
-    attackCharging: false,
-    attackTarget: null,
-};
+const getBossState = (state: GameState) => state.runtime.boss;
 
 /**
  * Check if a ring is accessible (boss defeated or not yet guarded)
  */
-export const isRingAccessible = (ring: 2 | 3): boolean => {
+export const isRingAccessible = (state: GameState, ring: 2 | 3): boolean => {
+    const bossState = getBossState(state);
     if (ring === 2) {
         return bossState.bossDefeated;
     }
@@ -83,37 +67,32 @@ export const isRingAccessible = (ring: 2 | 3): boolean => {
 /**
  * Check if Rush Window is active for a ring
  */
-export const isRushWindowActive = (ring: 2 | 3): boolean => {
+export const isRushWindowActive = (state: GameState, ring: 2 | 3): boolean => {
+    const bossState = getBossState(state);
     return bossState.rushWindowTimer > 0 && bossState.rushWindowRing === ring;
 };
 
 /**
  * Get remaining Rush Window time
  */
-export const getRushWindowTime = (): number => bossState.rushWindowTimer;
+export const getRushWindowTime = (state: GameState): number => getBossState(state).rushWindowTimer;
 
 /**
  * Handle boss defeat
  */
 const handleBossDefeat = (state: GameState) => {
+    const bossState = getBossState(state);
     bossState.bossDefeated = true;
     bossState.currentBossActive = false;
     bossState.rushWindowTimer = 5.0; // 5 second rush window
     bossState.rushWindowRing = 2;
 
     // Apply contribution rewards
-    const rankings = getContributionRanking();
-    rankings.forEach((entry) => {
-        const entity = state.player.id === entry.id ? state.player : state.bots.find(b => b.id === entry.id);
-        if (entity) {
-            // Apply simple buff - speed boost
-            entity.statusEffects.tempSpeedBoost = 1.2;
-            entity.statusEffects.tempSpeedTimer = 5.0;
-        }
-    });
+    const participants = [state.player, ...state.bots].filter(p => !p.isDead);
+    applyContributionBuffs(participants, state.runtime, state);
 
     // Last hitter bonus
-    const lastHitter = getLastHitter('ring_guardian');
+    const lastHitter = getLastHitter(state.runtime, 'ring_guardian');
     if (lastHitter) {
         const entity = state.player.id === lastHitter ? state.player : state.bots.find(b => b.id === lastHitter);
         if (entity) {
@@ -123,13 +102,14 @@ const handleBossDefeat = (state: GameState) => {
     }
 
     createFloatingText({ x: 0, y: 0 }, 'BOSS DEFEATED!', '#ff0000', 32, state);
-    resetContributionLog();
+    resetContributionLog(state.runtime);
 };
 
 /**
  * Update boss AI
  */
 const updateBossAI = (boss: Bot, state: GameState, dt: number) => {
+    const bossState = getBossState(state);
     // Leash to Ring 2
     const distFromCenter = distance(boss.position, { x: 0, y: 0 });
     if (distFromCenter > BOSS_CONFIG.leashRadius) {
@@ -142,7 +122,8 @@ const updateBossAI = (boss: Bot, state: GameState, dt: number) => {
     let closestTarget: Player | Bot | null = null;
     let closestDist = Infinity;
     
-    [state.player, ...state.bots].forEach(entity => {
+    const players = state.players?.length ? state.players : [state.player];
+    [...players, ...state.bots].forEach(entity => {
         if (entity.isDead) return;
         const dist = distance(boss.position, entity.position);
         if (dist < closestDist) {
@@ -161,16 +142,15 @@ const updateBossAI = (boss: Bot, state: GameState, dt: number) => {
 
         if (BOSS_CONFIG.attackPattern === 'telegraph') {
             // Telegraph attack
-            bossState.attackCharging = true;
-            bossState.attackTarget = closestTarget.position;
-            setTimeout(() => {
-                executeAttack(boss, closestTarget!, state);
-                bossState.attackCharging = false;
-                bossState.attackTarget = null;
-            }, BOSS_CONFIG.telegraphDuration * 1000);
+            if (!bossState.attackCharging) {
+                bossState.attackCharging = true;
+                bossState.attackChargeTimer = BOSS_CONFIG.telegraphDuration;
+                bossState.attackTarget = { ...closestTarget.position };
+                spawnTelegraph(bossState.attackTarget, state);
+            }
         } else {
             // Rapid attack
-            executeAttack(boss, closestTarget, state);
+            executeAttack(boss, closestTarget.position, state);
         }
     }
 };
@@ -178,23 +158,185 @@ const updateBossAI = (boss: Bot, state: GameState, dt: number) => {
 /**
  * Execute boss attack
  */
-const executeAttack = (boss: Bot, target: Player | Bot, state: GameState) => {
+const executeAttack = (boss: Bot, targetPos: Vector2, state: GameState) => {
+    const healthRatio = boss.currentHealth / Math.max(1, boss.maxHealth);
+    const roll = Math.random();
+
+    if (healthRatio < 0.25) {
+        if (roll < 0.33) {
+            spawnBossPulse(boss.position, state, '#ef4444');
+            fireRadialBurst(boss, state, 12);
+        } else if (roll < 0.66) {
+            spawnBossPulse(boss.position, state, '#f97316');
+            fireCross(boss, state, 8);
+        } else {
+            spawnBossPulse(boss.position, state, '#f59e0b');
+            fireSpiral(boss, state, 10);
+        }
+        return;
+    }
+
+    if (healthRatio < 0.5) {
+        if (roll < 0.3) {
+            spawnBossPulse(boss.position, state, '#ef4444');
+            fireRadialBurst(boss, state, 8);
+        } else if (roll < 0.6) {
+            fireSpread(boss, targetPos, state, 5, Math.PI / 12);
+        } else {
+            fireCross(boss, state, 4);
+        }
+        return;
+    }
+
+    fireSingle(boss, targetPos, state);
+};
+
+const spawnTelegraph = (targetPos: Vector2, state: GameState) => {
+    const ring = createParticle(targetPos.x, targetPos.y, '#ef4444', 0);
+    ring.style = 'ring';
+    ring.lineWidth = 3;
+    ring.pulseRadius = 20;
+    ring.pulseMaxRadius = 140;
+    ring.pulseSpeed = 180;
+    ring.maxLife = BOSS_CONFIG.telegraphDuration;
+    ring.life = ring.maxLife;
+    ring.fadeOut = true;
+    ring.isPulse = true;
+    state.particles.push(ring);
+
+    const inner = createParticle(targetPos.x, targetPos.y, '#f97316', 0);
+    inner.style = 'ring';
+    inner.lineWidth = 2;
+    inner.pulseRadius = 10;
+    inner.pulseMaxRadius = 80;
+    inner.pulseSpeed = 220;
+    inner.maxLife = BOSS_CONFIG.telegraphDuration;
+    inner.life = inner.maxLife;
+    inner.fadeOut = true;
+    inner.isPulse = true;
+    state.particles.push(inner);
+};
+
+const fireSingle = (boss: Bot, targetPos: Vector2, state: GameState) => {
     const projectile = createProjectile(
         boss.id,
         boss.position,
-        target.position,
+        targetPos,
         15,
         'web',
         2.0
     );
-    
     state.projectiles.push(projectile);
+};
+
+const fireSpread = (boss: Bot, targetPos: Vector2, state: GameState, count: number, spreadAngle: number) => {
+    const dir = normalize({
+        x: targetPos.x - boss.position.x,
+        y: targetPos.y - boss.position.y
+    });
+    const baseAngle = Math.atan2(dir.y, dir.x);
+    const aimDistance = 240;
+
+    for (let i = 0; i < count; i++) {
+        const offset = (i - Math.floor(count / 2)) * spreadAngle;
+        const angle = baseAngle + offset;
+        const aim = {
+            x: boss.position.x + Math.cos(angle) * aimDistance,
+            y: boss.position.y + Math.sin(angle) * aimDistance
+        };
+        const projectile = createProjectile(
+            boss.id,
+            boss.position,
+            aim,
+            12,
+            'web',
+            2.0
+        );
+        state.projectiles.push(projectile);
+    }
+};
+
+const fireRadialBurst = (boss: Bot, state: GameState, count: number) => {
+    const aimDistance = 200;
+    for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2;
+        const aim = {
+            x: boss.position.x + Math.cos(angle) * aimDistance,
+            y: boss.position.y + Math.sin(angle) * aimDistance
+        };
+        const projectile = createProjectile(
+            boss.id,
+            boss.position,
+            aim,
+            10,
+            'web',
+            2.0
+        );
+        state.projectiles.push(projectile);
+    }
+};
+
+const fireCross = (boss: Bot, state: GameState, count: number) => {
+    const aimDistance = 220;
+    const steps = Math.max(4, count);
+    for (let i = 0; i < steps; i++) {
+        const angle = (i / steps) * Math.PI * 2;
+        const aim = {
+            x: boss.position.x + Math.cos(angle) * aimDistance,
+            y: boss.position.y + Math.sin(angle) * aimDistance
+        };
+        const projectile = createProjectile(
+            boss.id,
+            boss.position,
+            aim,
+            11,
+            'web',
+            2.0
+        );
+        state.projectiles.push(projectile);
+    }
+};
+
+const fireSpiral = (boss: Bot, state: GameState, count: number) => {
+    const aimDistance = 210;
+    const offset = Math.random() * Math.PI * 2;
+    for (let i = 0; i < count; i++) {
+        const angle = offset + (i / count) * Math.PI * 2;
+        const aim = {
+            x: boss.position.x + Math.cos(angle) * aimDistance,
+            y: boss.position.y + Math.sin(angle) * aimDistance
+        };
+        const projectile = createProjectile(
+            boss.id,
+            boss.position,
+            aim,
+            10,
+            'web',
+            2.2
+        );
+        state.projectiles.push(projectile);
+    }
+};
+
+const spawnBossPulse = (position: Vector2, state: GameState, color: string) => {
+    const pulse = createParticle(position.x, position.y, color, 0);
+    pulse.style = 'ring';
+    pulse.lineWidth = 4;
+    pulse.pulseRadius = 40;
+    pulse.pulseMaxRadius = 180;
+    pulse.pulseSpeed = 240;
+    pulse.maxLife = 0.6;
+    pulse.life = pulse.maxLife;
+    pulse.fadeOut = true;
+    pulse.isPulse = true;
+    state.particles.push(pulse);
 };
 
 /**
  * Apply candy wind effect during Ring 3 rush window
  */
-export const applyCandyWind = (entity: Player | Bot, dt: number) => {
+export const applyCandyWind = (entity: Player | Bot, state: GameState, dt: number) => {
+    const bossState = getBossState(state);
     if (bossState.rushWindowTimer > 0 && bossState.rushWindowRing === 2) {
         const pullForce = 50 * dt;
         entity.velocity.x += -entity.position.x * pullForce * 0.01;
@@ -206,6 +348,7 @@ export const applyCandyWind = (entity: Player | Bot, dt: number) => {
  * Main boss logic update
  */
 export const updateBossLogic = (state: GameState, dt: number) => {
+    const bossState = getBossState(state);
     // Update rush window timer
     if (bossState.rushWindowTimer > 0) {
         bossState.rushWindowTimer -= dt;
@@ -217,6 +360,8 @@ export const updateBossLogic = (state: GameState, dt: number) => {
         boss.position = { x: RING_RADII.R2_BOUNDARY * 0.7, y: 0 };
         boss.radius = BOSS_CONFIG.radius;
         boss.isBoss = true;
+        boss.maxHealth = BOSS_CONFIG.health;
+        boss.currentHealth = BOSS_CONFIG.health;
         
         state.boss = boss;
         state.bots.push(boss);
@@ -228,6 +373,16 @@ export const updateBossLogic = (state: GameState, dt: number) => {
     // Update boss AI
     if (state.boss && !state.boss.isDead) {
         updateBossAI(state.boss, state, dt);
+
+        if (bossState.attackCharging) {
+            bossState.attackChargeTimer -= dt;
+            if (bossState.attackChargeTimer <= 0 && bossState.attackTarget) {
+                executeAttack(state.boss, bossState.attackTarget, state);
+                bossState.attackCharging = false;
+                bossState.attackTarget = null;
+                bossState.attackChargeTimer = 0;
+            }
+        }
         
         // Check defeat
         if (state.boss.currentHealth <= 0) {
@@ -241,32 +396,33 @@ export const updateBossLogic = (state: GameState, dt: number) => {
 /**
  * Reset boss state for new game
  */
-export const resetBossState = () => {
-    bossState = {
+export const resetBossState = (runtime: GameState['runtime']) => {
+    runtime.boss = {
         bossDefeated: false,
         rushWindowTimer: 0,
         rushWindowRing: null,
         currentBossActive: false,
         attackCharging: false,
         attackTarget: null,
+        attackChargeTimer: 0,
     };
 };
 
 /**
  * Get boss state for rendering
  */
-export const getBossState = () => bossState;
+export const getBossStateSnapshot = (state: GameState) => getBossState(state);
 
 /**
  * Legacy exports for compatibility
  */
-export const getRushWindowInfo = () => ({
-    active: bossState.rushWindowTimer > 0,
-    ring: bossState.rushWindowRing,
-    timeLeft: bossState.rushWindowTimer
-});
+export const getRushWindowInfo = (state: GameState) => {
+    const bossState = getBossState(state);
+    return {
+        active: bossState.rushWindowTimer > 0,
+        ring: bossState.rushWindowRing,
+        timeLeft: bossState.rushWindowTimer
+    };
+};
 
 export const getRushThreshold = () => 0.8; // Simplified
-
-// Export bossState for tests (read-only)
-export { bossState };

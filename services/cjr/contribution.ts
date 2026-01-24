@@ -2,31 +2,30 @@
 import {
     CONTRIBUTION_TIERS
 } from './cjrConstants';
-import { Player, Bot } from '../../types';
+import { GameState, Player, Bot } from '../../types';
 import { createFloatingText } from '../engine/effects';
 
-// In-memory tracking for match session
-let damageLog: Map<string, number> = new Map();
-let lastHitBy: Map<string, string> = new Map(); // Track last-hit for spotlight
+const getContributionState = (runtime: GameState['runtime']) => runtime.contribution;
 
-export const trackDamage = (attacker: Player | Bot, victim: Player | Bot, amount: number) => {
+export const trackDamage = (attacker: Player | Bot, victim: Player | Bot, amount: number, state: GameState) => {
     if (!attacker || !victim) return;
 
-    const current = damageLog.get(attacker.id) || 0;
-    damageLog.set(attacker.id, current + amount);
+    const contribution = getContributionState(state.runtime);
+    const current = contribution.damageLog.get(attacker.id) || 0;
+    contribution.damageLog.set(attacker.id, current + amount);
 
     // Track last hit for spotlight
-    lastHitBy.set(victim.id, attacker.id);
+    contribution.lastHitBy.set(victim.id, attacker.id);
 };
 
-export const getContributionRanking = () => {
-    return Array.from(damageLog.entries())
+export const getContributionRanking = (runtime: GameState['runtime']) => {
+    return Array.from(runtime.contribution.damageLog.entries())
         .map(([id, dmg]) => ({ id, dmg }))
         .sort((a, b) => b.dmg - a.dmg);
 };
 
-export const getLastHitter = (victimId: string): string | undefined => {
-    return lastHitBy.get(victimId);
+export const getLastHitter = (runtime: GameState['runtime'], victimId: string): string | undefined => {
+    return runtime.contribution.lastHitBy.get(victimId);
 };
 
 /**
@@ -36,8 +35,8 @@ export const getLastHitter = (victimId: string): string | undefined => {
  * - Top2-3: speed +15% 3s
  * - Top4-8: speed +10% 2s
  */
-export const applyContributionBuffs = (players: (Player | Bot)[], state?: any) => {
-    const ranking = getContributionRanking();
+export const applyContributionBuffs = (players: (Player | Bot)[], runtime: GameState['runtime'], state?: GameState) => {
+    const ranking = getContributionRanking(runtime);
 
     players.forEach(p => {
         if (p.isDead) return;
@@ -71,14 +70,16 @@ export const applyContributionBuffs = (players: (Player | Bot)[], state?: any) =
 /**
  * Reset tracking for new boss fight
  */
-export const resetContributionLog = () => {
-    damageLog = new Map();
-    lastHitBy = new Map();
+export const resetContributionLog = (runtime: GameState['runtime']) => {
+    runtime.contribution = {
+        damageLog: new Map(),
+        lastHitBy: new Map()
+    };
 };
 
 /**
  * Get total damage dealt to boss by player
  */
-export const getPlayerDamage = (playerId: string): number => {
-    return damageLog.get(playerId) || 0;
+export const getPlayerDamage = (runtime: GameState['runtime'], playerId: string): number => {
+    return runtime.contribution.damageLog.get(playerId) || 0;
 };

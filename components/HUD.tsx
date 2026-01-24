@@ -14,9 +14,13 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
   const [nextReq, setNextReq] = useState(0);
   const [score, setScore] = useState(0);
   const [winTimer, setWinTimer] = useState(0);
+  const [winHoldSeconds, setWinHoldSeconds] = useState(1.5);
   const [colorHint, setColorHint] = useState('');
   const [level, setLevel] = useState(1);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [goalLabel, setGoalLabel] = useState('Goal: Ring 2');
+  const [rushTimer, setRushTimer] = useState(0);
+  const [rushRing, setRushRing] = useState(0);
 
   useEffect(() => {
     const link = setInterval(() => {
@@ -29,15 +33,24 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
 
       // Calculate Next Requirement
       let req = 0;
+      let goalText = '';
       if (state.player.ring === 1) req = state.levelConfig.thresholds.ring2;
       else if (state.player.ring === 2) req = state.levelConfig.thresholds.ring3;
       else req = state.levelConfig.thresholds.win;
+      if (state.player.ring === 1) goalText = 'Goal: Ring 2';
+      else if (state.player.ring === 2) goalText = 'Goal: Ring 3';
+      else goalText = 'Goal: Core';
       setNextReq(req);
+      setGoalLabel(goalText);
 
       setWinTimer(state.player.stationaryTime || 0);
+      setWinHoldSeconds(state.levelConfig?.winHoldSeconds || 1.5);
       setLevel(state.level || 1);
       const limit = state.levelConfig?.timeLimit || 0;
       setTimeLeft(Math.max(0, Math.ceil(limit - state.gameTime)));
+      const rushTime = state.runtime?.boss?.rushWindowTimer || 0;
+      setRushTimer(rushTime);
+      setRushRing(state.runtime?.boss?.rushWindowRing || 0);
 
       // Color hint
       const hint = getColorHint(state.player.pigment, state.player.targetPigment);
@@ -113,7 +126,7 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
 
         {/* Target */}
         <div className="text-white text-xs opacity-70 mt-1">
-          Target: {reqPercent}%
+          {goalLabel} ≥ {reqPercent}%
         </div>
       </div>
 
@@ -124,6 +137,11 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
       <div className="absolute top-4 right-4 text-white font-bold text-lg drop-shadow-md text-right">
         <div>LEVEL {level}</div>
         <div className="text-xs text-slate-300">TIME {timeLeft}s</div>
+        {rushTimer > 0 && (
+          <div className="text-xs text-amber-300 mt-1">
+            RUSH R{rushRing} · {Math.ceil(rushTimer)}s
+          </div>
+        )}
       </div>
 
       {/* Win Channeling Alert */}
@@ -133,7 +151,7 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
             SECURING VICTORY
           </div>
           <div className="w-40 h-4 bg-gray-900 mt-2 rounded">
-            <div className="h-full bg-yellow-400" style={{ width: `${(winTimer / 1.5) * 100}%` }} />
+            <div className="h-full bg-yellow-400" style={{ width: `${Math.min(100, (winTimer / Math.max(0.1, winHoldSeconds)) * 100)}%` }} />
           </div>
         </div>
       )}

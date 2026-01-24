@@ -30,13 +30,18 @@ const STEPS: Step[] = [
     tip: 'From ~80% match, correct pigments pull harder (snap assist).',
   },
   {
+    title: 'Tattoos',
+    body: 'As you grow, you unlock tattoo choices. Pick one to shape your build and spike your power.',
+    tip: 'Some tattoos combo into synergies — experiment.',
+  },
+  {
     title: 'Membranes',
     body: 'Cross the color membrane to enter the next ring when you meet the threshold. Once you enter, you can’t go back.',
     tip: 'Ring 1 is safe and rich. Inner rings are poor and dangerous.',
   },
   {
     title: 'Boss Events',
-    body: 'Boss fights are shared events. Defeat Boss I to open Ring 2; Boss II to open Ring 3 + a dramatic finish.',
+    body: 'The Ring Guardian spawns in Ring 2. Defeat it to trigger a Rush Window with extra special pickups.',
     tip: 'Last hit gives a short headstart, but only if you contributed.',
   },
   {
@@ -109,4 +114,3 @@ const TutorialOverlay: React.FC<Props> = ({ step, onNext, onPrev, onClose }) => 
 };
 
 export default TutorialOverlay;
-

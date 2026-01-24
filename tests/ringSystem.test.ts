@@ -1,7 +1,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { THRESHOLDS } from '../services/cjr/cjrConstants';
-import { getRushThreshold, isRushWindowActive, bossState, resetBossState } from '../services/cjr/bossCjr';
+import { createInitialState } from '../services/engine';
+import { getRushThreshold, isRushWindowActive, resetBossState } from '../services/cjr/bossCjr';
 
 describe('CJR Ring System', () => {
     it('should define strict thresholds', () => {
@@ -13,17 +14,18 @@ describe('CJR Ring System', () => {
 
 describe('CJR Boss Rush Mechanic', () => {
     it('should reduce threshold during rush window', () => {
-        resetBossState();
+        const state = createInitialState(1);
+        resetBossState(state.runtime);
 
         // Default
-        expect(isRushWindowActive(2)).toBe(false);
+        expect(isRushWindowActive(state, 2)).toBe(false);
         expect(getRushThreshold()).toBe(0.8);
 
         // Simulate Rush
-        bossState.rushWindowTimer = 5.0;
-        bossState.rushWindowRing = 2;
+        state.runtime.boss.rushWindowTimer = 5.0;
+        state.runtime.boss.rushWindowRing = 2;
 
-        expect(isRushWindowActive(2)).toBe(true);
-        expect(isRushWindowActive(3)).toBe(false);
+        expect(isRushWindowActive(state, 2)).toBe(true);
+        expect(isRushWindowActive(state, 3)).toBe(false);
     });
 });

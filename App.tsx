@@ -10,6 +10,8 @@ import TattooPicker from './components/TattooPicker';
 import ErrorBoundary from './components/ErrorBoundary';
 import BootScreen from './components/screens/BootScreen';
 import LevelSelectScreen from './components/screens/LevelSelectScreen';
+import MatchmakingScreen from './components/screens/MatchmakingScreen';
+import TournamentLobbyScreen from './components/screens/TournamentLobbyScreen';
 import GameOverScreen from './components/screens/GameOverScreen';
 import PauseOverlay from './components/overlays/PauseOverlay';
 import SettingsOverlay from './components/overlays/SettingsOverlay';
@@ -33,6 +35,22 @@ import {
   type Settings,
 } from './services/ui/storage';
 import { applyTattoo } from './services/cjr/tattoos';
+import { networkClient } from './services/networking/NetworkClient';
+import {
+  cancelQueue,
+  createMatchmakingState,
+  markMatched,
+  startQueue,
+  type MatchmakingState,
+} from './services/meta/matchmaking';
+import {
+  createTournamentQueue,
+  enqueueTournament,
+  markTournamentReady,
+  resetTournamentQueue,
+  type TournamentParticipant,
+  type TournamentQueueState,
+} from './services/meta/tournaments';
 
 const PixiGameCanvas = React.lazy(() => import('./components/PixiGameCanvas'));
 
@@ -61,6 +79,12 @@ const App: React.FC = () => {
     }
   });
 
+  const [menuName, setMenuName] = useState('Jelly');
+  const [menuShape, setMenuShape] = useState<ShapeId>('circle');
+  const [matchmakingRegion, setMatchmakingRegion] = useState('NA');
+  const [matchmaking, setMatchmaking] = useState<MatchmakingState>(() => createMatchmakingState());
+  const [tournamentQueue, setTournamentQueue] = useState<TournamentQueueState>(() => createTournamentQueue());
+
   const [selectedLevel, setSelectedLevel] = useState(() => clampLevel(progression.unlockedLevel));
 
   useEffect(() => {
@@ -79,12 +103,43 @@ const App: React.FC = () => {
     }
   }, [progression]);
 
+  useEffect(() => {
+    if (matchmaking.status !== 'queuing') return;
+    const timeout = window.setTimeout(() => {
+      setMatchmaking((state) => {
+        if (state.status !== 'queuing') return state;
+        return markMatched(state, `match_${Date.now().toString(36)}`);
+      });
+    }, 2400);
+    return () => window.clearTimeout(timeout);
+  }, [matchmaking.status]);
+
+  useEffect(() => {
+    if (tournamentQueue.status !== 'queued') return;
+    const timeout = window.setTimeout(() => {
+      setTournamentQueue((state) => {
+        if (state.status !== 'queued') return state;
+        const participants: TournamentParticipant[] = [
+          { id: 'local', name: menuName || 'Jelly', rating: 1380 },
+          { id: 'bot_ember', name: 'Ember', rating: 1320 },
+          { id: 'bot_nyx', name: 'Nyx', rating: 1405 },
+          { id: 'bot_sable', name: 'Sable', rating: 1290 },
+          { id: 'bot_ash', name: 'Ash', rating: 1340 },
+          { id: 'bot_luxe', name: 'Luxe', rating: 1412 },
+        ];
+        return markTournamentReady(state, participants);
+      });
+    }, 2600);
+    return () => window.clearTimeout(timeout);
+  }, [menuName, tournamentQueue.status]);
+
   const gameStateRef = useRef<GameState | null>(null);
   const requestRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const lastStartRef = useRef<{ name: string; shape: ShapeId } | null>(null);
   const resultHandledRef = useRef<GameState['result']>(null);
   const tattooOverlayArmedRef = useRef(false);
+  const [networkStatus, setNetworkStatus] = useState<'offline' | 'connecting' | 'online' | 'reconnecting' | 'error'>('offline');
 
   const [isTouch, setIsTouch] = useState(false);
   const [viewport, setViewport] = useState(() => ({
@@ -107,7 +162,7 @@ const App: React.FC = () => {
     return () => window.clearTimeout(t);
   }, []);
 
-  const startGame = useCallback((name: string, shape: ShapeId, nextLevel: number) => {
+  const startGame = useCallback((name: string, shape: ShapeId, nextLevel: number, useMultiplayerOverride?: boolean) => {
     if (requestRef.current) cancelAnimationFrame(requestRef.current);
     requestRef.current = 0;
 
@@ -123,11 +178,17 @@ const App: React.FC = () => {
 
     setUi(() => ({ screen: 'playing', overlays: [] }));
 
+    const useMultiplayer = useMultiplayerOverride ?? settings.useMultiplayer;
+    if (useMultiplayer) {
+      networkClient.setLocalState(state);
+      networkClient.connectWithRetry(name, shape);
+    }
+
     if (!progression.tutorialSeen && nextLevel <= 3) {
       state.isPaused = true;
       setUi((s) => pushOverlay(s, { type: 'tutorial', step: 0 }));
     }
-  }, [progression.tutorialSeen]);
+  }, [progression.tutorialSeen, settings.useMultiplayer]);
 
   const gameLoop = useCallback((time: number) => {
     const state = gameStateRef.current;
@@ -138,6 +199,9 @@ const App: React.FC = () => {
 
     const safeDt = Math.min(dt, 0.1);
     if (!state.isPaused) updateGameState(state, safeDt);
+    if (settings.useMultiplayer && networkStatus === 'online') {
+      networkClient.sendInput(state.player.targetPosition, state.inputs);
+    }
 
     if (state.tattooChoices && !tattooOverlayArmedRef.current) {
       tattooOverlayArmedRef.current = true;
@@ -163,7 +227,19 @@ const App: React.FC = () => {
     }
 
     requestRef.current = requestAnimationFrame(gameLoop);
-  }, [selectedLevel]);
+  }, [selectedLevel, networkStatus, settings.useMultiplayer]);
+
+  useEffect(() => {
+    networkClient.setStatusListener(setNetworkStatus);
+    networkClient.enableAutoReconnect(true);
+    return () => networkClient.setStatusListener(undefined);
+  }, []);
+
+  useEffect(() => {
+    if (ui.screen === 'playing') return;
+    if (networkStatus === 'offline') return;
+    networkClient.disconnect();
+  }, [ui.screen, networkStatus]);
 
   useEffect(() => {
     if (ui.screen !== 'playing' || !gameStateRef.current) return;
@@ -247,11 +323,19 @@ const App: React.FC = () => {
             level={selectedLevel}
             unlockedLevel={progression.unlockedLevel}
             usePixi={settings.usePixi}
+            useMultiplayer={settings.useMultiplayer}
+            networkStatus={networkStatus}
+            name={menuName}
+            shape={menuShape}
             onTogglePixi={(next) => setSettings((s) => ({ ...s, usePixi: next }))}
             onOpenLevels={() => setUi((s) => ({ ...clearOverlays(s), screen: 'levelSelect' }))}
             onOpenTutorial={() => setUi((s) => pushOverlay(s, { type: 'tutorial', step: 0 }))}
             onOpenSettings={() => setUi((s) => pushOverlay(s, { type: 'settings' }))}
-            onStart={(name, shape) => startGame(name, shape, selectedLevel)}
+            onOpenMatchmaking={() => setUi((s) => ({ ...clearOverlays(s), screen: 'matchmaking' }))}
+            onOpenTournament={() => setUi((s) => ({ ...clearOverlays(s), screen: 'tournament' }))}
+            onStart={(name, shape) => startGame(name.trim(), shape, selectedLevel)}
+            onNameChange={setMenuName}
+            onShapeChange={setMenuShape}
           />
         )}
 
@@ -266,6 +350,41 @@ const App: React.FC = () => {
               const last = lastStartRef.current;
               if (last) startGame(last.name, last.shape, next);
               else setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
+            }}
+          />
+        )}
+
+        {ui.screen === 'matchmaking' && (
+          <MatchmakingScreen
+            name={menuName}
+            shape={menuShape}
+            region={matchmakingRegion}
+            status={matchmaking.status}
+            queuedAt={matchmaking.queuedAt}
+            networkStatus={networkStatus}
+            onRegionChange={setMatchmakingRegion}
+            onQueue={() => setMatchmaking((state) => startQueue(state, matchmakingRegion))}
+            onCancel={() => setMatchmaking(() => cancelQueue())}
+            onBack={() => {
+              setMatchmaking(() => cancelQueue());
+              setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
+            }}
+            onEnterMatch={() => {
+              setMatchmaking(() => cancelQueue());
+              setSettings((s) => ({ ...s, useMultiplayer: true }));
+              startGame(menuName.trim(), menuShape, selectedLevel, true);
+            }}
+          />
+        )}
+
+        {ui.screen === 'tournament' && (
+          <TournamentLobbyScreen
+            queue={tournamentQueue}
+            onQueue={(id) => setTournamentQueue(() => enqueueTournament(id))}
+            onCancel={() => setTournamentQueue(() => resetTournamentQueue())}
+            onBack={() => {
+              setTournamentQueue(() => resetTournamentQueue());
+              setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
             }}
           />
         )}
@@ -346,6 +465,7 @@ const App: React.FC = () => {
               if (requestRef.current) cancelAnimationFrame(requestRef.current);
               requestRef.current = 0;
               gameStateRef.current = null;
+              networkClient.disconnect();
               setUi({ screen: 'menu', overlays: [] });
             }}
             onSettings={() => setUi((s) => pushOverlay(s, { type: 'settings' }))}
@@ -355,7 +475,9 @@ const App: React.FC = () => {
         {top?.type === 'settings' && (
           <SettingsOverlay
             usePixi={settings.usePixi}
+            useMultiplayer={settings.useMultiplayer}
             onTogglePixi={(next) => setSettings((s) => ({ ...s, usePixi: next }))}
+            onToggleMultiplayer={(next) => setSettings((s) => ({ ...s, useMultiplayer: next }))}
             onClose={() => setUi((s) => popOverlay(s, 'settings'))}
           />
         )}

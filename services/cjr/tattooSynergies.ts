@@ -7,7 +7,7 @@
 
 import { Player, GameState } from '../../types';
 import { TattooId } from './cjrTypes';
-import { createParticle } from '../engine/factories';
+import { createFood, createParticle } from '../engine/factories';
 import { createFloatingText } from '../engine/effects';
 import './synergyStatusEffects'; // Import status effects extensions
 
@@ -203,6 +203,80 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
     },
     cooldown: 7.0
   },
+
+  {
+    id: 'prismatic_bulwark',
+    name: 'Prismatic Bulwark',
+    tattoos: [TattooId.PrismGuard, TattooId.DepositShield],
+    description: 'Perfect guard window grants a stronger shield and a short speed burst',
+    tier: 'advanced',
+    effect: (player, state) => {
+      player.statusEffects.shielded = true;
+      player.statusEffects.commitShield = Math.max(player.statusEffects.commitShield || 0, 4.0);
+      player.statusEffects.tempSpeedBoost = Math.max(player.statusEffects.tempSpeedBoost || 1, 1.15);
+      player.statusEffects.tempSpeedTimer = Math.max(player.statusEffects.tempSpeedTimer || 0, 3.5);
+
+      createSynergyVisualEffect(player, {
+        particleColor: '#F59E0B',
+        particleCount: 40,
+        pattern: 'geometric',
+        duration: 2.2
+      }, state);
+    },
+    visualEffect: {
+      particleColor: '#F59E0B',
+      particleCount: 40,
+      pattern: 'geometric',
+      duration: 2.2
+    },
+    unlockRequirement: {
+      minPlayerLevel: 3
+    },
+    cooldown: 8.0
+  },
+
+  {
+    id: 'catalyst_surge',
+    name: 'Catalyst Surge',
+    tattoos: [TattooId.CatalystEcho, TattooId.PerfectMatch],
+    description: 'Perfect matches surge color focus and pull nearby catalysts',
+    tier: 'advanced',
+    effect: (player, state) => {
+      player.statusEffects.colorBoostMultiplier = Math.max(player.statusEffects.colorBoostMultiplier || 1, 1.8);
+      player.statusEffects.colorBoostTimer = Math.max(player.statusEffects.colorBoostTimer || 0, 4.0);
+      player.magneticFieldRadius = Math.max(player.magneticFieldRadius || 0, 180);
+      player.statusEffects.magnetTimer = Math.max(player.statusEffects.magnetTimer || 0, 3.0);
+
+      state.food.forEach(food => {
+        if (food.isDead || food.kind !== 'catalyst') return;
+        const dx = player.position.x - food.position.x;
+        const dy = player.position.y - food.position.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 220 && dist > 1) {
+          const force = 120;
+          food.velocity.x += (dx / dist) * force;
+          food.velocity.y += (dy / dist) * force;
+        }
+      });
+
+      createSynergyVisualEffect(player, {
+        particleColor: '#10B981',
+        particleCount: 45,
+        pattern: 'spiral',
+        duration: 2.4
+      }, state);
+    },
+    visualEffect: {
+      particleColor: '#10B981',
+      particleCount: 45,
+      pattern: 'spiral',
+      duration: 2.4
+    },
+    unlockRequirement: {
+      minMatchPercent: 0.82
+    },
+    cooldown: 10.0
+  },
   
   // MASTER SYNERGIES (High skill requirement)
   {
@@ -270,6 +344,52 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
       minPlayerLevel: 5
     },
     cooldown: 12.0
+  },
+
+  {
+    id: 'blood_harvest',
+    name: 'Blood Harvest',
+    tattoos: [TattooId.InkLeech, TattooId.GrimHarvest, TattooId.PigmentBomb],
+    description: 'Kills erupt into neutral mass and briefly empower your movement',
+    tier: 'master',
+    effect: (player, state) => {
+      const dropCount = 3;
+      for (let i = 0; i < dropCount; i++) {
+        const offset = {
+          x: (Math.random() - 0.5) * 60,
+          y: (Math.random() - 0.5) * 60
+        };
+        const drop = createFood({
+          x: player.position.x + offset.x,
+          y: player.position.y + offset.y
+        });
+        drop.kind = 'neutral';
+        drop.color = '#9ca3af';
+        drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
+        state.food.push(drop);
+      }
+
+      player.statusEffects.tempSpeedBoost = Math.max(player.statusEffects.tempSpeedBoost || 1, 1.2);
+      player.statusEffects.tempSpeedTimer = Math.max(player.statusEffects.tempSpeedTimer || 0, 3.0);
+
+      createSynergyVisualEffect(player, {
+        particleColor: '#EF4444',
+        particleCount: 60,
+        pattern: 'explosion',
+        duration: 2.6
+      }, state);
+    },
+    visualEffect: {
+      particleColor: '#EF4444',
+      particleCount: 60,
+      pattern: 'explosion',
+      duration: 2.6
+    },
+    unlockRequirement: {
+      minPlayerLevel: 6,
+      specificSituation: 'in_combat'
+    },
+    cooldown: 14.0
   },
   
   // LEGENDARY SYNERGIES (Game-changing)
@@ -430,7 +550,7 @@ export class TattooSynergyManager {
       id: effectId,
       synergyId: synergy.id,
       playerId: player.id,
-      startTime: Date.now(),
+      elapsed: 0,
       duration: this.getSynergyDuration(synergy),
       tier: synergy.tier
     };
@@ -487,15 +607,24 @@ export class TattooSynergyManager {
     }
     
     // Update active synergies
-    const now = Date.now();
     for (const [effectId, effect] of this.activeSynergies.entries()) {
-      if (now - effect.startTime > effect.duration * 1000) {
+      effect.elapsed += dt;
+      if (effect.elapsed >= effect.duration) {
         this.activeSynergies.delete(effectId);
         
         // Remove synergy effects from player
         this.removeSynergyEffects(effect.playerId, effect.synergyId, state);
       }
     }
+  }
+
+  reset(): void {
+    this.activeSynergies.clear();
+    this.synergyCooldowns.clear();
+    this.synergyStats.clear();
+    this.discoveredSynergies.clear();
+    this.discoveredSynergies.add('purification_mastery');
+    this.discoveredSynergies.add('explosive_speed');
   }
 
   /**
@@ -613,7 +742,7 @@ interface TattooSynergyEffect {
   id: string;
   synergyId: string;
   playerId: string;
-  startTime: number;
+  elapsed: number;
   duration: number;
   tier: 'basic' | 'advanced' | 'master' | 'legendary';
 }

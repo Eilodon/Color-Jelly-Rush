@@ -8,7 +8,7 @@ import {
 } from '../../../constants';
 import { GameState, Player, Bot, Entity, Projectile, Food } from '../../../types';
 import { createDeathExplosion, createFloatingText, notifyPlayerDamage } from '../effects';
-import { createParticle } from '../factories';
+import { createParticle, createFood } from '../factories';
 import { applyGrowth } from './physics';
 import { TattooId } from '../../cjr/cjrTypes';
 import { mixPigment, calcMatchPercent, pigmentToHex, getSnapAlpha } from '../../cjr/colorMath';
@@ -91,6 +91,13 @@ export const consumePickup = (e: Player | Bot, food: Food, state: GameState) => 
       e.statusEffects.colorBoostMultiplier = Math.max(e.statusEffects.colorBoostMultiplier || 1, 1.5);
       e.statusEffects.colorBoostTimer = 4.0;
       e.statusEffects.pityBoost = 4.0;
+      if (e.tattoos?.includes(TattooId.CatalystEcho)) {
+        const bonus = e.statusEffects.catalystEchoBonus || 1.3;
+        const duration = e.statusEffects.catalystEchoDuration || 2.0;
+        e.statusEffects.colorBoostMultiplier = Math.max(e.statusEffects.colorBoostMultiplier || 1, bonus);
+        e.statusEffects.colorBoostTimer = Math.max(e.statusEffects.colorBoostTimer || 0, 4.0 + duration);
+        growth *= bonus;
+      }
       createFloatingText(e.position, 'Catalyst!', '#ff00ff', 18, state);
       break;
 
@@ -148,6 +155,19 @@ export const consume = (
   createDeathExplosion(prey.position, prey.color, prey.radius);
   createFloatingText(prey.position, '+Mass', '#22c55e', 20, state);
 
+  if (predator.tattoos?.includes(TattooId.GrimHarvest)) {
+    const dropCount = predator.statusEffects.grimHarvestDropCount || 2;
+    for (let i = 0; i < dropCount; i++) {
+      const offsetX = (Math.random() - 0.5) * prey.radius * 0.6;
+      const offsetY = (Math.random() - 0.5) * prey.radius * 0.6;
+      const drop = createFood({ x: prey.position.x + offsetX, y: prey.position.y + offsetY });
+      drop.kind = 'neutral';
+      drop.color = '#9ca3af';
+      drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
+      state.food.push(drop);
+    }
+  }
+
   prey.isDead = true;
 };
 
@@ -200,6 +220,13 @@ export const reduceHealth = (
   if (victim.statusEffects?.shielded) return;
 
   let actualDamage = amount / victim.defense;
+  if (victim.tattoos?.includes(TattooId.PrismGuard)) {
+    const threshold = victim.statusEffects.prismGuardThreshold || 0.8;
+    const reduction = victim.statusEffects.prismGuardReduction || 0.8;
+    if (victim.matchPercent >= threshold) {
+      actualDamage *= reduction;
+    }
+  }
   if (attacker && 'tattoos' in attacker) {
     const att = attacker as Player;
     if (victim.tattoos?.includes(TattooId.PigmentBomb)) {
@@ -214,13 +241,20 @@ export const reduceHealth = (
   }
 
   victim.currentHealth -= actualDamage;
+  if (attacker && 'currentHealth' in attacker) {
+    const leech = (attacker as Player | Bot).lifesteal || 0;
+    if (leech > 0 && actualDamage > 0) {
+      const healer = attacker as Player | Bot;
+      healer.currentHealth = Math.min(healer.maxHealth, healer.currentHealth + actualDamage * leech);
+    }
+  }
   state.shakeIntensity += actualDamage * 0.05;
   victim.lastHitTime = 0;
   triggerEmotion(victim, 'hit');
   spawnHitSplash(state, victim.position.x, victim.position.y, victim.color);
 
   if (attacker && 'score' in attacker && 'isBoss' in victim && (victim as Bot).isBoss) {
-    trackDamage(attacker as Player | Bot, victim as Player | Bot, actualDamage);
+    trackDamage(attacker as Player | Bot, victim as Player | Bot, actualDamage, state);
   }
 
   if (victim.currentHealth <= 0) {

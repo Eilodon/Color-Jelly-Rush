@@ -92,6 +92,11 @@ export interface Player extends Entity {
   isInvulnerable: boolean;
   skillCooldown: number;
   maxSkillCooldown: number;
+  inputs?: {
+    space: boolean;
+    w: boolean;
+  };
+  inputSeq?: number;
 
   // RPG Stats (Simplified)
   defense: number;
@@ -168,6 +173,11 @@ export interface Player extends Entity {
     neutralMassBonus?: number;
     solventPower?: number;
     solventSpeedBoost?: number;
+    catalystEchoBonus?: number;
+    catalystEchoDuration?: number;
+    prismGuardThreshold?: number;
+    prismGuardReduction?: number;
+    grimHarvestDropCount?: number;
     
     // Tattoo Synergy Effects - Phase 2 Gameplay Depth
     neutralPurification?: boolean;
@@ -238,6 +248,24 @@ export interface PlayerProfile {
   highScore: number;
   unlockedSkins: string[];
   unlockedTattoos: TattooId[];
+  cosmetics?: {
+    ownedSkins: string[];
+    ownedTrails: string[];
+    ownedAuras: string[];
+    ownedBadges: string[];
+    active: {
+      skin?: string;
+      trail?: string;
+      aura?: string;
+      badge?: string;
+    };
+  };
+  quests?: {
+    daily: Record<string, number>;
+    weekly: Record<string, number>;
+    lastReset: number;
+  };
+  guildId?: string | null;
   lastUpdated: number;
 }
 
@@ -277,6 +305,33 @@ export interface FloatingText {
   velocity: Vector2;
 }
 
+export interface WaveRuntimeState {
+  ring1: number;
+  ring2: number;
+  ring3: number;
+}
+
+export interface BossRuntimeState {
+  bossDefeated: boolean;
+  rushWindowTimer: number;
+  rushWindowRing: 2 | null;
+  currentBossActive: boolean;
+  attackCharging: boolean;
+  attackTarget: Vector2 | null;
+  attackChargeTimer: number;
+}
+
+export interface ContributionRuntimeState {
+  damageLog: Map<string, number>;
+  lastHitBy: Map<string, string>;
+}
+
+export interface GameRuntimeState {
+  wave: WaveRuntimeState;
+  boss: BossRuntimeState;
+  contribution: ContributionRuntimeState;
+}
+
 // Forward declaration for engine
 export interface IGameEngine {
   spatialGrid: any;
@@ -285,6 +340,7 @@ export interface IGameEngine {
 
 export interface GameState {
   player: Player;
+  players: Player[];
   bots: Bot[];
   creeps: Bot[];
   boss: Bot | null;
@@ -296,6 +352,7 @@ export interface GameState {
   delayedActions: DelayedAction[];
 
   engine: IGameEngine;
+  runtime: GameRuntimeState;
 
   worldSize: Vector2;
   zoneRadius: number; // Keep for compatibility, map to Ring
