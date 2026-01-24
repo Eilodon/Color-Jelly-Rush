@@ -1,7 +1,9 @@
 
-import { TattooId, MutationTier, Player } from '../../types';
+import { TattooId, MutationTier, Player, Bot, Food, GameState } from '../../types';
 import { COLOR_BALANCE } from './balance';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
+import { mixPigment, calcMatchPercent, pigmentToHex } from './colorMath';
+import { createFloatingText } from '../engine/effects';
 
 export interface TattooDefinition {
     id: TattooId;
@@ -9,6 +11,11 @@ export interface TattooDefinition {
     tier: MutationTier;
     description: string;
     apply: (player: Player) => void;
+    // Event hooks for tattoo effects
+    onConsume?: (entity: Player | Bot, food: Food, state: GameState) => void;
+    onHit?: (victim: Player | Bot, attacker: Player | Bot, state: GameState) => void;
+    onSkill?: (player: Player, state: GameState) => void;
+    onUpdate?: (player: Player, dt: number, state: GameState) => void;
 }
 
 const TATTOOS: TattooDefinition[] = [
@@ -19,6 +26,15 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Reduce impact of wrong pigments by 40%.',
         apply: (player: Player) => {
             player.statusEffects.wrongPigmentReduction = 0.6; // 40% reduction
+        },
+        onConsume: (entity: Player | Bot, food: Food, state: GameState) => {
+            if (food.kind === 'pigment' && food.pigment) {
+                const pigmentMatch = calcMatchPercent(food.pigment, entity.targetPigment);
+                if (pigmentMatch < 0.6) {
+                    // Apply reduction effect here instead of in combat.ts
+                    // This will be handled by the consumePickup function
+                }
+            }
         }
     },
     {
@@ -47,6 +63,18 @@ const TATTOOS: TattooDefinition[] = [
         apply: (player: Player) => {
             player.statusEffects.pigmentBombActive = true;
             player.statusEffects.pigmentBombChance = 0.3;
+        },
+        onHit: (victim: Player | Bot, attacker: Player | Bot, state: GameState) => {
+            if (victim.tattoos?.includes(TattooId.PigmentBomb)) {
+                const chance = victim.statusEffects.pigmentBombChance || 0.3;
+                if (Math.random() < chance && 'pigment' in attacker) {
+                    const att = attacker as Player | Bot;
+                    att.pigment = mixPigment(att.pigment, victim.pigment, 0.15);
+                    att.color = pigmentToHex(att.pigment);
+                    att.matchPercent = calcMatchPercent(att.pigment, att.targetPigment);
+                    createFloatingText(att.position, 'INKED!', '#ff66cc', 18, state);
+                }
+            }
         }
     },
     {

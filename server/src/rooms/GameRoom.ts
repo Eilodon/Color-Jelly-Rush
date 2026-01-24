@@ -21,9 +21,9 @@ import {
   FOOD_COUNT,
   FOOD_RADIUS
 } from '../constants';
-// TODO: Share factories/physics logic between client/server
-// For Phase 1 compilation, we implement basic logic here or duplicate slightly
-// Ideally we import from '../../../services/engine/...' but that might need Module resolution support
+// Import shared game logic
+import { updateGameState } from '../../../services/engine/index';
+import { createServerGameState } from './serverGameState';
 
 export class GameRoom extends Room<GameRoomState> {
   maxClients = 50;
@@ -90,8 +90,14 @@ export class GameRoom extends Room<GameRoomState> {
   update(dt: number) {
     this.state.gameTime += dt;
 
-    // TODO: Implement full server-side physics loop
-    // Currently relying on client-side prediction + future server reconciliation
+    // Convert server state to game engine format
+    const gameState = createServerGameState(this.state);
+    
+    // Run authoritative physics simulation
+    const updatedState = updateGameState(gameState, dt);
+    
+    // Sync results back to server state
+    this.syncGameStateToServer(updatedState);
   }
 
   spawnFoodInitial() {
@@ -111,5 +117,59 @@ export class GameRoom extends Room<GameRoomState> {
 
       this.state.food.set(food.id, food);
     }
+  }
+
+  private syncGameStateToServer(gameState: any) {
+    // Sync player positions and states
+    gameState.players?.forEach((player: any) => {
+      const serverPlayer = this.state.players.get(player.id);
+      if (serverPlayer) {
+        serverPlayer.position.x = player.position.x;
+        serverPlayer.position.y = player.position.y;
+        serverPlayer.radius = player.radius;
+        serverPlayer.score = player.score;
+        serverPlayer.currentHealth = player.currentHealth;
+        // Sync other essential properties
+      }
+    });
+
+    // Sync food states
+    gameState.food?.forEach((food: any) => {
+      if (food.isDead) {
+        this.state.food.delete(food.id);
+      } else {
+        const serverFood = this.state.food.get(food.id);
+        if (!serverFood) {
+          // Spawn new food if needed
+          const newFood = new FoodState();
+          newFood.id = food.id;
+          newFood.x = food.position.x;
+          newFood.y = food.position.y;
+          newFood.kind = food.kind;
+          newFood.pigment = food.pigment;
+          this.state.food.set(food.id, newFood);
+        }
+      }
+    });
+
+    // Handle dead entities cleanup
+    this.state.players.forEach((player, sessionId) => {
+      const gamePlayer = gameState.players?.find((p: any) => p.id === sessionId);
+      if (gamePlayer?.isDead) {
+        // Handle player death (respawn logic etc.)
+        this.handlePlayerDeath(player, sessionId);
+      }
+    });
+  }
+
+  private handlePlayerDeath(player: PlayerState, sessionId: string) {
+    // Respawn player at random position
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * (MAP_RADIUS * 0.8);
+    player.position.x = Math.cos(angle) * r;
+    player.position.y = Math.sin(angle) * r;
+    player.radius = 15; // Reset size
+    player.currentHealth = 100; // Reset health
+    // Reset other properties as needed
   }
 }
