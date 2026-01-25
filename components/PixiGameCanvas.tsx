@@ -24,7 +24,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
 
   // ... (rest of refs) ...
   const meshesRef = useRef<Map<string, Mesh | Container>>(new Map());
-  const particleGraphicsRef = useRef<Map<string, Graphics>>(new Map());
+  const particleLayerRef = useRef<Graphics | null>(null);
   const cameraSmoothRef = useRef({ x: 0, y: 0 }); // Smooth camera state
   const geometryCache = useRef<Geometry | null>(null);
   const shaderCache = useRef<Shader | null>(null);
@@ -106,10 +106,46 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         // Render Particles
         syncParticles(particleLayer, state.particles, app.ticker.lastTime / 1000, alpha);
 
-        // VFX / UI
+        // VFX / UI - Ring Pulse Animation
         if (ringsGraphicsRef.current) {
           const t = app.ticker.lastTime / 1000;
-          ringsGraphicsRef.current.alpha = 0.8 + Math.sin(t * 2.0) * 0.2;
+
+          // Check for active King/Pulse state
+          // If any player has kingForm > 0 or we have pulse events
+          const winnerOrCandidate = state.players.find(p => (p.statusEffects?.kingForm || 0) > 0);
+          let pulseIntensity = 0;
+          if (winnerOrCandidate) {
+            const progress = (winnerOrCandidate.statusEffects.kingForm || 0) / 1.5; // HOLD_TIME
+            pulseIntensity = progress;
+          }
+
+          ringsGraphicsRef.current.clear();
+
+          // Redraw rings with dynamic pulse
+          const baseAlpha = 0.3;
+          const pulse = Math.sin(t * (2.0 + pulseIntensity * 10.0)) * 0.2 * pulseIntensity; // Faster if closer
+
+          // Outer Rings
+          ringsGraphicsRef.current.circle(0, 0, RING_RADII.R2).stroke({ width: 4, color: COLOR_PALETTE.rings.r2, alpha: 0.3 });
+          ringsGraphicsRef.current.circle(0, 0, RING_RADII.R1).stroke({ width: 2, color: COLOR_PALETTE.rings.r1, alpha: 0.2 });
+
+          // Center Zone (Ring 3) - The Heart
+          const centerColor = pulseIntensity > 0 ? 0xff0000 : COLOR_PALETTE.rings.r3;
+          const centerWidth = pulseIntensity > 0 ? 8 + pulseIntensity * 10 : 4;
+
+          ringsGraphicsRef.current.circle(0, 0, RING_RADII.R3).stroke({
+            width: centerWidth,
+            color: centerColor,
+            alpha: 0.5 + pulse
+          });
+
+          if (pulseIntensity > 0.5) {
+            // Critical hold visuals
+            ringsGraphicsRef.current.circle(0, 0, RING_RADII.R3 * (1.0 - pulseIntensity * 0.1)).fill({
+              color: 0xff0000,
+              alpha: 0.1 + pulse * 0.2
+            });
+          }
         }
       });
     });
@@ -145,6 +181,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         uEmotion: 0,
         uEnergy: 0,
         uMatchPercent: 0.5,
+        uPulsePhase: 0.0, // New Uniform
       }
     });
     shaderCache.current = shader;
@@ -155,9 +192,15 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
   const drawMap = (container: Container) => {
     const g = new Graphics();
     ringsGraphicsRef.current = g;
+
+    // Draw Static Rings first
     g.circle(0, 0, RING_RADII.R3).stroke({ width: 4, color: COLOR_PALETTE.rings.r3, alpha: 0.5 });
     g.circle(0, 0, RING_RADII.R2).stroke({ width: 4, color: COLOR_PALETTE.rings.r2, alpha: 0.3 });
     g.circle(0, 0, RING_RADII.R1).stroke({ width: 2, color: COLOR_PALETTE.rings.r1, alpha: 0.2 });
+
+    // Win Zone Membrane (Inner)
+    // We'll update this in render loop for pulsing
+
     container.addChild(g);
   };
 
@@ -204,8 +247,12 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
       }
 
       // INTERPOLATION LOGIC
-      // If no prevPosition (newly spawned), use current.
-      const prev = e.prevPosition || e.position;
+      if (!e.prevPosition) {
+        // Fail fast as per Eidolon mandate
+        console.error(`Entity ${e.id} missing prevPosition! Lifecycle breach.`);
+        e.prevPosition = { ...e.position }; // Recovery
+      }
+      const prev = e.prevPosition;
       const curr = e.position;
 
       const x = prev.x + (curr.x - prev.x) * alpha;
@@ -229,7 +276,10 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
           res.uColor[2] = (val & 255) / 255;
 
           const speed = Math.hypot(e.velocity.x, e.velocity.y);
-          res.uSquish = Math.min(0.3, speed / 500);
+          if (res.uSquish !== undefined) {
+            const newSquish = Math.min(0.3, speed / 500);
+            if (Math.abs(res.uSquish - newSquish) > 0.01) res.uSquish = newSquish;
+          }
 
           let deform = 0;
           let pattern = 0;
@@ -237,8 +287,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
           let matchVal = 0.5;
 
           if (isPlayerOrBot(e)) {
-            // Tattoos (Using string literals that match Enum or casting)
-            // Ideally import TattooId but for now we fix the linter error by checking string validity or casting
+            // ... (keep logic) ...
             const tattoos = e.tattoos as string[] || [];
             if (tattoos.includes('grim_harvest') || tattoos.includes('invulnerable')) deform = 1;
             if ((e.statusEffects?.overdriveTimer || 0) > 0 || tattoos.includes('pigment_bomb')) pattern = 1;
@@ -257,11 +306,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
             matchVal = e.matchPercent || 0;
           }
 
-          res.uEmotion = emotionVal;
-          res.uMatchPercent = matchVal;
-          res.uEnergy = matchVal;
-          res.uDeformMode = deform;
-          res.uPatternMode = pattern;
+          if (res.uEmotion !== emotionVal) res.uEmotion = emotionVal;
+          if (Math.abs(res.uMatchPercent - matchVal) > 0.01) res.uMatchPercent = matchVal;
+          if (Math.abs(res.uEnergy - matchVal) > 0.01) res.uEnergy = matchVal;
+          if (res.uDeformMode !== deform) res.uDeformMode = deform;
+          if (res.uPatternMode !== pattern) res.uPatternMode = pattern;
         }
       } else if (mesh instanceof Graphics) {
         if (mesh.tint !== parseInt(e.color?.replace('#', '') || 'ffffff', 16)) {
@@ -279,84 +328,68 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
     }
   };
 
+
+
   const syncParticles = (container: Container, particles: Particle[], time: number, alpha: number) => {
-    const activeIds = new Set<string>();
+    // Initialize Batch Graphics if needed
+    if (!particleLayerRef.current) {
+      const g = new Graphics();
+      g.blendMode = 'add'; // Global bloom for all particles
+      container.addChild(g);
+      particleLayerRef.current = g;
+    }
+
+    const g = particleLayerRef.current;
+    g.clear(); // Batch render: Clear once
 
     particles.forEach(p => {
-      if (p.isDead) return;
-      activeIds.add(p.id);
-
-      let g = particleGraphicsRef.current.get(p.id);
-      if (!g) {
-        g = new Graphics();
-        g.blendMode = 'add'; // Bloom effect
-        container.addChild(g);
-        particleGraphicsRef.current.set(p.id, g);
+      // Safety: If particle is newly created, prev might be undefined.
+      if (!p.prevPosition) {
+        p.prevPosition = { ...p.position };
       }
 
-      // Render Logic based on Particle Type
-      g.clear();
+      const prev = p.prevPosition;
+      const curr = p.position;
 
-      const color = parseInt(p.color.replace('#', ''), 16);
+      const px = prev.x + (curr.x - prev.x) * alpha;
+      const py = prev.y + (curr.y - prev.y) * alpha;
+
       const alphaVal = p.fadeOut ? (p.life / (p.maxLife || 1)) : 1;
+      // Convert hex string to number
+      const color = parseInt(p.color.replace('#', ''), 16);
 
+      // Render Loop (Immediate Mode)
       if ((p as any).isRipple) {
-        // Ripple Ring
         const r = (p as any).rippleRadius || p.radius;
-        g.circle(0, 0, r).stroke({ width: 2, color, alpha: alphaVal * 0.6 });
+        g.circle(px, py, r).stroke({ width: 2, color, alpha: alphaVal * 0.6 });
       } else if ((p as any).isPulse) {
-        // Pulse
         const r = (p as any).pulseRadius || p.radius;
-        g.circle(0, 0, r).fill({ color, alpha: alphaVal * 0.3 });
-        g.circle(0, 0, r * 0.7).stroke({ width: 1, color, alpha: alphaVal * 0.8 });
+        g.circle(px, py, r).fill({ color, alpha: alphaVal * 0.3 });
+        g.circle(px, py, r * 0.7).stroke({ width: 1, color, alpha: alphaVal * 0.8 });
       } else if ((p as any).isShockwave) {
-        // Shockwave
         const r = (p as any).shockwaveRadius || p.radius;
-        g.circle(0, 0, r).stroke({ width: 4, color, alpha: alphaVal * 0.5 });
+        g.circle(px, py, r).stroke({ width: 4, color, alpha: alphaVal * 0.5 });
       } else if ((p as any).isLightRay) {
-        // Ray
         const len = (p as any).rayLength || 50;
         const wid = (p as any).rayWidth || 2;
-        g.rect(0, -wid / 2, len, wid).fill({ color, alpha: alphaVal });
-        // Rotate to velocity? calculated in update usually, here we interpret p.angle or velocity
+        // Rotation support for batch graphics? 
+        // Graphics context supports rotation transform but it's stateful.
+        // Easier to compute vertices for rect manually or use line.
+        // Let's use MoveTo/LineTo for Ray to handle rotation easily.
         const angle = Math.atan2(p.velocity.y, p.velocity.x);
-        g.rotation = angle;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // Draw rotated rect line
+        g.moveTo(px, py);
+        g.lineTo(px + cos * len, py + sin * len).stroke({ width: wid, color, alpha: alphaVal });
       } else if ((p as any).isText) {
-        // Text is handled by floatingTexts loop in engine, or strictly here?
-        // vfxSystem pushes text as particle with isText?
-        // If so, we can't easily use Graphics for text. Skip or Implement Text?
-        // Let's implement basic circle for now to avoid complexity or use Text if imported
-        // Ideally floating texts are separate list in state.
+        // Skip text in batch graphics
       } else {
-        // Standard Dot
-        g.circle(0, 0, p.radius * (p.scale || 1)).fill({ color, alpha: alphaVal });
+        // Dot
+        g.circle(px, py, p.radius * (p.scale || 1)).fill({ color, alpha: alphaVal });
       }
-
-      // Position (Interpolated)
-      // Particles usually don't have prevPosition set reliably in factories unless we did it?
-      // Factory `createParticle` sets prev? Let's assume naive position for particles is fine for Juice
-      // Or use prev if available.
-      const prev = p.prevPosition || p.position; // Factories usually set this now?
-      const curr = p.position;
-      // If factory doesn't set prevPosition on spawn, interpolation might glitch on first frame (fly in from 0)
-      // But let's try strict interpolation.
-
-      // Safety: If particle is newly created, prev might be undefined.
-      const px = prev ? (prev.x + (curr.x - prev.x) * alpha) : curr.x;
-      const py = prev ? (prev.y + (curr.y - prev.y) * alpha) : curr.y;
-
-      g.x = px;
-      g.y = py;
     });
-
-    // Cleanup
-    for (const [id, g] of particleGraphicsRef.current) {
-      if (!activeIds.has(id)) {
-        container.removeChild(g);
-        g.destroy();
-        particleGraphicsRef.current.delete(id);
-      }
-    }
   };
 
   const setupInputs = (app: Application, stateRef: any, world: Container) => {

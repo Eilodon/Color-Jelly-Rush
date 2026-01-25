@@ -180,19 +180,50 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
       </div>
 
       {/* --- CENTER: WIN HOLD OVERLAY --- */}
-      {isWinHold && (
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 flex flex-col items-center animate-pulse">
-          <div className="text-yellow-400 font-display text-4xl drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]">
-            CHANNELING
-          </div>
-          <div className="w-64 h-3 bg-black/50 rounded mt-2 overflow-hidden border border-yellow-500/50">
-            <div
-              className="h-full bg-yellow-400 shadow-[0_0_10px_#fbbf24]"
-              style={{ width: `${Math.min(100, (winTimer / 1.5) * 100)}%` }}
+      {/* Top Center: Circular Match% Indicator (The "Omnitrix" Style) */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+        <div className="relative w-32 h-32">
+          {/* Background Ring */}
+          <div className="absolute inset-0 rounded-full border-4 border-gray-700 opacity-50"></div>
+
+          {/* Progress Ring (SVG) */}
+          <svg className="absolute inset-0 w-full h-full transform -rotate-90">
+            <circle
+              cx="64" cy="64" r="60"
+              stroke="currentColor"
+              strokeWidth="8"
+              fill="transparent"
+              className={matchPercent > 0.9 ? "text-red-500 animate-pulse" : "text-green-400"}
+              strokeDasharray={`${matchPercent * 377} 377`}
             />
+          </svg>
+
+          {/* Center Text */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-black text-white drop-shadow-md">
+              {Math.floor(matchPercent * 100)}%
+            </span>
+            <span className="text-xs text-gray-300 font-bold uppercase tracking-widest">
+              Match
+            </span>
+          </div>
+
+          {/* Notches for Rings */}
+          <div className="absolute inset-0 w-full h-full">
+            {/* 50% Notch (Ring 2 Entry) */}
+            <div className={`absolute top-0 left-1/2 w-1 h-3 bg-white transform -translate-x-1/2 rotate-[180deg] origin-bottom-center`} style={{ transform: 'rotate(180deg) translateY(60px)' }}></div>
+            {/* This CSS transform is tricky in inline, using generic styles */}
           </div>
         </div>
-      )}
+
+        {/* Ring Status Badge */}
+        <div className={`mt-2 px-4 py-1 rounded-full border-2 font-bold text-sm tracking-widest uppercase
+            ${currentRing === 3 ? "bg-red-900 border-red-500 text-red-100 animate-pulse" :
+            currentRing === 2 ? "bg-yellow-900 border-yellow-500 text-yellow-100" :
+              "bg-blue-900 border-blue-500 text-blue-100"}`}>
+          {currentRing === 3 ? "FINAL ZONE" : currentRing === 2 ? "THE GAUNTLET" : "SAFE ZONE"}
+        </div>
+      </div>
 
     </div>
   );

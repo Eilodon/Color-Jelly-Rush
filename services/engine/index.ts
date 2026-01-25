@@ -45,6 +45,7 @@ import { updateRingLogic } from '../cjr/ringSystem';
 import { updateWaveSpawner, resetWaveTimers } from '../cjr/waveSpawner';
 import { updateWinCondition } from '../cjr/winCondition';
 import { updateBossLogic, resetBossState } from '../cjr/bossCjr';
+import { updateDynamicBounty } from '../cjr/dynamicBounty';
 import { updateEmotion } from '../cjr/emotions';
 import { assignRandomPersonality } from '../cjr/botPersonalities';
 import { getTattooChoices } from '../cjr/tattoos';
@@ -116,6 +117,7 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   players.forEach(player => updateRingLogic(player, dt, state.levelConfig, state));
   state.bots.forEach(b => updateRingLogic(b, dt, state.levelConfig, state));
   updateBossLogic(state, dt);
+  updateDynamicBounty(state, dt);
   updateWinCondition(state, dt, state.levelConfig);
 
   players.forEach(player => updateEmotion(player, dt));
@@ -410,6 +412,14 @@ const updateParticles = (state: GameState, dt: number) => {
         p.life = 0;
       }
     }
+    // Sync prevPosition for interpolation
+    if (p.prevPosition) {
+      p.prevPosition.x = p.position.x;
+      p.prevPosition.y = p.position.y;
+    } else {
+      p.prevPosition = { x: p.position.x, y: p.position.y };
+    }
+
     p.position.x += p.velocity.x * dt;
     p.position.y += p.velocity.y * dt;
     if (p.life <= 0) {

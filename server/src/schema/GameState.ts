@@ -32,6 +32,8 @@ export class StatusEffects extends Schema {
   // CJR Specific
   @type('float32') commitShield: number = 0;
   @type('float32') pityBoost: number = 0;
+  @type('float32') pulseTimer: number = 0;
+  @type('float32') kingForm: number = 0;
 }
 
 // ============================================

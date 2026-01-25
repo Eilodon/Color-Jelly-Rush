@@ -250,7 +250,23 @@ export class GameRoom extends Room<GameRoomState> {
       serverPlayer.pigment.b = player.pigment.b;
       serverPlayer.targetPigment.r = player.targetPigment.r;
       serverPlayer.targetPigment.g = player.targetPigment.g;
+      serverPlayer.targetPigment.g = player.targetPigment.g;
       serverPlayer.targetPigment.b = player.targetPigment.b;
+
+      // Sync specific CJR status effects
+      serverPlayer.statusEffects.commitShield = player.statusEffects.commitShield || 0;
+      serverPlayer.statusEffects.pityBoost = player.statusEffects.pityBoost || 0;
+      serverPlayer.statusEffects.pulseTimer = player.statusEffects.pulseTimer || 0;
+      serverPlayer.statusEffects.kingForm = player.statusEffects.kingForm || 0;
+      serverPlayer.statusEffects.shielded = player.statusEffects.shielded;
+      serverPlayer.statusEffects.speedBoost = player.statusEffects.speedBoost;
+      serverPlayer.statusEffects.speedBoost = player.statusEffects.speedBoost;
+      // Schema StatusEffects has: speedBoost, shielded, burning... invulnerable, damageBoost, defenseBoost.
+
+      // And we added commitShield, pityBoost, pulseTimer.
+      // kingForm is NOT in schema StatusEffects? I should check GameState.ts again.
+      // If it's not, I need to add it or map it.
+      // For now, let's sync what we added.
     });
 
     this.simState.bots.forEach((bot) => {
@@ -270,7 +286,11 @@ export class GameRoom extends Room<GameRoomState> {
       serverBot.radius = bot.radius;
       serverBot.currentHealth = bot.currentHealth;
       serverBot.score = bot.score;
+
       serverBot.isDead = bot.isDead;
+
+      // Sync Bot Status too if needed (e.g. boss shield)
+      serverBot.statusEffects.shielded = bot.statusEffects.shielded;
     });
 
     this.simState.food.forEach((food) => {

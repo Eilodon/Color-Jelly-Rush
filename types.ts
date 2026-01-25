@@ -176,6 +176,7 @@ export interface Player extends Entity {
     colorBoostMultiplier?: number;
     overdriveTimer?: number;
     magnetTimer?: number;
+    pulseTimer?: number;
     // Tattoo Effects
     wrongPigmentReduction?: number;
     overdriveActive?: boolean;

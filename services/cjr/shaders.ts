@@ -24,8 +24,8 @@ export const JELLY_VERTEX = `
     vUvs = aUvs;
     vec2 pos = aVertexPosition;
     
-    // 1. Organic Pulse (Heartbeat) based on Energy
-    float heartbeat = sin(uTime * (3.0 + uEnergy * 5.0)) * (0.02 + uEnergy * 0.05);
+    // 1. Organic Pulse (Heartbeat) based on Energy & Pulse Phase
+    float heartbeat = sin(uTime * (3.0 + uEnergy * 5.0) + uPulsePhase) * (0.02 + uEnergy * 0.05 + step(0.1, uPulsePhase) * 0.1);
     pos *= (1.0 + heartbeat);
 
     // 2. Velocity Squish (Directional would be better, but axial is cheap)
@@ -67,6 +67,7 @@ export const JELLY_FRAGMENT = `
   uniform float uAlpha;
   uniform float uTime;
   uniform float uEnergy;      // Match% (0..1)
+  uniform float uPulsePhase;  // New: Syncs with Win Condition Heartbeat
   uniform int uPatternMode;   // 0=Liquid, 1=Magma, 2=Electric
 
   // --- PRIMITIVES ---
@@ -138,6 +139,11 @@ export const JELLY_FRAGMENT = `
     // 6. ENERGY BLOOM (Match %)
     // If energy > 50%, inner glow increases
     float glow = uEnergy * smoothstep(0.0, 0.8, 1.0 - d); 
+    
+    // Pulse Flash
+    float pulseFlash = smoothstep(0.8, 1.0, sin(uPulsePhase)) * uEnergy;
+    glow += pulseFlash;
+    
     lightColor += baseColor * glow * 1.5;
 
     // 7. PATTERNS
