@@ -32,6 +32,7 @@ const spawnCandyVein = (state: GameState) => {
     const vein: Food = {
         id: `vein_${Date.now()}`,
         position: { x: Math.cos(angle) * r, y: Math.sin(angle) * r },
+        prevPosition: { x: Math.cos(angle) * r, y: Math.sin(angle) * r },
         velocity: { x: 0, y: 0 },
         radius: 30, // Big
         color: '#fbbf24',

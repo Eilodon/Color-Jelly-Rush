@@ -40,6 +40,7 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
   return {
     id: Math.random().toString(36).substr(2, 9),
     position,
+    prevPosition: { ...position },
     velocity: { x: 0, y: 0 },
     radius: PLAYER_START_RADIUS,
     color: `rgb(${pigment.r * 255},${pigment.g * 255},${pigment.b * 255})`,
@@ -187,9 +188,11 @@ export const createBotCreeps = (count: number): Bot[] => {
 
 export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => {
   const pigment = randomPigment();
+  const spawnPos = pos || randomPosInRing(1);
   return {
     id: Math.random().toString(),
-    position: pos || randomPosInRing(1),
+    position: spawnPos,
+    prevPosition: { ...spawnPos }, // Fix: Use same pos for prev to prevent lerp jump
     velocity: { x: 0, y: 0 },
     radius: FOOD_RADIUS,
     color: pigmentToHex(pigment),
@@ -226,6 +229,7 @@ export const createProjectile = (
   return {
     id: Math.random().toString(),
     position: { ...position },
+    prevPosition: { ...position },
     velocity: dist > 0 ? { x: (dx / dist) * speed, y: (dy / dist) * speed } : { x: 0, y: 0 },
     radius: 8,
     color: type === 'ice' ? '#88ccff' : type === 'web' ? '#888888' : '#ff4444',

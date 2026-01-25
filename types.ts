@@ -38,12 +38,21 @@ export interface Vector2 {
 export interface Entity {
   id: string;
   position: Vector2;
+  prevPosition: Vector2; // For Fixed Timestep Interpolation
   velocity: Vector2;
   radius: number; // Represents Mass/Size
   color: string;  // CSS string for rendering (derived from pigment)
   isDead: boolean;
   trail: Vector2[];
 }
+
+export const isPlayerOrBot = (e: Entity): e is Player | Bot => {
+  return 'score' in e && 'currentHealth' in e;
+};
+
+export const isFood = (e: Entity): e is Food => {
+  return 'value' in e && 'kind' in e;
+};
 
 export interface Projectile extends Entity {
   ownerId: string;
@@ -103,6 +112,7 @@ export interface Player extends Entity {
     w: boolean;
   };
   inputSeq?: number;
+  inputEvents?: Array<{ type: 'skill' | 'eject'; id: string }>;
 
   // RPG Stats (Simplified)
   defense: number;

@@ -95,7 +95,7 @@ export class VFXIntegrationManager {
     if (this.qualityLevel === 'ultra') {
       // Create light rays
       this.createLightRays(player.position, ringId, state);
-      
+
       // Create environmental effects
       this.createEnvironmentalEffects(player.position, ringId, state);
     }
@@ -107,15 +107,16 @@ export class VFXIntegrationManager {
   private createLightRays(position: any, ringId: RingId, state: GameState): void {
     const rayCount = 8;
     const colors = ['#FFD700', '#FFA500', '#FF6347', '#FF4500'];
-    
+
     for (let i = 0; i < rayCount; i++) {
       const angle = (i / rayCount) * Math.PI * 2;
       const color = colors[i % colors.length];
-      
+
       // Create ray particles
       const ray = {
         id: `ray_${i}_${Date.now()}`,
         position: { ...position },
+        prevPosition: { ...position },
         velocity: {
           x: Math.cos(angle) * 200,
           y: Math.sin(angle) * 200
@@ -130,7 +131,7 @@ export class VFXIntegrationManager {
         rayLength: 100,
         rayWidth: 3
       };
-      
+
       state.particles.push(ray);
     }
   }
@@ -141,17 +142,18 @@ export class VFXIntegrationManager {
   private createEnvironmentalEffects(position: any, ringId: RingId, state: GameState): void {
     // Create ground impact effects
     const impactCount = 12;
-    
+
     for (let i = 0; i < impactCount; i++) {
       const angle = (i / impactCount) * Math.PI * 2;
       const distance = 50 + Math.random() * 30;
-      
+
       const x = position.x + Math.cos(angle) * distance;
       const y = position.y + Math.sin(angle) * distance;
-      
+
       const impact = {
         id: `impact_${i}_${Date.now()}`,
         position: { x, y },
+        prevPosition: { x, y },
         velocity: { x: 0, y: 0 },
         radius: 5,
         color: '#FFFFFF',
@@ -162,7 +164,7 @@ export class VFXIntegrationManager {
         isGroundImpact: true,
         impactSize: 10
       };
-      
+
       state.particles.push(impact);
     }
   }
@@ -189,9 +191,9 @@ export class VFXIntegrationManager {
 
     // Check if player has synergy tattoos
     for (const synergy of synergies) {
-      if (player.tattoos.includes(synergy.tattoos[0]) && 
-          player.tattoos.includes(synergy.tattoos[1])) {
-        
+      if (player.tattoos.includes(synergy.tattoos[0]) &&
+        player.tattoos.includes(synergy.tattoos[1])) {
+
         // Check if the activated tattoo is part of this synergy
         if (synergy.tattoos.includes(activatedTattoo)) {
           this.createSynergyEffect(player, synergy.effect, state);
@@ -224,6 +226,7 @@ export class VFXIntegrationManager {
       const particle = {
         id: `purify_${i}_${Date.now()}`,
         position: { ...player.position },
+        prevPosition: { ...player.position },
         velocity: {
           x: Math.cos(angle) * 100,
           y: Math.sin(angle) * 100
@@ -237,7 +240,7 @@ export class VFXIntegrationManager {
         isPurification: true,
         glowIntensity: 0.8
       };
-      
+
       state.particles.push(particle);
     }
   }
@@ -248,6 +251,7 @@ export class VFXIntegrationManager {
       const particle = {
         id: `speed_${i}_${Date.now()}`,
         position: { ...player.position },
+        prevPosition: { ...player.position },
         velocity: {
           x: player.velocity.x * 0.5 + (Math.random() - 0.5) * 50,
           y: player.velocity.y * 0.5 + (Math.random() - 0.5) * 50
@@ -261,7 +265,7 @@ export class VFXIntegrationManager {
         isSpeedTrail: true,
         trailIntensity: 1.2
       };
-      
+
       state.particles.push(particle);
     }
   }
@@ -271,13 +275,14 @@ export class VFXIntegrationManager {
     for (let i = 0; i < 25; i++) {
       const angle = (i / 25) * Math.PI * 2;
       const radius = 30 + Math.random() * 20;
-      
+
       const x = player.position.x + Math.cos(angle) * radius;
       const y = player.position.y + Math.sin(angle) * radius;
-      
+
       const particle = {
         id: `golden_${i}_${Date.now()}`,
         position: { x, y },
+        prevPosition: { x, y },
         velocity: {
           x: -Math.cos(angle) * 80,
           y: -Math.sin(angle) * 80
@@ -291,7 +296,7 @@ export class VFXIntegrationManager {
         isGoldenAttraction: true,
         attractionForce: 1.5
       };
-      
+
       state.particles.push(particle);
     }
   }
@@ -333,7 +338,7 @@ export class VFXIntegrationManager {
           tattoos.delete(tattooId);
         }
       }
-      
+
       if (tattoos.size === 0) {
         this.lastTattooActivation.delete(playerId);
       }
@@ -383,7 +388,7 @@ declare module '../../types' {
     rayWidth?: number;
     isGroundImpact?: boolean;
     impactSize?: number;
-    
+
     // Synergy effects
     isPurification?: boolean;
     isSpeedTrail?: boolean;

@@ -12,16 +12,23 @@ import { Entity, Player, Bot, SizeTier } from '../../../types';
  */
 
 export const integrateEntity = (e: Player | Bot, dt: number) => {
-  // 1. Friction / Drag
-  // Use fixed time step assumption for determinism if possible, but here we use dt
-  const friction = Math.pow(FRICTION_BASE, dt * 60);
+  // Record previous position for interpolation
+  e.prevPosition.x = e.position.x;
+  e.prevPosition.y = e.position.y;
 
+  // 1. Friction / Drag
+  // Fixed Timestep guarantees dt is constant (e.g. 1/60), so we can use a constant friction factor.
+  // Using 0.92 per frame as a base 'feel'.
+  const friction = 0.92;
   e.velocity.x *= friction;
   e.velocity.y *= friction;
 
   // 2. Integration
-  e.position.x += e.velocity.x * dt * 10; // Scaling factor preserved from legacy
-  e.position.y += e.velocity.y * dt * 10;
+  // Removed arbitrary '* 10' scaling. If we need speed, we should adjust velocity or MAX_SPEED constant.
+  // But for compatibility with existing values, we keep the scale for now, just strictly controlled.
+  const INTEGRATION_SCALE = 10;
+  e.position.x += e.velocity.x * dt * INTEGRATION_SCALE;
+  e.position.y += e.velocity.y * dt * INTEGRATION_SCALE;
 
   // 3. Max Speed Clamp (Soft Cap)
   const speedSq = e.velocity.x * e.velocity.x + e.velocity.y * e.velocity.y;

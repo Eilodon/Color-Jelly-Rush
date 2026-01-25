@@ -2,6 +2,7 @@
 import * as Colyseus from 'colyseus.js';
 import type { Room } from 'colyseus.js';
 import type { GameState, Player, Bot, Food, Projectile, Vector2 } from '../../types';
+import { SizeTier } from '../../types';
 import type { PigmentVec3, ShapeId, Emotion, PickupKind, TattooId } from '../cjr/cjrTypes';
 import { integrateEntity } from '../engine/systems/physics';
 
@@ -69,6 +70,15 @@ export class NetworkClient {
 
   setLocalState(state: GameState) {
     this.localState = state;
+  }
+
+  reset() {
+    this.localState = null;
+    this.snapshots = [];
+    this.pendingInputs = [];
+    this.inputSeq = 0;
+    this.isConnecting = false;
+    // Don't nuke callbacks, just state
   }
 
   setStatusListener(listener?: (status: NetworkStatus) => void) {
@@ -178,12 +188,13 @@ export class NetworkClient {
       let localPlayer = this.localState!.players.find(p => p.id === sessionId);
 
       if (!localPlayer) {
-        // ... (Creation Logic omitted for brevity, assumed stable)
-        // Re-using simplified creation from previous version or rely on factory?
-        // Let's implement minimal creation here to be safe
+        // SAFE CREATION: Use factory base + override props
+        // We construct a valid Player object first, then overwrite with server data 
+        // to ensure no fields are missing.
         localPlayer = {
           id: sessionId,
           position: { x: sPlayer.position.x, y: sPlayer.position.y },
+          prevPosition: { x: sPlayer.position.x, y: sPlayer.position.y },
           velocity: { x: sPlayer.velocity.x, y: sPlayer.velocity.y },
           radius: sPlayer.radius,
           color: '#ffffff',
@@ -194,7 +205,7 @@ export class NetworkClient {
           kills: sPlayer.kills,
           maxHealth: sPlayer.maxHealth,
           currentHealth: sPlayer.currentHealth,
-          tier: 0 as any,
+          tier: SizeTier.Larva,
           targetPosition: { x: sPlayer.position.x, y: sPlayer.position.y },
           spawnTime: 0,
           pigment: { r: sPlayer.pigment.r, g: sPlayer.pigment.g, b: sPlayer.pigment.b },
@@ -242,8 +253,11 @@ export class NetworkClient {
           },
           rewindHistory: [],
           stationaryTime: 0,
-          statusEffects: { ...sPlayer.statusEffects }
-        } as unknown as Player;
+          statusEffects: { ...sPlayer.statusEffects },
+          killStreak: 0,
+          streakTimer: 0,
+          inputEvents: []
+        };
         this.localState!.players.push(localPlayer);
       }
 
@@ -350,15 +364,17 @@ export class NetworkClient {
       let localBot = this.localState!.bots.find(b => b.id === id);
 
       if (!localBot) {
-        // Create new (Simplified)
+        // Create new (Typed)
         localBot = {
           id: sBot.id,
           position: { x: sBot.position.x, y: sBot.position.y },
+          prevPosition: { x: sBot.position.x, y: sBot.position.y },
           velocity: { x: sBot.velocity.x, y: sBot.velocity.y },
           radius: sBot.radius,
           color: '#fff',
           isDead: sBot.isDead,
           trail: [],
+          targetPosition: { x: sBot.position.x, y: sBot.position.y }, // Added missing prop
           name: sBot.name,
           score: sBot.score,
           kills: sBot.kills,
@@ -376,9 +392,44 @@ export class NetworkClient {
           targetEntityId: null,
           aiReactionTimer: 0,
           tattoos: [],
-          tier: 0 as any,
-          isInvulnerable: false
-        } as unknown as Bot;
+          tier: SizeTier.Larva,
+          isInvulnerable: false,
+          // Bot specific missing props defaults
+          spawnTime: 0,
+          acceleration: 1,
+          maxSpeed: 1,
+          friction: 1,
+          skillCooldown: 0,
+          maxSkillCooldown: 5,
+          defense: 1,
+          damageMultiplier: 1,
+          critChance: 0,
+          critMultiplier: 1,
+          lifesteal: 0,
+          armorPen: 0,
+          reflectDamage: 0,
+          visionMultiplier: 1,
+          sizePenaltyMultiplier: 1,
+          skillCooldownMultiplier: 1,
+          skillPowerMultiplier: 1,
+          skillDashMultiplier: 1,
+          killGrowthMultiplier: 1,
+          poisonOnHit: false,
+          doubleCast: false,
+          reviveAvailable: false,
+          magneticFieldRadius: 0,
+          mutationCooldowns: { speedSurge: 0, invulnerable: 0, rewind: 0, lightning: 0, chaos: 0, kingForm: 0 },
+          rewindHistory: [],
+          stationaryTime: 0,
+          killStreak: 0,
+          streakTimer: 0,
+          lastHitTime: 0,
+          lastEatTime: 0,
+          matchStuckTime: 0,
+          ring3LowMatchTime: 0,
+          emotionTimer: 0,
+          inputEvents: []
+        };
         this.localState!.bots.push(localBot);
       }
 
@@ -404,6 +455,7 @@ export class NetworkClient {
         localFood = {
           id: sFood.id,
           position: { x: sFood.x, y: sFood.y },
+          prevPosition: { x: sFood.x, y: sFood.y },
           velocity: { x: 0, y: 0 },
           radius: sFood.radius,
           color: '#fff',

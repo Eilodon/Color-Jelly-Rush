@@ -24,10 +24,11 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
       kills: serverPlayer.kills || 0,
       maxHealth: serverPlayer.maxHealth || 100,
       currentHealth: serverPlayer.currentHealth || 100,
-      tier: 'Larva' as any, // Default tier
+      tier: 'Larva' as any, // TODO: Use SizeTier.Larva
       targetPosition: { x: serverPlayer.position.x, y: serverPlayer.position.y },
       spawnTime: Date.now(),
       position: { x: serverPlayer.position.x, y: serverPlayer.position.y },
+      prevPosition: { x: serverPlayer.position.x, y: serverPlayer.position.y }, // Added prevPosition
       velocity: { x: serverPlayer.velocity.x || 0, y: serverPlayer.velocity.y || 0 },
       radius: serverPlayer.radius || 15,
       color: '#ffffff', // Default color
@@ -134,7 +135,8 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
         grimHarvestDropCount: 0
       },
       killStreak: 0,
-      streakTimer: 0
+      streakTimer: 0,
+      inputEvents: [] // Added inputEvents
     };
     players.push(player);
   });
@@ -145,6 +147,7 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
     const foodItem: Food = {
       id: foodId,
       position: { x: serverFood.x, y: serverFood.y },
+      prevPosition: { x: serverFood.x, y: serverFood.y }, // Added prevPosition
       velocity: { x: 0, y: 0 },
       radius: FOOD_RADIUS || 5,
       kind: serverFood.kind as any, // Cast to PickupKind
@@ -186,7 +189,8 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
     isPaused: false,
     result: null,
     vfxEvents: [],
-    inputs: { space: false, w: false }
+    inputs: { space: false, w: false },
+    inputEvents: [] // Added inputEvents
   };
 
   return gameState;

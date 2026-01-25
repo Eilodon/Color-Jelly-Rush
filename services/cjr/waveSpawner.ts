@@ -75,6 +75,7 @@ const spawnFood = (state: GameState, x: number, y: number, kind: PickupKind, pig
     const food: Food = {
         id: `food_${Date.now()}_${Math.random()}`,
         position: { x, y },
+        prevPosition: { x, y },
         velocity: { x: 0, y: 0 },
         radius: kind === 'pigment' ? 12 : (kind === 'neutral' ? 8 : 10),
         color: '#fff',

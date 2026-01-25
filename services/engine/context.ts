@@ -145,6 +145,7 @@ class ParticlePool {
     return {
       id: Math.random().toString(),
       position: { x: 0, y: 0 },
+      prevPosition: { x: 0, y: 0 },
       velocity: { x: 0, y: 0 },
       radius: 0,
       color: '',

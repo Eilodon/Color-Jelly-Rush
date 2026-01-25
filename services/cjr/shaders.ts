@@ -66,87 +66,91 @@ export const JELLY_FRAGMENT = `
   uniform vec3 uColor; 
   uniform float uAlpha;
   uniform float uTime;
-  uniform float uEnergy;      // Match% (0..1) determines glow intensity
+  uniform float uEnergy;      // Match% (0..1)
   uniform int uPatternMode;   // 0=Liquid, 1=Magma, 2=Electric
 
-  // --- Fast Pseudo-Noise (Simplex-like) ---
-  vec2 hash(vec2 p) {
-    p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
-    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
-  }
-  
-  float noise(in vec2 p) {
-    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
-    const float K2 = 0.211324865; // (3-sqrt(3))/6;
-    vec2 i = floor(p + (p.x+p.y)*K1);
-    vec2 a = p - i + (i.x+i.y)*K2;
-    float m = step(a.y,a.x); 
-    vec2 o = vec2(m,1.0-m);
-    vec2 b = a - o + K2;
-    vec2 c = a - 1.0 + 2.0*K2;
-    vec3 h = max(0.5-vec3(dot(a,a), dot(b,b), dot(c,c)), 0.0);
-    vec3 n = h*h*h*h*vec3( dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1.0)));
-    return dot(n, vec3(70.0));
+  // --- PRIMITIVES ---
+  vec2 rotate(vec2 v, float a) {
+      float s = sin(a);
+      float c = cos(a);
+      return mat2(c, -s, s, c) * v;
   }
 
-  // --- Domain Warping (Liquid Flow) ---
+  // --- NOISE ---
+  vec3 hash3(vec2 p) {
+      vec3 q = vec3(dot(p,vec2(127.1,311.7)), 
+                    dot(p,vec2(269.5,183.3)), 
+                    dot(p,vec2(419.2,371.9)));
+      return fract(sin(q)*43758.5453);
+  }
+
+  float noise(vec2 x) {
+      vec2 p = floor(x);
+      vec2 f = fract(x);
+      f = f*f*(3.0-2.0*f);
+      float n = p.x + p.y*57.0;
+      // Simple value noise
+      return mix(mix( dot(hash3(p+vec2(0,0)).xy, f-vec2(0,0)), 
+                      dot(hash3(p+vec2(1,0)).xy, f-vec2(1,0)), f.x),
+                 mix( dot(hash3(p+vec2(0,1)).xy, f-vec2(0,1)), 
+                      dot(hash3(p+vec2(1,1)).xy, f-vec2(1,1)), f.x), f.y) + 0.5;
+  }
+
   float fbm(vec2 p) {
-    float f = 0.0;
-    float w = 0.5;
-    for (int i = 0; i < 3; i++) { // 3 Octaves
-        f += w * noise(p);
-        p *= 2.0;
-        w *= 0.5;
-    }
-    return f;
+      float f = 0.0;
+      float w = 0.5;
+      float t = uTime * 0.1;
+      for (int i=0; i<3; i++) {
+          f += w * noise(p + t);
+          p *= 2.0; 
+          w *= 0.5;
+          p = rotate(p, 0.5);
+      }
+      return f;
   }
 
   void main() {
-    // 1. Shape Masking (Soft Circle)
+    // 1. CIRCLE MASK & SOFT EDGE
     vec2 center = vec2(0.5);
-    float dist = distance(vUvs, center) * 2.0; // 0 at center, 1 at edge
-    float alpha = 1.0 - smoothstep(0.85, 1.0, dist); // Soft edge
+    float d = length(vUvs - center) * 2.0; // 0..1
+    float alpha = 1.0 - smoothstep(0.85, 1.0, d);
     
-    if (alpha <= 0.01) discard; // Optimization
+    if (alpha < 0.01) discard;
 
-    // 2. Coordinate Flow
-    vec2 flowUV = vUvs * 2.5 + vec2(uTime * 0.2, uTime * 0.1);
-    
-    // 3. Internal Texture Generation
-    float fluid = fbm(flowUV + fbm(flowUV + uTime * 0.3)); // Double Domain Warp
-    
-    // 4. Lighting Model (Fake SSS)
-    // Core is darker/saturated, Rim is bright
-    float fresnel = smoothstep(0.4, 0.9, dist);
-    
-    // Base Color Mixing
-    vec3 coreColor = uColor * 0.7; // Darker core
-    vec3 rimColor = uColor + 0.3;  // Whiter rim
-    
-    vec3 finalColor = mix(coreColor, rimColor, fresnel);
-    
-    // 5. Add Fluid Detail
-    // Fluid veins appear brighter
-    finalColor += uColor * fluid * (0.3 + uEnergy * 0.5); 
+    // 2. INTERNAL COORDINATES (WARPED)
+    vec2 uv = vUvs * 2.5; 
+    float warp = fbm(uv + vec2(uTime * 0.2));
+    float fluid = fbm(uv + warp + uTime * 0.1);
 
-    // 6. Pattern Overlays (Tattoos)
+    // 3. COLOR PALETTE
+    // Core is saturated, Rim is white-hot
+    vec3 baseColor = uColor;
+    
+    // 4. LIGHTING
+    // Rim Light (Fresnel)
+    float rim = smoothstep(0.5, 0.95, d);
+    vec3 lightColor = mix(baseColor * 0.7, vec3(1.0), rim * 0.5);
+
+    // 5. FLUID VEINS
+    // Veins are brighter
+    lightColor += baseColor * fluid * 0.5;
+
+    // 6. ENERGY BLOOM (Match %)
+    // If energy > 50%, inner glow increases
+    float glow = uEnergy * smoothstep(0.0, 0.8, 1.0 - d); 
+    lightColor += baseColor * glow * 1.5;
+
+    // 7. PATTERNS
     if (uPatternMode == 1) { 
-        // MAGMA (Overdrive)
-        float fire = smoothstep(0.4, 0.8, noise(vUvs * 8.0 - uTime * 2.0));
-        finalColor = mix(finalColor, vec3(1.0, 0.9, 0.2), fire * 0.8);
-    } else if (uPatternMode == 2) { 
-        // ELECTRIC (Speed/Lightning)
-        float bolt = abs(1.0 / (sin(vUvs.y * 20.0 + uTime * 10.0 + noise(vUvs*5.0)*5.0) * 20.0));
-        finalColor += vec3(0.6, 0.8, 1.0) * bolt * 2.0;
+        // MAGMA: Pulsing Heat
+        float fire = smoothstep(0.4, 0.9, noise(uv * 4.0 - uTime * 2.0));
+        lightColor = mix(lightColor, vec3(1.5, 0.5, 0.1), fire * uEnergy);
+    } else if (uPatternMode == 2) {
+        // ELECTRIC: Arcs
+        float bolt = smoothstep(0.8, 0.9, noise(uv * 10.0 + uTime * 8.0));
+        lightColor += vec3(0.6, 0.8, 1.0) * bolt * 2.0;
     }
 
-    // 7. Energy Glow (Match%)
-    // If energy is high, the whole jelly blooms
-    if (uEnergy > 0.8) {
-        float glow = smoothstep(0.8, 1.0, uEnergy) * sin(uTime * 10.0) * 0.5 + 0.5;
-        finalColor += vec3(1.0, 1.0, 0.8) * glow * 0.3;
-    }
-
-    gl_FragColor = vec4(finalColor, alpha * uAlpha);
+    gl_FragColor = vec4(lightColor, alpha * uAlpha);
   }
 `;
