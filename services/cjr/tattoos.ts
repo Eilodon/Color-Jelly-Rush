@@ -5,6 +5,7 @@ import { COLOR_BALANCE } from './balance';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { mixPigment, calcMatchPercent, pigmentToHex } from './colorMath';
 import { createFloatingText } from '../engine/effects';
+import { createParticle, createFood } from '../engine/factories';
 
 export interface TattooDefinition {
     id: TattooId;
@@ -32,8 +33,7 @@ const TATTOOS: TattooDefinition[] = [
             if (food.kind === 'pigment' && food.pigment) {
                 const pigmentMatch = calcMatchPercent(food.pigment, entity.targetPigment);
                 if (pigmentMatch < 0.6) {
-                    // Apply reduction effect here instead of in combat.ts
-                    // This will be handled by the consumePickup function
+                    // Handled in combat.ts logic via statusEffects.wrongPigmentReduction
                 }
             }
         }
@@ -45,6 +45,10 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Skill triggers 3s fast-eat mode.',
         apply: (player: Player) => {
             player.statusEffects.overdriveActive = true;
+        },
+        onSkill: (player: Player, state: GameState) => {
+            player.statusEffects.overdriveTimer = 3.0; // 3s boost to growth
+            createFloatingText(player.position, 'Overdrive!', '#FF5722', 20, state);
         }
     },
     {
@@ -54,6 +58,13 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Gain shield while holding core (Ring 3).',
         apply: (player: Player) => {
             player.statusEffects.coreShieldBonus = true;
+        },
+        onUpdate: (player: Player, dt: number, state: GameState) => {
+            // If in Ring 3 and high match (holding), grant shield
+            if (player.ring === 3 && player.matchPercent > 0.8) {
+                player.statusEffects.shielded = true;
+                player.statusEffects.commitShield = 0.1; // Refreshing shield
+            }
         }
     },
     {
@@ -86,6 +97,11 @@ const TATTOOS: TattooDefinition[] = [
         apply: (player: Player) => {
             player.statusEffects.perfectMatchThreshold = 0.85;
             player.statusEffects.perfectMatchBonus = 1.5;
+        },
+        onUpdate: (player: Player, dt: number, state: GameState) => {
+            if (player.matchPercent >= 0.85) {
+                player.statusEffects.speedBoost = Math.max(player.statusEffects.speedBoost, 1.2);
+            }
         }
     },
     {
@@ -153,6 +169,62 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Killing enemies spawns neutral mass.',
         apply: (player: Player) => {
             player.statusEffects.grimHarvestDropCount = 2;
+        }
+    },
+
+    // --- NEW TATTOOS ---
+    {
+        id: TattooId.SpeedSurge,
+        name: 'Speed Surge',
+        tier: MutationTier.Common,
+        description: 'Passive 15% speed boost. Dash is cheaper.',
+        apply: (player: Player) => {
+            player.statusEffects.speedSurge = 1;
+            player.statusEffects.speedBoost = Math.max(player.statusEffects.speedBoost, 1.15);
+            player.skillCooldownMultiplier = 1.5; // Faster recharge
+        }
+    },
+    {
+        id: TattooId.Invulnerable,
+        name: 'Titan Skin',
+        tier: MutationTier.Epic,
+        description: 'Start with 3s invulnerability. Gain 50% defense.',
+        apply: (player: Player) => {
+            player.statusEffects.invulnerable = 3.0; // Start invuln
+            player.defense *= 1.5;
+        }
+    },
+    {
+        id: TattooId.Rewind,
+        name: 'Time Anchor',
+        tier: MutationTier.Legendary,
+        description: 'Fatal damage restores 50% HP and rewinds position (once/run).',
+        apply: (player: Player) => {
+            player.reviveAvailable = true;
+        },
+        onUpdate: (player: Player, dt: number, state: GameState) => {
+            // Record history for rewind? (Heavy, maybe simplify to just revive)
+        }
+    },
+    {
+        id: TattooId.Magnet,
+        name: 'Void Magnet',
+        tier: MutationTier.Rare,
+        description: 'Significantly increased pickup radius.',
+        apply: (player: Player) => {
+            player.magneticFieldRadius = 150;
+            player.statusEffects.magnetTimer = 9999;
+        }
+    },
+    {
+        id: TattooId.KingForm,
+        name: 'Crown of Light',
+        tier: MutationTier.Legendary,
+        description: 'Win requirement reduced to 85%. You glow with authority.',
+        apply: (player: Player) => {
+            // Logic handled in winCondition.ts to check this ID? 
+            // Or just reduce threshold directly if possible, but threshold is constant.
+            // We can check tattoos in winCondition logic.
         }
     }
 ];

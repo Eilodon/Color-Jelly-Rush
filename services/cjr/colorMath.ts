@@ -1,60 +1,53 @@
+import { PigmentVec3 } from "./cjrTypes";
 
-import { PigmentVec3 } from './cjrTypes';
+export const getColorHint = (current: PigmentVec3, target: PigmentVec3): string => {
+    // Simple heuristic for now
+    // Diff
+    const rDiff = target.r - current.r;
+    const gDiff = target.g - current.g;
+    const bDiff = target.b - current.b;
 
-// Linear interpolation between two colors
-export const lerpPigment = (current: PigmentVec3, target: PigmentVec3, alpha: number): PigmentVec3 => {
-    return {
-        r: current.r + (target.r - current.r) * alpha,
-        g: current.g + (target.g - current.g) * alpha,
-        b: current.b + (target.b - current.b) * alpha,
-    };
+    // Find max need
+    if (Math.abs(rDiff) > 0.2 || Math.abs(gDiff) > 0.2 || Math.abs(bDiff) > 0.2) {
+        if (rDiff > 0.2) return "Need RED";
+        if (gDiff > 0.2) return "Need GREEN";
+        if (bDiff > 0.2) return "Need BLUE";
+        if (rDiff < -0.2) return "Less RED";
+        if (gDiff < -0.2) return "Less GREEN";
+        if (bDiff < -0.2) return "Less BLUE";
+    }
+
+    return "Perfect!";
 };
 
-// Calculate match percentage (0..1)
-// Using 1 - Euclidean distance normalized
-export const calculateMatchPercent = (current: PigmentVec3, target: PigmentVec3): number => {
-    const dr = current.r - target.r;
-    const dg = current.g - target.g;
-    const db = current.b - target.b;
-
-    // Max possible distance is sqrt(1^2 + 1^2 + 1^2) = sqrt(3) ~ 1.732
+export const calcMatchPercent = (p1: PigmentVec3, p2: PigmentVec3): number => {
+    // 1.0 - (Euclidean Distance / Max Distance)
+    // Max dist in 3D unit cube is sqrt(3) ~ 1.732
+    const dr = p1.r - p2.r;
+    const dg = p1.g - p2.g;
+    const db = p1.b - p2.b;
     const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-    const maxDist = 1.732;
-
-    return Math.max(0, 1 - (dist / maxDist));
+    return Math.max(0, 1 - (dist / 1.732));
 };
 
-// Helper to convert PigmentVec3 to Hex String for PIXI
-export const pigmentToHex = (p: PigmentVec3): string => {
-    const r = Math.round(Math.max(0, Math.min(1, p.r)) * 255);
-    const g = Math.round(Math.max(0, Math.min(1, p.g)) * 255);
-    const b = Math.round(Math.max(0, Math.min(1, p.b)) * 255);
-    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-};
-
-// Mix logic: Small jelly eating big pigment changes fast? 
-// No, conservation of mass logic usually suggests:
-// newColor = (m1*c1 + m2*c2) / (m1+m2)
-export const mixPigmentWithMass = (
-    c1: PigmentVec3, m1: number,
-    c2: PigmentVec3, m2: number
-): PigmentVec3 => {
-    const total = m1 + m2;
-    if (total <= 0) return c1;
-
+export const mixPigment = (current: PigmentVec3, added: PigmentVec3, ratio: number): PigmentVec3 => {
     return {
-        r: (c1.r * m1 + c2.r * m2) / total,
-        g: (c1.g * m1 + c2.g * m2) / total,
-        b: (c1.b * m1 + c2.b * m2) / total,
+        r: current.r + (added.r - current.r) * ratio,
+        g: current.g + (added.g - current.g) * ratio,
+        b: current.b + (added.b - current.b) * ratio
     };
 };
 
-export const getSnapAlpha = (currentMatch: number, baseRatio: number): number => {
-    // Boost mixing speed if player is already close to target (Snap effect)
-    if (currentMatch > 0.9) return baseRatio * 2.0;
-    if (currentMatch > 0.8) return baseRatio * 1.5;
-    return baseRatio;
+export const pigmentToHex = (p: PigmentVec3): string => {
+    const toHex = (c: number) => {
+        const hex = Math.floor(c * 255).toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+    };
+    return "#" + toHex(p.r) + toHex(p.g) + toHex(p.b);
 };
 
-export const calcMatchPercent = calculateMatchPercent;
-export const mixPigment = lerpPigment;
+// Snap to closest 10% if close
+export const getSnapAlpha = (currentMatch: number, baseRatio: number): number => {
+    // Bonus for high match players?
+    return baseRatio * 1.2;
+};

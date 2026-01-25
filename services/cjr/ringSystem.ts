@@ -46,8 +46,9 @@ export const checkRingTransition = (player: Player) => {
                 player.ring = 2;
                 applyCommitBuff(player, COMMIT_BUFFS.R2);
             } else {
-                // REJECT! Bounce back
-                bounceBack(player, RING_RADII.R2);
+                // REJECT! Elastic Membrane
+                // Membrane thickness 50px
+                applyElasticRejection(player, RING_RADII.R2, 50);
             }
         }
     }
@@ -56,14 +57,13 @@ export const checkRingTransition = (player: Player) => {
     else if (player.ring === 2) {
         if (dist < RING_RADII.R3) {
             // Condition check
-            // Optional: specific Boss logic override here if we want boss death to gate R3
             if (player.matchPercent >= THRESHOLDS.ENTER_RING3) {
                 // COMMIT!
                 player.ring = 3;
                 applyCommitBuff(player, COMMIT_BUFFS.R3);
             } else {
-                // REJECT!
-                bounceBack(player, RING_RADII.R3);
+                // REJECT! Elastic Membrane
+                applyElasticRejection(player, RING_RADII.R3, 50);
             }
         }
         // Backward check: keep them in R2 (Inner bound is R3, Outer bound is R2)
@@ -89,27 +89,63 @@ const applyCommitBuff = (player: Player, buff: any) => {
     player.statusEffects.tempSpeedTimer = buff.duration;
 };
 
-const bounceBack = (player: Player, radiusLimit: number) => {
-    const angle = Math.atan2(player.position.y, player.position.x);
-    const safeR = radiusLimit + 50;
+/**
+ * Applies organic elastic force when trying to cross a membrane without permission.
+ * F = -k * x - c * v (Spring + Damping)
+ */
+const applyElasticRejection = (player: Player, radiusLimit: number, thickness: number) => {
+    const dist = Math.hypot(player.position.x, player.position.y);
+    const penetration = radiusLimit - dist; // Positive if inside
 
-    player.position.x = Math.cos(angle) * safeR;
-    player.position.y = Math.sin(angle) * safeR;
-
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
-
-    const dot = player.velocity.x * dx + player.velocity.y * dy;
-    if (dot < 0) {
-        player.velocity.x -= dot * dx * 1.5;
-        player.velocity.y -= dot * dy * 1.5;
+    // Safety clamp (if they break through somehow, push them out hard)
+    if (dist > radiusLimit + thickness) {
+        clampToRingOuter(player, radiusLimit + thickness);
+        return;
     }
+
+    const angle = Math.atan2(player.position.y, player.position.x);
+
+    // Soft membrane zone
+    // K_SPRING = 2.0 (Force per pixel)
+    // C_DAMPING = 0.5 (Drag)
+    const k = 5.0;
+    const c = 0.2;
+
+    // If they are deep in the membrane, push back OUT
+    // Vector pointing OUT
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+
+    // Force magnitude
+    // We want to push them AWAY from the center if they are trying to enter inner ring
+    // BUT wait, entering Ring 2 (Inner) means dist < R2.
+    // So penetration = R2 - dist. Positive.
+    // We want to push them OUT (increase dist).
+
+    const force = penetration * k;
+
+    player.velocity.x += dirX * force * 0.016; // dt approx
+    player.velocity.y += dirY * force * 0.016;
+
+    // Damping / Friction in the membrane
+    player.velocity.x *= (1 - c);
+    player.velocity.y *= (1 - c);
 };
 
 const clampToRingOuter = (player: Player, radiusLimit: number) => {
     const angle = Math.atan2(player.position.y, player.position.x);
-    const safeR = radiusLimit - 10;
+    const safeR = radiusLimit - 2; // Slight buffer
 
     player.position.x = Math.cos(angle) * safeR;
     player.position.y = Math.sin(angle) * safeR;
+
+    // Kill velocity into the wall
+    // Project velocity onto normal
+    const nx = Math.cos(angle);
+    const ny = Math.sin(angle);
+    const dot = player.velocity.x * nx + player.velocity.y * ny;
+    if (dot > 0) { // If moving OUT
+        player.velocity.x -= dot * nx;
+        player.velocity.y -= dot * ny;
+    }
 };

@@ -24,19 +24,19 @@ export const updateWinCondition = (state: GameState, dt: number, levelConfig: an
     }
 
     if (potentialWinner) {
-        if (!potentialWinner.kingForm) potentialWinner.kingForm = 0;
+        if (!potentialWinner.statusEffects.kingForm) potentialWinner.statusEffects.kingForm = 0;
 
-        potentialWinner.kingForm += dt;
+        potentialWinner.statusEffects.kingForm += dt;
 
         const pulseInterval = 0.5;
-        if (potentialWinner.kingForm % pulseInterval < dt) {
+        if (potentialWinner.statusEffects.kingForm % pulseInterval < dt) {
             // Pulse!
             state.vfxEvents.push(`pulse_${potentialWinner.id}`);
             state.shakeIntensity = 5;
         }
 
         // Win Condition
-        if (potentialWinner.kingForm >= 1.5) { // 1.5s Hold
+        if (potentialWinner.statusEffects.kingForm >= 1.5) { // 1.5s Hold
             state.result = 'win';
             state.kingId = potentialWinner.id;
         }
@@ -44,8 +44,8 @@ export const updateWinCondition = (state: GameState, dt: number, levelConfig: an
     } else {
         // Decay channel if not holding
         for (const p of playersToCheck) {
-            if ((p.kingForm || 0) > 0) {
-                p.kingForm = Math.max(0, (p.kingForm || 0) - dt * 2);
+            if ((p.statusEffects.kingForm || 0) > 0) {
+                p.statusEffects.kingForm = Math.max(0, (p.statusEffects.kingForm || 0) - dt * 2);
             }
         }
     }

@@ -4,164 +4,144 @@ import {
   MAX_SPEED_BASE,
   MAX_ENTITY_RADIUS,
 } from '../../../constants';
-import { Entity, Player, Bot, SizeTier, Vector2 } from '../../../types';
-import { distance, normalize } from '../math';
+import { Entity, Player, Bot, SizeTier } from '../../../types';
+import { PhysicsWorld } from '../PhysicsWorld';
 
-// Physics Tuning
-const BASE_MASS_RADIUS = 28; // Standard starting radius
-const FORCE_SCALAR = 1500; // Tuning force strength
-const MIN_SPEED = 0.5;
+/**
+ * DOD PHYSICS UPDATE (The Purge)
+ * Iterates over Float32Arrays for maximum cache locality.
+ */
+export const updatePhysicsWorld = (world: PhysicsWorld, dt: number) => {
+  const count = world.capacity;
+  const frictionBase = Math.pow(FRICTION_BASE, dt * 60);
 
-export const applyPhysics = (entity: Player | Bot, dt: number) => {
-  // 1. Calculate Mass (Area-based roughly, or Radius^2)
-  // We normalize so starting jelly has mass ~ 1.0
-  const mass = Math.max(1, Math.pow(entity.radius / BASE_MASS_RADIUS, 1.5));
+  // 1. Integration Loop (SIMD-friendly if JIT optimizes)
+  for (let i = 0; i < count; i++) {
+    if ((world.flags[i] & 1) === 0) continue; // Inactive
 
-  // 2. Apply Friction (Drag)
-  // Drag Force = -Velocity * Coeff
-  // Heavier objects have more momentum, so friction slows them down effectively less 'quickly' in terms of speed change?
-  // Actually a=F/m, so Friction Decel = F_fric / m.
-  // Standard friction: vel *= 0.9. This is independent of mass.
-  // For "Heavy" feel, we want drag to be consistent.
-  // Let's stick to simple damping for now but scale max speed.
+    const px = i * 2;
+    const py = i * 2 + 1;
 
-  // Update Speed Caps based on Size
-  const speedScale = 1 / Math.pow(mass, 0.3); // Slower as you grow
-  const speedMultiplier =
-    (entity.statusEffects?.speedBoost ?? 1) *
-    (entity.statusEffects?.tempSpeedBoost ?? 1) *
-    (entity.statusEffects?.slowMultiplier ?? 1);
-  const currentMaxSpeed = MAX_SPEED_BASE * speedScale * speedMultiplier;
-  const currentAccel = (entity.acceleration || 1.0) * FORCE_SCALAR / mass;
+    // Friction
+    world.velocities[px] *= frictionBase;
+    world.velocities[py] *= frictionBase;
 
-  // 3. Movement Logic (Input applied externally via entity.targetPosition or inputs)
-  // For Players, input is usually "Mouse Direction".
-  // For Bots, input is "Velocity target".
+    // Position Integration
+    // Note: Using a scaler of 10 matches legacy logic
+    world.positions[px] += world.velocities[px] * dt * 10;
+    world.positions[py] += world.velocities[py] * dt * 10;
 
-  // Here we assume velocity is already being modified by Input/AI *before* this, 
-  // OR we need to apply forces here based on input.
-  // Current Architecture: AI/Input sets Velocity DIRECTLY or sets flags?
-  // App.tsx/AI.ts sets Velocity directly in Phase 1.
-  // Let's migrate to Force-based.
+    // Map Constraints (Circle)
+    // Hardcoded radius for now, should be passed in
+    const MAP_R = 2500;
+    const r2 = world.positions[px] * world.positions[px] + world.positions[py] * world.positions[py];
+    const myR = world.radii[i];
 
-  // If entity has a "Target Vector" (like mouse pos), we apply force pending that direction.
-  if ('targetPosition' in entity) {
-    const p = entity as Player;
-    if (p.targetPosition) {
-      const dx = p.targetPosition.x - p.position.x;
-      const dy = p.targetPosition.y - p.position.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 10) { // Deadzone
-        const fx = (dx / dist) * currentAccel;
-        const fy = (dy / dist) * currentAccel;
+    // Simple Boundary Check
+    if (Math.sqrt(r2) + myR > MAP_R) {
+      const angle = Math.atan2(world.positions[py], world.positions[px]);
+      const safeR = MAP_R - myR;
+      const nx = Math.cos(angle);
+      const ny = Math.sin(angle);
 
-        p.velocity.x += fx * dt;
-        p.velocity.y += fy * dt;
+      world.positions[px] = nx * safeR;
+      world.positions[py] = ny * safeR;
+
+      // Bounce
+      const dot = world.velocities[px] * nx + world.velocities[py] * ny;
+      if (dot > 0) {
+        world.velocities[px] -= 1.5 * dot * nx;
+        world.velocities[py] -= 1.5 * dot * ny;
       }
     }
   }
-  // Bots handled in AI.ts - need to ensure AI sets acceleration or target, not direct velocity to fully respect this.
-  // For now, let's assume Velocity is preserved and we just apply drag/clamp.
-
-  // Clamp Velocity
-  const speed = Math.hypot(entity.velocity.x, entity.velocity.y);
-  if (speed > currentMaxSpeed) {
-    const scale = currentMaxSpeed / speed;
-    entity.velocity.x *= scale;
-    entity.velocity.y *= scale;
-  }
-
-  // PERFORMANCE FIX: Frame-rate independent friction
-  // Old: velocity *= 0.93 (depends on FPS!)
-  // New: Apply friction consistently regardless of frame rate
-  const frictionPerSecond = Math.pow(FRICTION_BASE, dt * 60);
-  entity.velocity.x *= frictionPerSecond;
-  entity.velocity.y *= frictionPerSecond;
-
-  // 4. Update Position
-  entity.position.x += entity.velocity.x * dt * 10; // Scaling factor
-  entity.position.y += entity.velocity.y * dt * 10;
-
-  // Visual Tier
-  updateTier(entity);
 };
 
-export const constrainToMap = (entity: Entity, radius: number) => {
-  const dist = distance(entity.position, { x: 0, y: 0 });
-  if (dist + entity.radius > radius) {
-    const angle = Math.atan2(entity.position.y, entity.position.x);
-    // Push back exactly to edge
-    entity.position.x = Math.cos(angle) * (radius - entity.radius);
-    entity.position.y = Math.sin(angle) * (radius - entity.radius);
+/**
+ * Legacy/Hybrid Bridge:
+ * Applies game logic (input forces) to the Entity object.
+ * AND syncs it to the PhysicsWorld.
+ */
+export const applyPhysics = (entity: Player | Bot, dt: number) => {
+  // 1. Calculate Mass & Caps (Game Logic)
+  const BASE_MASS_RADIUS = 28;
+  const mass = Math.max(1, Math.pow(entity.radius / BASE_MASS_RADIUS, 1.5));
 
-    // Bounce velocity (Inelastic collision with wall)
-    const normal = { x: Math.cos(angle), y: Math.sin(angle) };
-    const dot = entity.velocity.x * normal.x + entity.velocity.y * normal.y;
+  const speedScale = 1 / Math.pow(mass, 0.3);
+  const speedMultiplier = (entity.statusEffects?.speedBoost || 1);
+  const currentMaxSpeed = MAX_SPEED_BASE * speedScale * speedMultiplier;
 
-    // Reflect: v' = v - (1 + cor) * (v.n) * n
-    // Simple bounce: reverse normal component
-    if (dot > 0) { // moving towards wall
-      entity.velocity.x -= 2 * dot * normal.x;
-      entity.velocity.y -= 2 * dot * normal.y;
-
-      // Dampen
-      entity.velocity.x *= 0.5;
-      entity.velocity.y *= 0.5;
-    }
+  // 2. Input Forces (Assume input handling modified velocity already)
+  // Clamp Speed
+  const s = Math.hypot(entity.velocity.x, entity.velocity.y);
+  if (s > currentMaxSpeed) {
+    const k = currentMaxSpeed / s;
+    entity.velocity.x *= k;
+    entity.velocity.y *= k;
   }
+
+  // 3. Sync TO PhysicsWorld (if available) -> This would be done in batch in index.ts
+  // For now, we compute updated velocity here but let PhysicsWorld do the integration.
+  // Wait, if PhysicsWorld does integration, we shouldn't modify entity.position here?
+  // CORRECT.
+  // But for legacy compatibility with the rest of the file (factories etc), 
+  // we keep the local update as a fallback if World isn't running?
+  // No, we must switch.
+
+  // TEMPORARY: Detailed integration is done in updatePhysicsWorld.
+  // Here we just prepare data.
 };
 
+/**
+ * Legacy Bridge: Resolves collisions using Entity objects but could rely on World.
+ */
 export const checkCollisions = (
   entity: Entity,
   others: Entity[],
   onCollide: (other: Entity) => void
 ) => {
+  // Standard pairwise check (Hybrid)
+  // In a full DOD system, this would iterate indices.
+  // For now, we keep object references for gameplay logic (eating).
   others.forEach(other => {
     if (entity === other) return;
-
     const dx = entity.position.x - other.position.x;
     const dy = entity.position.y - other.position.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const minDist = entity.radius + other.radius;
+    const dist = Math.hypot(dx, dy);
+    const min = entity.radius + other.radius;
 
-    if (dist < minDist) {
-      // Overlap!
+    if (dist < min) {
       onCollide(other);
+      // Soft Push
+      if (dist > 0 && !entity.isDead && !other.isDead && 'score' in other) {
+        const overlap = min - dist;
+        const push = overlap * 0.5;
+        const nx = dx / dist;
+        const ny = dy / dist;
 
-      // Soft Collision Resolution (Push apart)
-      // unless one eats the other (handled in onCollide logic)
-      // We apply separation force here regardless to prevent stacking
-      if (dist > 0 && !other.isDead && !entity.isDead) {
-        const overlap = minDist - dist;
-        const pushX = (dx / dist) * overlap * 0.5; // Shared displacement
-        const pushY = (dy / dist) * overlap * 0.5;
+        // Approximate mass
+        const m1 = entity.radius;
+        const m2 = other.radius;
+        const r1 = m2 / (m1 + m2);
 
-        // Weight by mass ratio?
-        // For simplified "Soft" feeling, just push equally or assume similar density
-        // If entity is player, we want to feel the bump.
-
-        // Only push if "Solid" (Players/Bots)
-        // Food doesn't push back usually
-        if ('score' in other && 'score' in entity) {
-          const eMass = Math.pow(entity.radius, 2);
-          const oMass = Math.pow(other.radius, 2);
-          const totalMass = eMass + oMass;
-
-          const eRatio = oMass / totalMass; // Other is heavy -> I move more
-          const oRatio = eMass / totalMass; // I am heavy -> Other moves more
-
-          entity.position.x += pushX * eRatio;
-          entity.position.y += pushY * eRatio;
-
-          // Apply impulse to velocity too?
-          // Simple position correction is often enough for "Squishy"
-          // But let's add slight bounce
-          entity.velocity.x += (pushX * 2);
-          entity.velocity.y += (pushY * 2);
-        }
+        // Modify Entity state (will be synced to World next frame)
+        entity.position.x += nx * push * r1;
+        entity.position.y += ny * push * r1;
+        entity.velocity.x += nx * push;
+        entity.velocity.y += ny * push;
       }
     }
   });
+};
+
+export const constrainToMap = (entity: Entity, radius: number) => {
+  // Handled in updatePhysicsWorld, but kept for non-synced entities
+  const dist = Math.hypot(entity.position.x, entity.position.y);
+  if (dist + entity.radius > radius) {
+    const angle = Math.atan2(entity.position.y, entity.position.x);
+    entity.position.x = Math.cos(angle) * (radius - entity.radius);
+    entity.position.y = Math.sin(angle) * (radius - entity.radius);
+  }
 };
 
 export const updateTier = (entity: Player | Bot) => {
@@ -171,13 +151,11 @@ export const updateTier = (entity: Player | Bot) => {
   else if (r < 100) entity.tier = SizeTier.Adult;
   else if (r < 130) entity.tier = SizeTier.Elder;
   else entity.tier = SizeTier.AncientKing;
-
-  // Update visual props or state if needed
 };
 
 export const applyGrowth = (entity: Player | Bot, amount: number) => {
   const currentArea = Math.PI * entity.radius * entity.radius;
-  const newArea = currentArea + amount * 25; // Tuned scalar for gameplay "Juice"
+  const newArea = currentArea + amount * 25;
   entity.radius = Math.sqrt(newArea / Math.PI);
   if (entity.radius > MAX_ENTITY_RADIUS) entity.radius = MAX_ENTITY_RADIUS;
 };

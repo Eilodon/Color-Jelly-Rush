@@ -35,6 +35,17 @@ const TATTOO_ICONS: Record<TattooId, string> = {
     [TattooId.PrismGuard]: '🔶',
     [TattooId.InkLeech]: '🩸',
     [TattooId.GrimHarvest]: '☠️',
+    // New
+    [TattooId.SpeedSurge]: '⏩',
+    [TattooId.Invulnerable]: '🌟',
+    [TattooId.Rewind]: '⏪',
+    [TattooId.Lightning]: '⚡',
+    [TattooId.Chaos]: '🌀',
+    [TattooId.KingForm]: '👑',
+    [TattooId.Magnet]: '🧲',
+    [TattooId.Dash]: '💨',
+    [TattooId.Bump]: '🧱',
+    [TattooId.Pierce]: '🗡️',
 };
 
 const TattooPicker: React.FC<TattooPickerProps> = ({ choices, onSelect }) => {

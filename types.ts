@@ -1,7 +1,7 @@
-import type { PigmentVec3, RingId, Emotion, ShapeId, PickupKind } from './services/cjr/cjrTypes';
+import type { PigmentVec3, RingId, Emotion, ShapeId, PickupKind, TattooId } from './services/cjr/cjrTypes';
 import type { LevelConfig } from './services/cjr/levels';
 
-export type { PigmentVec3, RingId, PickupKind };
+export type { PigmentVec3, RingId, PickupKind, TattooId };
 export type { Emotion, ShapeId };
 
 export enum GamePhase {
@@ -77,7 +77,7 @@ export interface Player extends Entity {
   ring: RingId;
   emotion: Emotion;
   shape: ShapeId;
-  tattoos: string[];
+  tattoos: TattooId[];
   lastHitTime: number;
   lastEatTime: number;
   matchStuckTime: number;
@@ -338,6 +338,7 @@ export interface GameRuntimeState {
 export interface IGameEngine {
   spatialGrid: any;
   particlePool: any;
+  physicsWorld: any;
 }
 
 export interface GameState {
@@ -370,6 +371,7 @@ export interface GameState {
   unlockedTattoos: string[];
   isPaused: boolean;
   result: 'win' | 'lose' | null;
+  vfxEvents: string[];
 
   inputs: {
     space: boolean;

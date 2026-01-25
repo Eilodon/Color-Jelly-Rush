@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GameState, RingId } from '../types';
 import { getColorHint } from '../services/cjr/colorMath';
-import { RING_THRESHOLDS } from '../services/cjr/cjrConstants';
+import { THRESHOLDS as RING_THRESHOLDS } from '../services/cjr/cjrConstants';
 
 interface HUDProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
@@ -19,33 +19,40 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
   const [minimapData, setMinimapData] = useState<{ x: number, y: number, r: number } | null>(null);
 
   useEffect(() => {
-    const link = setInterval(() => {
+    let animationFrameId: number;
+
+    const renderLoop = () => {
       const state = gameStateRef.current;
-      if (!state || !state.player) return;
+      if (state && state.player) {
+        // Optimization: Only setState if values differ significantly to avoid React thrashing? 
+        // React 18+ handles high freq updates well enough for HUDs usually.
+        // For 'Pro' feel, we rely on the fact that RAF syncs with screen refresh.
 
-      setMatchPercent(state.player.matchPercent);
-      setCurrentRing(state.player.ring);
-      setScore(Math.floor(state.player.score));
-      setWinTimer(state.player.stationaryTime || 0);
+        setMatchPercent(state.player.matchPercent);
+        setCurrentRing(state.player.ring);
+        setScore(Math.floor(state.player.score));
+        setWinTimer(state.player.stationaryTime || 0);
 
-      const hint = getColorHint(state.player.pigment, state.player.targetPigment);
-      setColorHint(hint);
+        // Heavy calc?
+        const hint = getColorHint(state.player.pigment, state.player.targetPigment);
+        if (hint !== colorHint) setColorHint(hint);
 
-      // Wave Timer (approximate from gameTime % interval)
-      const now = state.gameTime * 1000;
-      setWaveTimer(10000 - (now % 10000)); // Demo loop
+        const now = state.gameTime * 1000;
+        setWaveTimer(10000 - (now % 10000));
 
-      // Minimap Player Pos (Normalized to R1)
-      const r1 = 1600; // Map Radius
-      setMinimapData({
-        x: state.player.position.x / r1,
-        y: state.player.position.y / r1,
-        r: state.player.ring
-      });
+        const r1 = 1600;
+        setMinimapData({
+          x: state.player.position.x / r1,
+          y: state.player.position.y / r1,
+          r: state.player.ring
+        });
+      }
+      animationFrameId = requestAnimationFrame(renderLoop);
+    };
 
-    }, 60); // 16ms too fast for React state, 60ms is smooth enough
-    return () => clearInterval(link);
-  }, []);
+    animationFrameId = requestAnimationFrame(renderLoop);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []); // Remove dependencies to avoid loop resets
 
   // Visuals
   const percent = Math.floor(matchPercent * 100);
@@ -143,8 +150,8 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
 
           {/* Ring Status Badge */}
           <div className={`mt-2 px-3 py-1 rounded border overflow-hidden relative ${currentRing === 3 ? 'bg-red-900/80 border-red-500' :
-              currentRing === 2 ? 'bg-blue-900/80 border-blue-500' :
-                'bg-slate-800/80 border-slate-500'
+            currentRing === 2 ? 'bg-blue-900/80 border-blue-500' :
+              'bg-slate-800/80 border-slate-500'
             }`}>
             <span className="relative z-10 text-xs font-bold text-white uppercase tracking-wider">
               {currentRing === 3 ? 'DEATH ZONE' : currentRing === 2 ? 'THE ARENA' : 'OUTER RIM'}

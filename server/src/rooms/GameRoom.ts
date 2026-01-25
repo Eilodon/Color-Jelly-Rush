@@ -74,8 +74,8 @@ export class GameRoom extends Room<GameRoomState> {
 
     this.syncSimStateToServer();
 
-    // Start Game Loop (20 FPS or 60 FPS)
-    this.setSimulationInterval((dt) => this.update(dt), 1000 / 20);
+    // Start Game Loop (60 FPS)
+    this.setSimulationInterval((dt) => this.update(dt), 1000 / 60);
 
     this.onMessage('input', (client, message: any) => {
       if (!message) return;

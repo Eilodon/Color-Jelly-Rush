@@ -69,7 +69,7 @@ export class AudioExcellence {
     this.masterGain = this.audioContext.createGain();
     this.compressor = this.audioContext.createDynamicsCompressor();
     this.analyser = this.audioContext.createAnalyser();
-    
+
     this.setupAudioPipeline();
     this.initializeAudioThemes();
   }
@@ -79,46 +79,115 @@ export class AudioExcellence {
     this.masterGain.connect(this.compressor);
     this.compressor.connect(this.analyser);
     this.analyser.connect(this.audioContext.destination);
-    
+
     // Configure compressor for professional sound
     this.compressor.threshold.value = -24;
     this.compressor.knee.value = 30;
     this.compressor.ratio.value = 12;
     this.compressor.attack.value = 0.003;
     this.compressor.release.value = 0.25;
-    
+
     // Configure analyser
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.8;
-    
+
     // Set initial master volume
     this.masterGain.gain.value = 0.7;
-    
+
     this.isInitialized = true;
   }
 
   private initializeAudioThemes() {
-    // This would be expanded with actual musical compositions
-    // For now, we'll create procedural audio themes
+    // SINGULARITY THEME - Procedural
+    const singularityTheme: AudioTheme = {
+      name: 'Singularity',
+      layers: [
+        {
+          id: 'base_rhythm',
+          type: 'rhythm',
+          gain: 0.5,
+          frequency: 100, // Base kick/thump
+          waveform: 'square',
+          envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 },
+          effects: []
+        },
+        {
+          id: 'aggressive_layer', // For GrimHarvest etc
+          type: 'melody',
+          gain: 0, // Starts silent
+          frequency: 440,
+          waveform: 'sawtooth',
+          envelope: { attack: 0.1, decay: 0.1, sustain: 0.5, release: 0.5 },
+          effects: [{ type: 'distortion', params: { amount: 50 } }]
+        },
+        {
+          id: 'defense_layer', // For Shield etc
+          type: 'harmony',
+          gain: 0,
+          frequency: 220,
+          waveform: 'sine',
+          envelope: { attack: 1.0, decay: 1.0, sustain: 0.8, release: 2.0 },
+          effects: [{ type: 'reverb', params: { duration: 3, decay: 2 } }]
+        },
+        {
+          id: 'tech_layer', // For Catalyst etc
+          type: 'effect',
+          gain: 0,
+          frequency: 880,
+          waveform: 'triangle',
+          envelope: { attack: 0.05, decay: 0.1, sustain: 0.1, release: 0.1 },
+          effects: [{ type: 'delay', params: { delayTime: 0.25, maxDelayTime: 1.0 } }]
+        }
+      ],
+      transitions: []
+    };
+    this.playTheme(singularityTheme);
+  }
+
+  // Called by Game Loop or React
+  public updateTattooMix(tattoos: string[]) {
+    if (!this.currentTheme) return;
+
+    // Logic: If tattoo present, ramp gain up. If not, ramp down.
+    const hasAggro = tattoos.includes('grim_harvest') || tattoos.includes('pigment_bomb');
+    const hasDef = tattoos.includes('deposit_shield') || tattoos.includes('invulnerable');
+    const hasTech = tattoos.includes('catalyst_echo') || tattoos.includes('magnet');
+
+    this.setLayerGain('aggressive_layer', hasAggro ? 0.6 : 0);
+    this.setLayerGain('defense_layer', hasDef ? 0.6 : 0);
+    this.setLayerGain('tech_layer', hasTech ? 0.5 : 0);
+  }
+
+  private setLayerGain(id: string, targetGain: number) {
+    if (!this.activeLayers.has(id)) {
+      // If layer not active but we want gain, we should ensure it started? 
+      // Current playTheme starts all.
+      return;
+    }
+    const nodes = this.activeLayers.get(id);
+    const gainNode = nodes?.find(n => n instanceof GainNode) as GainNode;
+    if (gainNode) {
+      gainNode.gain.linearRampToValueAtTime(targetGain, this.audioContext.currentTime + 2.0);
+    }
   }
 
   // Create procedural audio layer
   createAudioLayer(layer: AudioLayer): AudioNode[] {
     const nodes: AudioNode[] = [];
-    
+
     // Create oscillator
     const oscillator = this.audioContext.createOscillator();
     oscillator.type = layer.waveform;
     oscillator.frequency.value = layer.frequency;
-    
+
     // Create envelope
     const gainNode = this.audioContext.createGain();
     this.applyEnvelope(gainNode, layer.envelope);
-    
+
     // Apply effects
     let currentNode: AudioNode = oscillator;
     nodes.push(currentNode);
-    
+
     for (const effect of layer.effects) {
       const effectNode = this.createEffect(effect);
       if (effectNode) {
@@ -127,29 +196,29 @@ export class AudioExcellence {
         nodes.push(effectNode);
       }
     }
-    
+
     // Connect to gain node
     currentNode.connect(gainNode);
     nodes.push(gainNode);
-    
+
     // Connect to master gain
     gainNode.connect(this.masterGain);
-    
+
     // Start oscillator
     oscillator.start();
-    
+
     return nodes;
   }
 
   private applyEnvelope(gainNode: GainNode, envelope: ADSREnvelope) {
     const now = this.audioContext.currentTime;
-    
+
     // Initial state
     gainNode.gain.setValueAtTime(0, now);
-    
+
     // Attack
     gainNode.gain.linearRampToValueAtTime(1, now + envelope.attack);
-    
+
     // Decay
     gainNode.gain.linearRampToValueAtTime(envelope.sustain, now + envelope.attack + envelope.decay);
   }
@@ -176,14 +245,14 @@ export class AudioExcellence {
     const convolver = this.audioContext.createConvolver();
     const length = this.audioContext.sampleRate * params.duration || 2;
     const impulse = this.audioContext.createBuffer(2, length, this.audioContext.sampleRate);
-    
+
     for (let channel = 0; channel < 2; channel++) {
       const channelData = impulse.getChannelData(channel);
       for (let i = 0; i < length; i++) {
         channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, params.decay || 2);
       }
     }
-    
+
     convolver.buffer = impulse;
     return convolver;
   }
@@ -200,12 +269,12 @@ export class AudioExcellence {
     const samples = 44100;
     const curve = new Float32Array(samples);
     const deg = Math.PI / 180;
-    
+
     for (let i = 0; i < samples; i++) {
       const x = (i * 2) / samples - 1;
       curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x));
     }
-    
+
     distortion.curve = curve;
     return distortion;
   }
@@ -231,17 +300,17 @@ export class AudioExcellence {
   // Spatial audio positioning
   createSpatialAudio(id: string, position: SpatialAudio): PannerNode {
     const panner = this.audioContext.createPanner();
-    
+
     panner.setPosition(position.x, position.y, position.z);
     panner.refDistance = position.radius;
     panner.coneInnerAngle = position.cone.innerAngle;
     panner.coneOuterAngle = position.cone.outerAngle;
     panner.coneOuterGain = position.cone.outerGain;
-    
+
     // Set panning model for 3D audio
     panner.panningModel = 'HRTF';
     panner.distanceModel = 'inverse';
-    
+
     this.spatialNodes.set(id, panner);
     return panner;
   }
@@ -249,7 +318,7 @@ export class AudioExcellence {
   updateSpatialAudio(id: string, position: Partial<SpatialAudio>) {
     const panner = this.spatialNodes.get(id);
     if (!panner) return;
-    
+
     if (position.x !== undefined) panner.setPosition(position.x, panner.positionY.value, panner.positionZ.value);
     if (position.y !== undefined) panner.setPosition(panner.positionX.value, position.y, panner.positionZ.value);
     if (position.z !== undefined) panner.setPosition(panner.positionX.value, panner.positionY.value, position.z);
@@ -260,9 +329,9 @@ export class AudioExcellence {
     if (this.currentTheme) {
       this.stopTheme();
     }
-    
+
     this.currentTheme = theme;
-    
+
     // Start all layers
     for (const layer of theme.layers) {
       const nodes = this.createAudioLayer(layer);
@@ -279,7 +348,7 @@ export class AudioExcellence {
 
   private stopTheme() {
     if (!this.currentTheme) return;
-    
+
     // Fade out and stop all layers using constants
     for (const [layerId, nodes] of this.activeLayers) {
       this.fadeOutLayer(nodes, AUDIO_CONSTANTS.FADE.LAYER_FADE_OUT);
@@ -292,7 +361,7 @@ export class AudioExcellence {
         });
       }, AUDIO_CONSTANTS.FADE.LAYER_FADE_OUT * 1000);
     }
-    
+
     this.activeLayers.clear();
     this.currentTheme = null;
   }
@@ -305,20 +374,20 @@ export class AudioExcellence {
     isPaused: boolean;
   }) {
     if (!this.adaptiveMode || !this.currentTheme) return;
-    
+
     // Adjust audio based on game intensity using constants
     const intensityGain = AUDIO_CONSTANTS.INTENSITY.MIN_GAIN + (gameState.intensity * AUDIO_CONSTANTS.INTENSITY.BASE_INTENSITY);
     this.masterGain.gain.linearRampToValueAtTime(
       intensityGain,
       this.audioContext.currentTime + AUDIO_CONSTANTS.INTENSITY.TRANSITION_DURATION
     );
-    
+
     // Add ring-specific audio layers
     this.updateRingAudio(gameState.ring);
-    
+
     // Match percentage affects tempo
     this.updateTempo(gameState.matchPercent);
-    
+
     // Pause/resume audio
     if (gameState.isPaused) {
       this.suspendAudio();
@@ -331,10 +400,10 @@ export class AudioExcellence {
     // Add ring-specific ambient layers
     const ringLayers = {
       1: 'ambient_outer',
-      2: 'ambient_middle', 
+      2: 'ambient_middle',
       3: 'ambient_core',
     };
-    
+
     const layerId = ringLayers[ring as keyof typeof ringLayers];
     if (layerId && this.currentTheme) {
       const layer = this.currentTheme.layers.find(l => l.id === layerId);
@@ -348,7 +417,7 @@ export class AudioExcellence {
   private updateTempo(matchPercent: number) {
     // Adjust tempo based on match percentage using constants
     const tempoMultiplier = AUDIO_CONSTANTS.TEMPO.MIN_MULTIPLIER + (matchPercent * AUDIO_CONSTANTS.TEMPO.BASE_RANGE);
-    
+
     for (const [layerId, nodes] of this.activeLayers) {
       const oscillator = nodes.find(node => node instanceof OscillatorNode) as OscillatorNode;
       if (oscillator) {
@@ -384,19 +453,19 @@ export class AudioExcellence {
   private playProceduralSound(frequency: number, duration: number, type: OscillatorType) {
     const oscillator = this.audioContext.createOscillator();
     const gainNode = this.audioContext.createGain();
-    
+
     oscillator.type = type;
     oscillator.frequency.value = frequency;
-    
+
     const now = this.audioContext.currentTime;
     gainNode.gain.setValueAtTime(AUDIO_CONSTANTS.PROCEDURAL.BASE_VOLUME, now);
-    
+
     // Apply envelope using constants
     gainNode.gain.linearRampToValueAtTime(0, now + duration);
-    
+
     oscillator.connect(gainNode);
     gainNode.connect(this.masterGain);
-    
+
     oscillator.start(now);
     oscillator.stop(now + duration);
   }
@@ -404,7 +473,7 @@ export class AudioExcellence {
   // Audio quality management
   setAudioQuality(quality: 'low' | 'medium' | 'high' | 'ultra') {
     this.audioQuality = quality;
-    
+
     // Adjust processing based on quality
     const sampleRates = {
       low: 22050,
@@ -412,7 +481,7 @@ export class AudioExcellence {
       high: 48000,
       ultra: 96000,
     };
-    
+
     // Note: In a real implementation, you'd recreate the AudioContext
     // with the new sample rate. This is simplified for demonstration.
     console.log(`🎵 Audio quality set to ${quality}`);
@@ -428,29 +497,29 @@ export class AudioExcellence {
     const bufferLength = this.analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     this.analyser.getByteFrequencyData(dataArray);
-    
+
     const bassEnd = Math.floor(bufferLength * 0.1);
     const midEnd = Math.floor(bufferLength * 0.5);
-    
+
     let bass = 0, mid = 0, treble = 0;
-    
+
     for (let i = 0; i < bassEnd; i++) {
       bass += dataArray[i];
     }
     bass /= bassEnd;
-    
+
     for (let i = bassEnd; i < midEnd; i++) {
       mid += dataArray[i];
     }
     mid /= (midEnd - bassEnd);
-    
+
     for (let i = midEnd; i < bufferLength; i++) {
       treble += dataArray[i];
     }
     treble /= (bufferLength - midEnd);
-    
+
     const average = (bass + mid + treble) / 3;
-    
+
     return { bass, mid, treble, average };
   }
 

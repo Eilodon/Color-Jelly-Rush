@@ -20,7 +20,7 @@ export const updateEmotion = (p: Player | Bot, dt: number) => {
     // Priority Overrides
 
     // 1. Victory/Winning (Player only)
-    if ('kingForm' in p && (p.kingForm || 0) > 0.5) {
+    if ('statusEffects' in p && (p.statusEffects.kingForm || 0) > 0.5) {
         setEmotion(p, 'victory', 0.5);
         return;
     }

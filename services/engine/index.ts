@@ -54,6 +54,8 @@ import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
 import { resetContributionLog } from '../cjr/contribution';
 
+import { updatePhysicsWorld } from './systems/physics';
+
 // --- Main Game Loop ---
 export const updateGameState = (state: GameState, dt: number): GameState => {
   if (state.isPaused) return state;
@@ -70,51 +72,78 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   bindEngine(state.engine);
   const grid = getCurrentSpatialGrid();
   grid.clear();
+  const indexer = state.engine.physicsWorld;
 
-  // 2. Game Time & Round Logic
+  // 1.5. SYNC ENTITIES TO PHYSICS WORLD (Hybrid Bridge)
+  const syncList = [...players, ...state.bots]; // Only sync movers
+  syncList.forEach(e => {
+    let idx = indexer.idToIndex.get(e.id);
+    if (idx === undefined) {
+      // Register Layout
+      // Calculate Mass for initial setup
+      const r = e.radius;
+      const m = r * r;
+      idx = indexer.addBody(e.id, e.position.x, e.position.y, e.radius, m, true);
+    }
+    // Sync Velocity/Input from Logic
+    indexer.velocities[idx * 2] = e.velocity.x;
+    indexer.velocities[idx * 2 + 1] = e.velocity.y;
+    indexer.radii[idx] = e.radius;
+    indexer.positions[idx * 2] = e.position.x; // Strict Sync In case Logic moved it
+    indexer.positions[idx * 2 + 1] = e.position.y;
+  });
+
+  // 2. RUN DOD PHYSICS
+  updatePhysicsWorld(indexer, dt);
+
+  // 3. SYNC BACK TO ENTITIES
+  syncList.forEach(e => {
+    const idx = indexer.idToIndex.get(e.id);
+    if (idx !== undefined) {
+      e.position.x = indexer.positions[idx * 2];
+      e.position.y = indexer.positions[idx * 2 + 1];
+      e.velocity.x = indexer.velocities[idx * 2];
+      e.velocity.y = indexer.velocities[idx * 2 + 1];
+    }
+  });
+
+  // 4. Game Time & Round Logic
   state.gameTime += dt;
   if (state.gameTime > state.levelConfig.timeLimit && !state.result) {
     state.result = 'lose';
     state.isPaused = true;
   }
 
-  // 3. Batch Entity Insertion
+  // 5. Batch Entity Insertion
   const allEntities = [...players, ...state.bots, ...state.food, ...state.projectiles];
   allEntities.forEach(entity => grid.insert(entity));
 
-  // 4. BATCHED ENTITY UPDATES (Player + Bots)
+  // 6. LOGIC UPDATES
   players.forEach(player => updatePlayer(player, state, dt));
   state.bots.forEach(bot => updateBot(bot, state, dt));
 
-  // 5. BATCHED PROJECTILE & PARTICLE UPDATES
+  // ... Rest of Loop ...
   updateProjectiles(state, dt);
   updateParticles(state, dt);
   updateFloatingTexts(state, dt);
   cleanupTransientEntities(state);
 
-  // 6. BATCHED CJR SYSTEMS (Wave + Ring + Boss + Win)
   updateWaveSpawner(state, dt);
   players.forEach(player => updateRingLogic(player, dt, state.levelConfig, state));
   state.bots.forEach(b => updateRingLogic(b, dt, state.levelConfig, state));
   updateBossLogic(state, dt);
   updateWinCondition(state, dt, state.levelConfig);
 
-  // 7. BATCHED EMOTION UPDATES (merged with camera)
   players.forEach(player => updateEmotion(player, dt));
   state.bots.forEach(b => updateEmotion(b, dt));
   updateCamera(state);
 
-  // 8. Tattoo Unlock Check (only when needed)
   checkTattooUnlock(state);
-
-  // 9. VFX System Updates (Premium Game Juice)
   vfxIntegrationManager.update(state, dt);
 
-  // 10. Tattoo Synergy System Updates (Gameplay Depth)
   players.forEach(player => tattooSynergyManager.checkSynergies(player, state));
   tattooSynergyManager.updateSynergies(state, dt);
 
-  // 11. Apply screen shake to camera
   const shakeOffset = vfxIntegrationManager.getScreenShakeOffset();
   state.camera.x += shakeOffset.x;
   state.camera.y += shakeOffset.y;
@@ -524,6 +553,7 @@ export const createInitialState = (level: number = 1): GameState => {
     unlockedTattoos: [],
     isPaused: false,
     result: null,
+    vfxEvents: [],
     inputs: { space: false, w: false },
   };
 };

@@ -4,7 +4,7 @@ import { Application, Container, Geometry, Shader, Mesh, Texture, Graphics, Text
 import { GameState, Entity } from '../types';
 import { MAP_RADIUS } from '../constants';
 import { RING_RADII, COLOR_PALETTE } from '../services/cjr/cjrConstants';
-import { calculateMatchPercent, pigmentToHex } from '../services/cjr/colorMath';
+import { calcMatchPercent, pigmentToHex } from '../services/cjr/colorMath';
 import { JELLY_VERTEX, JELLY_FRAGMENT } from '../services/cjr/shaders';
 
 // Performance Configuration
@@ -113,6 +113,8 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         uColor: [1, 1, 1],
         uAlpha: 1,
         uBorderColor: [0, 0, 0],
+        uDeformMode: 0,
+        uPatternMode: 0,
       }
     });
     shaderCache.current = shader;
@@ -159,7 +161,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
               // Let's create a new Shader instance reusing the program for uniforms.
             });
             // Manual clone for uniforms
-            mesh.shader = Shader.from({
+            (mesh as any).shader = Shader.from({
               gl: { vertex: JELLY_VERTEX, fragment: JELLY_FRAGMENT },
               resources: {
                 uTime: 0,
@@ -167,7 +169,9 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
                 uSquish: 0,
                 uColor: [1, 1, 1],
                 uAlpha: 1,
-                uBorderColor: [0, 0, 0]
+                uBorderColor: [0, 0, 0],
+                uDeformMode: 0,
+                uPatternMode: 0
               }
             });
           } else {
@@ -218,6 +222,28 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
           // Wobble based on velocity
           const speed = Math.hypot(e.velocity.x, e.velocity.y);
           resources.uSquish = Math.min(0.3, speed / 500);
+
+          // TATTOO VISUALS
+          let deform = 0;
+          let pattern = 0;
+
+          if ('tattoos' in e) {
+            const tattoos = (e as any).tattoos || []; // check type
+            // Spikes for aggressive tattoos
+            if (tattoos.includes('grim_harvest') || tattoos.includes('invulnerable') || tattoos.includes('pierce')) {
+              deform = 1;
+            }
+
+            // Patterns
+            if ((e as any).statusEffects?.overdriveTimer > 0 || tattoos.includes('pigment_bomb')) {
+              pattern = 1; // Fire
+            }
+            if (tattoos.includes('lightning') || tattoos.includes('speed_surge')) {
+              pattern = 2; // Electric
+            }
+          }
+          resources.uDeformMode = deform;
+          resources.uPatternMode = pattern;
         }
 
         // Emotion -> Texture? (Not implemented in Shader yet, overlay face sprite needed)

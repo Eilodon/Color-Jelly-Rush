@@ -222,6 +222,127 @@ const TATTOO_VFX_CONFIGS: Record<TattooId, TattooVFXConfig> = {
       character: 'shadow' as const
     },
     iconSymbol: '☠️'
+  },
+  // --- New Logic Tattoos ---
+  [TattooId.SpeedSurge]: {
+    id: TattooId.SpeedSurge,
+    name: 'Speed Surge',
+    primaryColor: '#00FF00',
+    secondaryColor: '#CCFFCC',
+    particleCount: 40,
+    duration: 2.0,
+    pattern: 'wave',
+    specialEffects: ['speed_trails'],
+    soundProfile: { pitch: 1.2, volume: 0.7, character: 'tech' },
+    iconSymbol: '⏩'
+  },
+  [TattooId.Invulnerable]: {
+    id: TattooId.Invulnerable,
+    name: 'Invulnerability',
+    primaryColor: '#FFFF00',
+    secondaryColor: '#FFFFCC',
+    particleCount: 50,
+    duration: 3.0,
+    pattern: 'geometric',
+    specialEffects: ['shield_bubble'],
+    soundProfile: { pitch: 1.0, volume: 0.8, character: 'magical' },
+    iconSymbol: '🌟'
+  },
+  [TattooId.Rewind]: {
+    id: TattooId.Rewind,
+    name: 'Time Rewind',
+    primaryColor: '#00FFFF',
+    secondaryColor: '#CCFFFF',
+    particleCount: 45,
+    duration: 2.5,
+    pattern: 'spiral',
+    specialEffects: ['energy_lines'],
+    soundProfile: { pitch: 0.8, volume: 0.7, character: 'cosmic' },
+    iconSymbol: '⏪'
+  },
+  [TattooId.Lightning]: {
+    id: TattooId.Lightning,
+    name: 'Lightning Strike',
+    primaryColor: '#FFFF00',
+    secondaryColor: '#FFFFFF',
+    particleCount: 60,
+    duration: 1.5,
+    pattern: 'burst',
+    specialEffects: ['color_explosion'],
+    soundProfile: { pitch: 1.5, volume: 0.9, character: 'nature' },
+    iconSymbol: '⚡'
+  },
+  [TattooId.Chaos]: {
+    id: TattooId.Chaos,
+    name: 'Chaos Mode',
+    primaryColor: '#FF00FF',
+    secondaryColor: '#FFCCFF',
+    particleCount: 70,
+    duration: 3.0,
+    pattern: 'organic',
+    specialEffects: ['color_explosion', 'splash_damage'],
+    soundProfile: { pitch: 1.1, volume: 0.8, character: 'shadow' },
+    iconSymbol: '🌀'
+  },
+  [TattooId.KingForm]: {
+    id: TattooId.KingForm,
+    name: 'King Form',
+    primaryColor: '#FFD700',
+    secondaryColor: '#FFA500',
+    particleCount: 100,
+    duration: 5.0,
+    pattern: 'geometric',
+    specialEffects: ['golden_aura', 'perfection_glow'],
+    soundProfile: { pitch: 0.7, volume: 1.0, character: 'cosmic' },
+    iconSymbol: '👑'
+  },
+  [TattooId.Magnet]: {
+    id: TattooId.Magnet,
+    name: 'Magnet',
+    primaryColor: '#607D8B',
+    secondaryColor: '#B0BEC5',
+    particleCount: 30,
+    duration: 2.0,
+    pattern: 'spiral',
+    specialEffects: ['magnetic_field'],
+    soundProfile: { pitch: 1.0, volume: 0.6, character: 'tech' },
+    iconSymbol: '🧲'
+  },
+  [TattooId.Dash]: {
+    id: TattooId.Dash,
+    name: 'Dash',
+    primaryColor: '#2196F3',
+    secondaryColor: '#64B5F6',
+    particleCount: 20,
+    duration: 1.0,
+    pattern: 'wave',
+    specialEffects: ['speed_trails'],
+    soundProfile: { pitch: 1.3, volume: 0.5, character: 'tech' },
+    iconSymbol: '💨'
+  },
+  [TattooId.Bump]: {
+    id: TattooId.Bump,
+    name: 'Bump',
+    primaryColor: '#795548',
+    secondaryColor: '#A1887F',
+    particleCount: 30,
+    duration: 1.0,
+    pattern: 'burst',
+    specialEffects: ['shield_bubble'],
+    soundProfile: { pitch: 0.8, volume: 0.7, character: 'organic' },
+    iconSymbol: '🧱'
+  },
+  [TattooId.Pierce]: {
+    id: TattooId.Pierce,
+    name: 'Pierce',
+    primaryColor: '#F44336',
+    secondaryColor: '#E57373',
+    particleCount: 40,
+    duration: 1.5,
+    pattern: 'burst',
+    specialEffects: ['energy_lines'],
+    soundProfile: { pitch: 1.4, volume: 0.6, character: 'magical' },
+    iconSymbol: '🗡️'
   }
 };
 
@@ -316,16 +437,16 @@ export class TattooVFXSystem {
     for (let i = 0; i < config.particleCount; i++) {
       const angle = (i / config.particleCount) * Math.PI * 2;
       const speed = 150 + Math.random() * 100;
-      
+
       const particle = createParticle(position.x, position.y, config.primaryColor, speed);
-      
+
       particle.velocity.x = Math.cos(angle) * speed;
       particle.velocity.y = Math.sin(angle) * speed;
       particle.life = config.duration;
       particle.maxLife = config.duration;
       particle.fadeOut = true;
       particle.glowIntensity = 0.8;
-      
+
       state.particles.push(particle);
     }
   }
@@ -335,18 +456,18 @@ export class TattooVFXSystem {
    */
   private createSpiralPattern(position: Vector2, config: TattooVFXConfig, state: GameState): void {
     const spiralCount = 3;
-    
+
     for (let spiral = 0; spiral < spiralCount; spiral++) {
       setTimeout(() => {
         for (let i = 0; i < config.particleCount / spiralCount; i++) {
           const angle = (i / (config.particleCount / spiralCount)) * Math.PI * 4;
           const radius = 20 + i * 3;
-          
+
           const x = position.x + Math.cos(angle) * radius;
           const y = position.y + Math.sin(angle) * radius;
-          
+
           const particle = createParticle(x, y, config.secondaryColor, 100);
-          
+
           // Spiral inward motion
           particle.velocity.x = -Math.cos(angle) * 50;
           particle.velocity.y = -Math.sin(angle) * 50;
@@ -354,7 +475,7 @@ export class TattooVFXSystem {
           particle.maxLife = config.duration;
           particle.fadeOut = true;
           particle.glowIntensity = 0.6;
-          
+
           state.particles.push(particle);
         }
       }, spiral * 200);
@@ -366,27 +487,27 @@ export class TattooVFXSystem {
    */
   private createWavePattern(position: Vector2, config: TattooVFXConfig, state: GameState): void {
     const waveCount = 5;
-    
+
     for (let wave = 0; wave < waveCount; wave++) {
       setTimeout(() => {
         for (let i = 0; i < config.particleCount / waveCount; i++) {
           const angle = (i / (config.particleCount / waveCount)) * Math.PI * 2;
           const radius = 30 + wave * 20;
-          
+
           const x = position.x + Math.cos(angle) * radius;
           const y = position.y + Math.sin(angle) * radius;
-          
+
           const particle = createParticle(x, y, config.primaryColor, 80);
-          
+
           // Wave motion
-          particle.velocity.x = Math.cos(angle + Math.PI/2) * 60;
-          particle.velocity.y = Math.sin(angle + Math.PI/2) * 60;
+          particle.velocity.x = Math.cos(angle + Math.PI / 2) * 60;
+          particle.velocity.y = Math.sin(angle + Math.PI / 2) * 60;
           particle.life = config.duration;
           particle.maxLife = config.duration;
           particle.fadeOut = true;
           particle.waveAmplitude = 20;
           particle.waveFrequency = 3;
-          
+
           state.particles.push(particle);
         }
       }, wave * 150);
@@ -399,17 +520,17 @@ export class TattooVFXSystem {
   private createGeometricPattern(position: Vector2, config: TattooVFXConfig, state: GameState): void {
     const sides = 6; // Hexagon for Deposit Shield
     const layers = 3;
-    
+
     for (let layer = 0; layer < layers; layer++) {
       const radius = 40 + layer * 30;
-      
+
       for (let i = 0; i < sides; i++) {
         const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
         const x = position.x + Math.cos(angle) * radius;
         const y = position.y + Math.sin(angle) * radius;
-        
+
         const particle = createParticle(x, y, config.primaryColor, 0);
-        
+
         particle.radius = 8;
         particle.maxLife = config.duration;
         particle.life = particle.maxLife;
@@ -418,7 +539,7 @@ export class TattooVFXSystem {
         particle.geometricRadius = radius;
         particle.rotationSpeed = 0.5;
         particle.fadeOut = true;
-        
+
         state.particles.push(particle);
       }
     }
@@ -431,12 +552,12 @@ export class TattooVFXSystem {
     for (let i = 0; i < config.particleCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const radius = Math.random() * 80;
-      
+
       const x = position.x + Math.cos(angle) * radius;
       const y = position.y + Math.sin(angle) * radius;
-      
+
       const particle = createParticle(x, y, config.primaryColor, 50);
-      
+
       // Organic, flowing motion
       particle.velocity.x = (Math.random() - 0.5) * 100;
       particle.velocity.y = (Math.random() - 0.5) * 100;
@@ -445,7 +566,7 @@ export class TattooVFXSystem {
       particle.fadeOut = true;
       particle.organicFlow = true;
       particle.flowSpeed = 0.5;
-      
+
       state.particles.push(particle);
     }
   }
@@ -487,7 +608,7 @@ export class TattooVFXSystem {
    */
   private createActivationAura(player: Player, config: TattooVFXConfig, state: GameState): void {
     const aura = createParticle(player.position.x, player.position.y, config.primaryColor, 0);
-    
+
     aura.radius = player.radius + 20;
     aura.maxLife = config.duration;
     aura.life = aura.maxLife;
@@ -496,7 +617,7 @@ export class TattooVFXSystem {
     aura.auraIntensity = 0.6;
     aura.pulseSpeed = 2;
     aura.fadeOut = true;
-    
+
     state.particles.push(aura);
   }
 
@@ -553,7 +674,7 @@ export class TattooVFXSystem {
       const angle = (i / 30) * Math.PI * 2;
       const speed = 200 + Math.random() * 100;
       const color = colors[Math.floor(Math.random() * colors.length)];
-      
+
       const particle = createParticle(player.position.x, player.position.y, color, speed);
       particle.velocity.x = Math.cos(angle) * speed;
       particle.velocity.y = Math.sin(angle) * speed;
@@ -597,7 +718,7 @@ export class TattooVFXSystem {
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? 1 : -1;
       const color = i === 0 ? config.primaryColor : config.secondaryColor;
-      
+
       const particle = createParticle(
         player.position.x + side * 20,
         player.position.y,
@@ -638,7 +759,7 @@ export class TattooVFXSystem {
    */
   updateEffects(state: GameState, dt: number): void {
     const now = Date.now();
-    
+
     // Clean up expired effects
     for (const [id, effect] of this.activeEffects.entries()) {
       if (now - effect.startTime > effect.duration) {
@@ -672,7 +793,7 @@ declare module '../../types' {
     fontSize?: number;
     floatUpward?: boolean;
     floatSpeed?: number;
-    
+
     // Pattern effects
     waveAmplitude?: number;
     waveFrequency?: number;
@@ -682,7 +803,7 @@ declare module '../../types' {
     geometricSides?: number;
     geometricRadius?: number;
     rotationSpeed?: number;
-    
+
     // Special effects
     isBubble?: boolean;
     bubbleColor?: string;
@@ -705,7 +826,7 @@ declare module '../../types' {
     waveColor?: string;
     waveOpacity?: number;
     expandSpeed?: number;
-    
+
     // Aura effects
     isAura?: boolean;
     auraColor?: string;

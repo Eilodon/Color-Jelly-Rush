@@ -1,48 +1,60 @@
-
-// COLOR JELLY RUSH - Constants & Balance
+import { RingId } from "./cjrTypes";
 
 export const RING_RADII = {
-    CENTER: 0,
-    R3: 600,  // Inner (Death Zone / Win Hold)
-    R2: 1200, // Mid (Boss 1)
-    R1: 2000, // Outer (Spawn)
-    MAP: 2200, // Wall
+    R1: 1600, // Outer Rim
+    R2: 1000, // The Arena
+    R3: 400,  // Death Zone
+    CENTER: 100
 };
 
 export const THRESHOLDS = {
-    ENTER_RING2: 0.50, // 50% match
-    ENTER_RING3: 0.70, // 70% match
-    WIN_HOLD: 0.90,    // 90% match to channel win
+    ENTER_R2: 0.50, // 50% match
+    ENTER_R3: 0.70, // 70% match
+    WIN_HOLD: 0.90,  // 90% match to channel win
+
+    // Legacy Aliases
+    ENTER_RING2: 0.50,
+    ENTER_RING3: 0.70
 };
 
 export const WAVE_CONFIG = {
-    INTERVAL_R1: 8000, // ms
+    INTERVAL: {
+        [1 as RingId]: 8000,
+        [2 as RingId]: 10000,
+        [3 as RingId]: 14000,
+    },
+    INTERVAL_R1: 8000,
     INTERVAL_R2: 10000,
     INTERVAL_R3: 14000,
-
+    SPAWN_WEIGHTS: {
+        pigment: 0.60,
+        neutral: 0.25,
+        special: 0.15
+    },
     SPAWN_COUNTS: {
-        R1: 20,
-        R2: 15,
-        R3: 10, // Scarce logic, rely on candy vein
+        R1: 5,
+        R2: 4,
+        R3: 3
     }
+};
+
+export const WAVE_CONFIGS = WAVE_CONFIG;
+
+export const COMMIT_BUFFS = {
+    R2: { shield: 3.0, speed: 1.1, duration: 2.0 },
+    R3: { shield: 5.0, speed: 1.2, duration: 3.0 }
+};
+
+export const BOSS_CONFIGS = {
+    BOSS_1_TRIGGER: 'RING_2_ACTIVE',
+    BOSS_2_TRIGGER: 'RING_3_ACTIVE',
 };
 
 export const COLOR_PALETTE = {
-    background: '#1a1a1a',
-    grid: '#333333',
+    background: '#111111',
     rings: {
-        r1: '#4b5563', // gray-600
-        r2: '#2563eb', // blue-600
-        r3: '#dc2626', // red-600
-    },
-    ui: {
-        matchHigh: '#22c55e',
-        matchMed: '#eab308',
-        matchLow: '#ef4444',
+        r1: '#475569', // Slate
+        r2: '#3b82f6', // Blue
+        r3: '#ef4444'  // Red
     }
-};
-
-export const COMMIT_BUFFS = {
-    R2: { speed: 1.10, duration: 2000, shield: 2000 },
-    R3: { speed: 1.20, duration: 3000, shield: 3000 },
 };

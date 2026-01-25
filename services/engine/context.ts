@@ -4,78 +4,103 @@ import { randomRange } from './math';
 
 // --- Optimization: Persistent Spatial Grid ---
 // WE DO NOT DESTROY THE GRID EVERY FRAME. WE REUSE THE ARRAYS.
+// --- Optimization: Hierarchical Spatial Grid (The God Eye) ---
+// Multiple layers for different query scales:
+// Layer 0: Physics (Contact) - Cell Size ~100
+// Layer 1: Local Awareness (Combat) - Cell Size ~300
+// Layer 2: Network Culling / AI Vision - Cell Size ~1500
 class SpatialGrid {
-  private cellSize: number;
-  private grid: Map<number, Entity[]> = new Map(); // INTEGER keys, not string!
+  private layers: { cellSize: number; grid: Map<number, Entity[]> }[];
   private usageTimestamps: Map<number, number> = new Map();
   private frameCount: number = 0;
 
-  constructor(cellSize: number) {
-    this.cellSize = cellSize;
+  constructor() {
+    // Defined resolutions
+    this.layers = [
+      { cellSize: 150, grid: new Map() },  // 0: High Precision
+      { cellSize: 450, grid: new Map() },  // 1: Medium Range
+      { cellSize: 1500, grid: new Map() }  // 2: Long Range (Vision)
+    ];
   }
 
-  // PERFORMANCE FIX: Integer key via bit-shifting
-  // Supports maps up to 65536x65536 cells (more than enough)
+  // INTEGER key via bit-shifting
   private getKey(cellX: number, cellY: number): number {
-    return (cellX << 16) | (cellY & 0xFFFF);
+    // 16-bit packed coordinates (Limits world to +/- 32768 cells)
+    // For 150 size, that's roughly 5,000,000 units. Plenty.
+    return ((cellX + 32768) << 16) | ((cellY + 32768) & 0xFFFF);
   }
 
   clear() {
     this.frameCount++;
+    for (const layer of this.layers) {
+      for (const bucket of layer.grid.values()) {
+        bucket.length = 0;
+      }
 
-    // Optimization: Don't delete keys, just empty the arrays.
-    for (const [key, bucket] of this.grid.entries()) {
-      bucket.length = 0;
-
-      // PERFORMANCE FIX: Clean up stale buckets every 60 frames (~1 second)
-      if (this.frameCount % 60 === 0) {
-        const lastUsed = this.usageTimestamps.get(key) || 0;
-        if (this.frameCount - lastUsed > 300) { // 5 seconds unused
-          this.grid.delete(key);
-          this.usageTimestamps.delete(key);
+      // Garbage Collection for empty buckets (staggered)
+      if (this.frameCount % 120 === 0) {
+        for (const [key, bucket] of layer.grid.entries()) {
+          if (bucket.length === 0) layer.grid.delete(key);
         }
       }
     }
   }
 
   insert(entity: Entity) {
-    const cellX = Math.floor(entity.position.x / this.cellSize);
-    const cellY = Math.floor(entity.position.y / this.cellSize);
-    const key = this.getKey(cellX, cellY); // INTEGER key - 0 allocations!
+    for (const layer of this.layers) {
+      const cx = Math.floor(entity.position.x / layer.cellSize);
+      const cy = Math.floor(entity.position.y / layer.cellSize);
+      const key = this.getKey(cx, cy);
 
-    this.usageTimestamps.set(key, this.frameCount);
-
-    let bucket = this.grid.get(key);
-    if (!bucket) {
-      bucket = [];
-      this.grid.set(key, bucket);
+      let bucket = layer.grid.get(key);
+      if (!bucket) {
+        bucket = [];
+        layer.grid.set(key, bucket);
+      }
+      bucket.push(entity);
     }
-    bucket.push(entity);
   }
 
+  /**
+   * Get nearby entities using the most appropriate layer for the requested range.
+   * Auto-selects layer based on maxDistance.
+   */
   getNearby(entity: Entity, maxDistance: number = 200): Entity[] {
-    const cellX = Math.floor(entity.position.x / this.cellSize);
-    const cellY = Math.floor(entity.position.y / this.cellSize);
+    // Select appropriate layer
+    // We want the cell size that is roughly >= 2 * maxDistance, or slightly smaller?
+    // Actually, smaller cell size = more checks but less entities per cell.
+    // Larger cell size = fewer checks but more entities.
+    // Best practice: Cell Size ~= Query Diameter (2 * r).
+    // range 100 -> Layer 0 (150)
+    // range 300 -> Layer 1 (450)
+    // range 1000 -> Layer 2 (1500)
+
+    let layerIdx = 0;
+    if (maxDistance > 600) layerIdx = 2;
+    else if (maxDistance > 200) layerIdx = 1;
+
+    const layer = this.layers[layerIdx];
+    const cellSize = layer.cellSize;
+
+    const cx = Math.floor(entity.position.x / cellSize);
+    const cy = Math.floor(entity.position.y / cellSize);
+    const distSq = maxDistance * maxDistance;
 
     const nearby: Entity[] = [];
-    const maxDistanceSq = maxDistance * maxDistance;
-    
+
+    // Check 3x3 neighbor cells
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
-        const key = this.getKey(cellX + dx, cellY + dy); // INTEGER key!
-        const bucket = this.grid.get(key);
-        if (bucket && bucket.length > 0) {
-          // Fast array copy with distance culling
+        const key = this.getKey(cx + dx, cy + dy);
+        const bucket = layer.grid.get(key);
+        if (bucket) {
           for (let i = 0; i < bucket.length; i++) {
             const other = bucket[i];
             if (other === entity) continue;
-            
-            // Distance culling - skip if too far
-            const dx = other.position.x - entity.position.x;
-            const dy = other.position.y - entity.position.y;
-            const distSq = dx * dx + dy * dy;
-            
-            if (distSq <= maxDistanceSq) {
+
+            const ddx = other.position.x - entity.position.x;
+            const ddy = other.position.y - entity.position.y;
+            if (ddx * ddx + ddy * ddy <= distSq) {
               nearby.push(other);
             }
           }
@@ -133,13 +158,17 @@ class ParticlePool {
 
 // --- S-TIER: GameEngine Class (Encapsulated Singletons) ---
 // Each GameState owns its own engine instance, preventing multi-mount issues.
+import { PhysicsWorld } from './PhysicsWorld';
+
 export class GameEngine {
   public spatialGrid: SpatialGrid;
   public particlePool: ParticlePool;
+  public physicsWorld: PhysicsWorld;
 
   constructor() {
-    this.spatialGrid = new SpatialGrid(GRID_CELL_SIZE);
+    this.spatialGrid = new SpatialGrid();
     this.particlePool = new ParticlePool();
+    this.physicsWorld = new PhysicsWorld(5000); // Capacity 5000
   }
 }
 

@@ -70,36 +70,36 @@ export class AAAVisualEngine {
 
   private initializeWebGL() {
     const gl = this.gl;
-    
+
     // Enable WebGL features
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    
+
     // Set up viewport
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    
+
     // Create render targets for post-processing
     this.createRenderTargets();
-    
+
     console.log('🎨 AAA Visual Engine initialized with WebGL');
   }
 
   private createRenderTargets() {
     const gl = this.gl;
-    
+
     // Create color buffer
     const colorTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, colorTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.canvas.width, this.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    
+
     // Create depth buffer
     const depthTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, depthTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, this.canvas.width, this.canvas.height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
-    
+
     this.renderTargets.push(colorTexture, depthTexture);
   }
 
@@ -204,20 +204,20 @@ export class AAAVisualEngine {
 
   private createShader(name: string, vertexSource: string, fragmentSource: string) {
     const gl = this.gl;
-    
+
     const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
     gl.shaderSource(vertexShader, vertexSource);
     gl.compileShader(vertexShader);
-    
+
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
     gl.shaderSource(fragmentShader, fragmentSource);
     gl.compileShader(fragmentShader);
-    
+
     const program = gl.createProgram()!;
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
-    
+
     this.shaders.set(name, program);
   }
 
@@ -289,7 +289,7 @@ export class AAAVisualEngine {
     });
   }
 
-  private createParticleSystem(name: string, config: ParticleSystemConfig) {
+  public createParticleSystem(name: string, config: ParticleSystemConfig) {
     const system = new ParticleSystem(this.gl, config);
     this.particleSystems.set(name, system);
   }
@@ -346,7 +346,7 @@ export class AAAVisualEngine {
 
   private createDynamicLight(light: DynamicLight) {
     this.dynamicLights.push(light);
-    
+
     // Remove light after duration
     setTimeout(() => {
       this.dynamicLights = this.dynamicLights.filter(l => l.id !== light.id);
@@ -367,7 +367,7 @@ export class AAAVisualEngine {
   // Quality management
   setQualityLevel(level: 'low' | 'medium' | 'high' | 'ultra') {
     this.qualityLevel = level;
-    
+
     // Adjust particle counts based on quality
     const qualityMultipliers = {
       low: 0.25,
@@ -377,7 +377,7 @@ export class AAAVisualEngine {
     };
 
     const multiplier = qualityMultipliers[level];
-    
+
     this.particleSystems.forEach(system => {
       system.setMaxParticles(Math.floor(system.config.maxParticles * multiplier));
     });
@@ -394,7 +394,7 @@ export class AAAVisualEngine {
   render(deltaTime: number) {
     const gl = this.gl;
     const now = performance.now();
-    
+
     // Calculate FPS
     this.frameCount++;
     if (now - this.lastFrameTime >= 1000) {
@@ -405,13 +405,13 @@ export class AAAVisualEngine {
 
     // Clear screen
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    
+
     // Render particle systems
     this.renderParticleSystems(deltaTime);
-    
+
     // Apply post-processing
     this.applyPostProcessing();
-    
+
     // Update active effects
     this.updateEffects(deltaTime);
   }
@@ -419,15 +419,15 @@ export class AAAVisualEngine {
   private renderParticleSystems(deltaTime: number) {
     const gl = this.gl;
     const shader = this.shaders.get('particle');
-    
+
     if (!shader) return;
-    
+
     gl.useProgram(shader);
-    
+
     // Set uniforms
     const timeLocation = gl.getUniformLocation(shader, 'uTime');
     gl.uniform1f(timeLocation, performance.now() / 1000);
-    
+
     // Render each particle system
     this.particleSystems.forEach(system => {
       system.render(gl, shader, deltaTime);
@@ -436,10 +436,10 @@ export class AAAVisualEngine {
 
   private applyPostProcessing() {
     const gl = this.gl;
-    
+
     // Render to texture
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    
+
     // Apply each enabled post-processing effect
     this.postProcessingEffects
       .filter(effect => effect.enabled)
@@ -451,15 +451,15 @@ export class AAAVisualEngine {
   private applyPostEffect(effect: PostProcessingEffect) {
     const gl = this.gl;
     const shader = this.shaders.get(effect.type);
-    
+
     if (!shader) return;
-    
+
     gl.useProgram(shader);
-    
+
     // Set effect-specific uniforms
     const intensityLocation = gl.getUniformLocation(shader, 'uIntensity');
     gl.uniform1f(intensityLocation, effect.intensity);
-    
+
     // Draw full-screen quad
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -508,7 +508,7 @@ class ParticleSystem {
 
   emit(position: { x: number; y: number; z: number }, intensity: number, color: { r: number; g: number; b: number; a: number }) {
     const particlesToEmit = Math.floor(this.config.emissionRate * intensity);
-    
+
     for (let i = 0; i < particlesToEmit && this.particles.length < this.maxParticles; i++) {
       const particle = new Particle();
       particle.position = { ...position };
@@ -520,7 +520,7 @@ class ParticleSystem {
       particle.color = { ...color };
       particle.life = 1.0;
       particle.size = this.config.startSize;
-      
+
       this.particles.push(particle);
     }
   }
@@ -529,22 +529,22 @@ class ParticleSystem {
     // Update particles
     this.particles = this.particles.filter(particle => {
       particle.life -= deltaTime / this.config.particleLifetime;
-      
+
       if (particle.life <= 0) return false;
-      
+
       // Update position
       particle.position.x += particle.velocity.x * deltaTime;
       particle.position.y += particle.velocity.y * deltaTime;
       particle.position.z += particle.velocity.z * deltaTime;
-      
+
       // Update velocity (acceleration)
       particle.velocity.x += this.config.acceleration.x * deltaTime;
       particle.velocity.y += this.config.acceleration.y * deltaTime;
       particle.velocity.z += this.config.acceleration.z * deltaTime;
-      
+
       // Update size
       particle.size = this.config.startSize + (this.config.endSize - this.config.startSize) * (1.0 - particle.life);
-      
+
       return true;
     });
 
@@ -552,7 +552,7 @@ class ParticleSystem {
     if (this.particles.length === 0) return;
 
     const vertices: number[] = [];
-    
+
     this.particles.forEach(particle => {
       vertices.push(
         particle.position.x, particle.position.y, particle.position.z,

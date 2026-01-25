@@ -35,6 +35,7 @@ import {
 } from './services/ui/storage';
 import { applyTattoo } from './services/cjr/tattoos';
 import { networkClient } from './services/networking/NetworkClient';
+import { audioExcellence } from './services/audio/AudioExcellence';
 import {
   cancelQueue,
   createMatchmakingState,
@@ -52,6 +53,7 @@ import {
 } from './services/meta/tournaments';
 import TournamentLobbyScreen from './components/screens/TournamentLobbyScreen';
 import { updateProfileStats, unlockBadge } from './services/profile';
+import BackgroundCanvas from './components/BackgroundCanvas';
 
 const PixiGameCanvas = React.lazy(() => import('./components/PixiGameCanvas'));
 
@@ -232,7 +234,12 @@ const App: React.FC = () => {
     }
 
     if (settings.useMultiplayer && networkStatus === 'online') {
-      networkClient.sendInput(state.player.targetPosition, state.inputs);
+      networkClient.sendInput(state.player.targetPosition, state.inputs, safeDt);
+    }
+
+    // Audio Mix Update
+    if (state.player && !state.isPaused) {
+      audioExcellence.updateTattooMix(state.player.tattoos);
     }
 
     if (state.tattooChoices && !tattooOverlayArmedRef.current) {
@@ -357,6 +364,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app-shell select-none">
+      <BackgroundCanvas gameStateRef={gameStateRef} />
       <ErrorBoundary>
         {ui.screen === 'boot' && <BootScreen />}
 

@@ -1,6 +1,7 @@
 
 import { GameState, Bot, Player } from '../../types';
 import { distance } from '../engine/math';
+import { createFloatingText } from '../engine/effects';
 
 export const updateBossLogic = (state: GameState, dt: number) => {
     // Check if Boss exists
@@ -82,4 +83,8 @@ export const onBossDeath = (state: GameState, boss: Bot) => {
     state.runtime.boss.rushWindowRing = 2; // Open Ring 2->3
 
     // Distribute Rewards
+    state.players.forEach(p => {
+        p.score += 500;
+        createFloatingText(p.position, 'BOSS SLAIN', '#ffcc00', 40, state);
+    });
 };
