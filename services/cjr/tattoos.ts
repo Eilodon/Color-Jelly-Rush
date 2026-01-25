@@ -1,5 +1,5 @@
 
-import { MutationTier, Player, Bot, Food, GameState } from '../../types';
+import { TattooTier, Player, Bot, Food, GameState } from '../../types';
 import { TattooId } from './cjrTypes';
 import { COLOR_BALANCE } from './balance';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
@@ -10,7 +10,7 @@ import { createParticle, createFood } from '../engine/factories';
 export interface TattooDefinition {
     id: TattooId;
     name: string;
-    tier: MutationTier;
+    tier: TattooTier;
     description: string;
     apply: (player: Player) => void;
     // Event hooks for tattoo effects
@@ -24,7 +24,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.FilterInk,
         name: 'Filter Ink',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Reduce impact of wrong pigments by 40%.',
         apply: (player: Player) => {
             player.statusEffects.wrongPigmentReduction = 0.6; // 40% reduction
@@ -41,7 +41,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.Overdrive,
         name: 'Overdrive',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Skill triggers 3s fast-eat mode.',
         apply: (player: Player) => {
             player.statusEffects.overdriveActive = true;
@@ -54,7 +54,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.DepositShield,
         name: 'Deposit Shield',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Gain shield while holding core (Ring 3).',
         apply: (player: Player) => {
             player.statusEffects.coreShieldBonus = true;
@@ -70,7 +70,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.PigmentBomb,
         name: 'Pigment Bomb',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Getting hit splashes 30% of your color on enemy.',
         apply: (player: Player) => {
             player.statusEffects.pigmentBombActive = true;
@@ -92,7 +92,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.PerfectMatch,
         name: 'Perfect Match Bonus',
-        tier: MutationTier.Rare,
+        tier: TattooTier.Rare,
         description: 'Match ≥85% grants 50% extra mass and speed.',
         apply: (player: Player) => {
             player.statusEffects.perfectMatchThreshold = 0.85;
@@ -107,7 +107,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.CatalystSense,
         name: 'Catalyst Sense',
-        tier: MutationTier.Rare,
+        tier: TattooTier.Rare,
         description: 'Attract catalysts from 2x distance and highlight them.',
         apply: (player: Player) => {
             player.statusEffects.catalystSenseRange = 2.0;
@@ -117,7 +117,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.NeutralMastery,
         name: 'Neutral Mastery',
-        tier: MutationTier.Rare,
+        tier: TattooTier.Rare,
         description: 'Neutral pickups give 25% extra mass.',
         apply: (player: Player) => {
             player.statusEffects.neutralMassBonus = 1.25;
@@ -126,7 +126,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.SolventExpert,
         name: 'Solvent Expert',
-        tier: MutationTier.Epic,
+        tier: TattooTier.Epic,
         description: 'Solvent cleanses 2x faster and provides brief speed boost.',
         apply: (player: Player) => {
             player.statusEffects.solventPower = 2.0;
@@ -136,7 +136,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.CatalystEcho,
         name: 'Catalyst Echo',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Catalysts last longer and grant extra mass.',
         apply: (player: Player) => {
             player.statusEffects.catalystEchoBonus = 1.3;
@@ -146,7 +146,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.PrismGuard,
         name: 'Prism Guard',
-        tier: MutationTier.Rare,
+        tier: TattooTier.Rare,
         description: 'Match ≥80% reduces incoming damage by 20%.',
         apply: (player: Player) => {
             player.statusEffects.prismGuardThreshold = 0.8;
@@ -156,7 +156,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.InkLeech,
         name: 'Ink Leech',
-        tier: MutationTier.Epic,
+        tier: TattooTier.Epic,
         description: 'Deal damage to heal for 20% of it.',
         apply: (player: Player) => {
             player.lifesteal = Math.max(player.lifesteal || 0, 0.2);
@@ -165,7 +165,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.GrimHarvest,
         name: 'Grim Harvest',
-        tier: MutationTier.Epic,
+        tier: TattooTier.Epic,
         description: 'Killing enemies spawns neutral mass.',
         apply: (player: Player) => {
             player.statusEffects.grimHarvestDropCount = 2;
@@ -176,7 +176,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.SpeedSurge,
         name: 'Speed Surge',
-        tier: MutationTier.Common,
+        tier: TattooTier.Common,
         description: 'Passive 15% speed boost. Dash is cheaper.',
         apply: (player: Player) => {
             player.statusEffects.speedSurge = 1;
@@ -187,7 +187,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.Invulnerable,
         name: 'Titan Skin',
-        tier: MutationTier.Epic,
+        tier: TattooTier.Epic,
         description: 'Start with 3s invulnerability. Gain 50% defense.',
         apply: (player: Player) => {
             player.statusEffects.invulnerable = 3.0; // Start invuln
@@ -197,7 +197,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.Rewind,
         name: 'Time Anchor',
-        tier: MutationTier.Legendary,
+        tier: TattooTier.Legendary,
         description: 'Fatal damage restores 50% HP and rewinds position (once/run).',
         apply: (player: Player) => {
             player.reviveAvailable = true;
@@ -209,7 +209,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.Magnet,
         name: 'Void Magnet',
-        tier: MutationTier.Rare,
+        tier: TattooTier.Rare,
         description: 'Significantly increased pickup radius.',
         apply: (player: Player) => {
             player.magneticFieldRadius = 150;
@@ -219,7 +219,7 @@ const TATTOOS: TattooDefinition[] = [
     {
         id: TattooId.KingForm,
         name: 'Crown of Light',
-        tier: MutationTier.Legendary,
+        tier: TattooTier.Legendary,
         description: 'Win requirement reduced to 85%. You glow with authority.',
         apply: (player: Player) => {
             // Logic handled in winCondition.ts to check this ID? 
@@ -249,7 +249,7 @@ export const applyTattoo = (player: Player, id: TattooId, state?: any) => {
 export interface TattooChoice {
     id: TattooId;
     name: string;
-    tier: MutationTier;
+    tier: TattooTier;
     description: string;
 }
 

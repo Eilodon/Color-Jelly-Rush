@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MutationTier, TattooChoice } from '../types';
+import { TattooTier, TattooChoice } from '../types';
 import { TattooId } from '../services/cjr/cjrTypes';
 
 interface TattooPickerProps {
@@ -8,17 +8,17 @@ interface TattooPickerProps {
     onSelect: (id: string) => void;
 }
 
-const tierColor = (tier: MutationTier) => {
-    if (tier === MutationTier.Legendary) return 'text-yellow-300 border-yellow-500/50 shadow-yellow-500/20';
-    if (tier === MutationTier.Epic) return 'text-purple-300 border-purple-500/50 shadow-purple-500/20';
-    if (tier === MutationTier.Rare) return 'text-sky-300 border-sky-500/50 shadow-sky-500/20';
+const tierColor = (tier: TattooTier) => {
+    if (tier === TattooTier.Legendary) return 'text-yellow-300 border-yellow-500/50 shadow-yellow-500/20';
+    if (tier === TattooTier.Epic) return 'text-purple-300 border-purple-500/50 shadow-purple-500/20';
+    if (tier === TattooTier.Rare) return 'text-sky-300 border-sky-500/50 shadow-sky-500/20';
     return 'text-emerald-300 border-emerald-500/50 shadow-emerald-500/20';
 };
 
-const tierLabel = (tier: MutationTier) => {
-    if (tier === MutationTier.Legendary) return 'Legendary';
-    if (tier === MutationTier.Epic) return 'Epic';
-    if (tier === MutationTier.Rare) return 'Rare';
+const tierLabel = (tier: TattooTier) => {
+    if (tier === TattooTier.Legendary) return 'Legendary';
+    if (tier === TattooTier.Epic) return 'Epic';
+    if (tier === TattooTier.Rare) return 'Rare';
     return 'Common';
 };
 

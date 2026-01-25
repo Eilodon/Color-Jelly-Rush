@@ -21,13 +21,25 @@ export const getColorHint = (current: PigmentVec3, target: PigmentVec3): string 
 };
 
 export const calcMatchPercent = (p1: PigmentVec3, p2: PigmentVec3): number => {
-    // 1.0 - (Euclidean Distance / Max Distance)
-    // Max dist in 3D unit cube is sqrt(3) ~ 1.732
+    // EIDOLON-V: Gaussian Dopamine Curve (The "Bell of Flow")
+    // Formula: e^(-k * dist^2)
+    // Matches "Forgiving Start" -> "Sharp Drop" which is better for Flow State.
+    // k = 2.5
+    // Dist 0.00 -> 1.00 (Perfect)
+    // Dist 0.14 -> 0.95 (Super Forgiving)
+    // Dist 0.30 -> 0.80 (Good)
+    // Dist 0.50 -> 0.53 (The "Mid" Point)
+    // Dist 1.00 -> 0.08 (Trash)
+
     const dr = p1.r - p2.r;
     const dg = p1.g - p2.g;
     const db = p1.b - p2.b;
-    const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-    return Math.max(0, 1 - (dist / 1.732));
+    const distSq = dr * dr + dg * dg + db * db;
+
+    // Low K means wider bell = more forgiving.
+    const k = 2.5;
+
+    return Math.exp(-k * distSq);
 };
 
 export const mixPigment = (current: PigmentVec3, added: PigmentVec3, ratio: number): PigmentVec3 => {

@@ -79,7 +79,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         syncEntities(entityLayer, state, app.ticker.lastTime / 1000);
 
         // VFX / UI
-        // (Previous particle system logic can be ported here, kept simple for this step)
+        // Living Membrane Pulse
+        if (ringsGraphicsRef.current) {
+          const t = app.ticker.lastTime / 1000;
+          ringsGraphicsRef.current.alpha = 0.8 + Math.sin(t * 2.0) * 0.2; // Pulse between 0.6 and 1.0 (relative to base alphas)
+        }
       });
     });
 
@@ -115,21 +119,25 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
         uBorderColor: [0, 0, 0],
         uDeformMode: 0,
         uPatternMode: 0,
+        uEmotion: 0,
+        uEnergy: 0, // NEW: Energy Level
+        uMatchPercent: 0.5,
       }
     });
     shaderCache.current = shader;
   };
 
+  // Ref for Ring Graphics to animate them
+  const ringsGraphicsRef = useRef<Graphics | null>(null);
+
   const drawMap = (container: Container) => {
     const g = new Graphics();
+    ringsGraphicsRef.current = g;
 
-    // Ring 3 (Death)
+    // Rings will be redrawn or just alpha animated?
+    // Initial draw
     g.circle(0, 0, RING_RADII.R3).stroke({ width: 4, color: COLOR_PALETTE.rings.r3, alpha: 0.5 });
-
-    // Ring 2 (Mid)
     g.circle(0, 0, RING_RADII.R2).stroke({ width: 4, color: COLOR_PALETTE.rings.r2, alpha: 0.3 });
-
-    // Ring 1 (Outer) - Map Boundary
     g.circle(0, 0, RING_RADII.R1).stroke({ width: 2, color: COLOR_PALETTE.rings.r1, alpha: 0.2 });
 
     container.addChild(g);
@@ -171,7 +179,9 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
                 uAlpha: 1,
                 uBorderColor: [0, 0, 0],
                 uDeformMode: 0,
-                uPatternMode: 0
+                uPatternMode: 0,
+                uEmotion: 0,
+                uMatchPercent: 0.5
               }
             });
           } else {
@@ -242,6 +252,39 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
               pattern = 2; // Electric
             }
           }
+
+          // Emotion & Match Logic (EIDOLON-V UPGRADE)
+          const EMOTION_MAP: Record<string, number> = {
+            'happy': 0, 'focus': 0, 'victory': 0,
+            'hungry': 1,
+            'panic': 2, 'despair': 2, 'ko': 2,
+            'greed': 3, 'yum': 3
+          };
+
+          let emotionVal = 0;
+          let matchVal = 0.5;
+
+          if ('emotion' in e) {
+            emotionVal = EMOTION_MAP[(e as any).emotion] ?? 0;
+          }
+
+          // Boss Telegraph Override (Spikes before dash)
+          if ((e as any).isBoss && (e as any).bossAttackTimer !== undefined && (e as any).bossAttackTimer < 1.0 && (e as any).bossAttackTimer > 0) {
+            emotionVal = 3;
+          }
+
+          if ('matchPercent' in e) {
+            matchVal = (e as any).matchPercent ?? 0;
+            // EIDOLON-V: Energy = Match%. 
+            // If Match > 0.8, let it bloom.
+            resources.uEnergy = matchVal;
+          } else {
+            resources.uEnergy = 0;
+          }
+
+          resources.uEmotion = emotionVal;
+          resources.uMatchPercent = matchVal;
+
           resources.uDeformMode = deform;
           resources.uPatternMode = pattern;
         }

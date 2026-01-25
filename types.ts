@@ -19,12 +19,16 @@ export enum SizeTier {
   AncientKing = 'Cổ Vương' // 80-100%
 }
 
-export enum MutationTier {
+// EIDOLON-V: Renaming for consistency
+export enum TattooTier {
   Common = 'Common',
   Rare = 'Rare',
   Epic = 'Epic',
   Legendary = 'Legendary',
 }
+// Alias for backward compatibility if needed, else replace usages
+export type MutationTier = TattooTier; // Backward compact
+export const MutationTier = TattooTier;
 
 export interface Vector2 {
   x: number;

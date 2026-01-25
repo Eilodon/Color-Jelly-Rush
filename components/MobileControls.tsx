@@ -9,36 +9,95 @@ interface MobileControlsProps {
 
 const MobileControls: React.FC<MobileControlsProps> = ({ onMove, onAction, onActionEnd }) => {
   const stickRef = useRef<HTMLDivElement>(null);
+  const baseRef = useRef<HTMLDivElement>(null);
+  const touchIdRef = useRef<number | null>(null);
 
-  // Joystick logic (simplified for MVP)
-  // ...
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (touchIdRef.current !== null) return;
+    const touch = e.changedTouches[0];
+    touchIdRef.current = touch.identifier;
+    updateStick(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (touchIdRef.current === null) return;
+    const touch = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
+    if (touch) updateStick(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault();
+    const touch = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
+    if (touch) {
+      touchIdRef.current = null;
+      if (stickRef.current) {
+        stickRef.current.style.transform = `translate(0px, 0px)`;
+      }
+      onMove(0, 0); // Reset
+    }
+  };
+
+  const updateStick = (clientX: number, clientY: number) => {
+    if (!baseRef.current || !stickRef.current) return;
+    const rect = baseRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let dx = clientX - centerX;
+    let dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = rect.width / 2;
+
+    if (dist > maxDist) {
+      dx = (dx / dist) * maxDist;
+      dy = (dy / dist) * maxDist;
+    }
+
+    stickRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    // Normalize output -1..1
+    // Ideally we map this to screen space targetPosition relative to camera
+    // But Game expects a target position usually?
+    // Wait, updatePlayer uses targetPosition. 
+    // If joystick, we need to convert (dx, dy) to a target offset from player.
+    onMove(dx / maxDist, dy / maxDist);
+  };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-50">
+    <div className="absolute inset-0 pointer-events-none z-50 select-none">
       {/* Joystick Area */}
-      <div className="absolute bottom-10 left-10 w-40 h-40 bg-white/10 rounded-full pointer-events-auto"
-        onTouchMove={(e) => {
-          // Calculate delta
-          const touch = e.touches[0];
-          // normalized -1..1
-          onMove(0.5, 0.5); // Placeholder
-        }}
-      />
+      <div
+        ref={baseRef}
+        className="absolute bottom-8 left-8 w-40 h-40 bg-white/10 rounded-full pointer-events-auto backdrop-blur-sm border-2 border-white/20 active:bg-white/20 transition-colors"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        <div
+          ref={stickRef}
+          className="absolute top-1/2 left-1/2 w-16 h-16 -ml-8 -mt-8 bg-white rounded-full shadow-lg pointer-events-none"
+        />
+      </div>
 
       {/* Action Buttons */}
-      <div className="absolute bottom-10 right-10 flex gap-4 pointer-events-auto">
+      <div className="absolute bottom-8 right-8 flex gap-6 pointer-events-auto items-end">
+        {/* Eject (Smaller) */}
         <button
-          className="w-20 h-20 bg-red-500/50 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-          onTouchStart={() => onAction('eject')}
-          onTouchEnd={() => onActionEnd('eject')}
+          className="w-16 h-16 bg-red-500/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-2 border-white/20"
+          onTouchStart={(e) => { e.preventDefault(); onAction('eject'); }}
+          onTouchEnd={(e) => { e.preventDefault(); onActionEnd('eject'); }}
         >
-          EJECT
+          <span className="text-xs">EJECT</span>
         </button>
 
+        {/* Skill (Larger) */}
         <button
-          className="w-24 h-24 bg-blue-500/50 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-          onTouchStart={() => onAction('skill')}
-          onTouchEnd={() => onActionEnd('skill')}
+          className="w-24 h-24 bg-blue-500/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-4 border-white/20"
+          onTouchStart={(e) => { e.preventDefault(); onAction('skill'); }}
+          onTouchEnd={(e) => { e.preventDefault(); onActionEnd('skill'); }}
         >
           SKILL
         </button>

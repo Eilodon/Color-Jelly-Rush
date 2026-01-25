@@ -83,10 +83,20 @@ export const checkRingTransition = (player: Player) => {
     }
 };
 
+import { updateGameplayStats, getRuntimeStats } from '../runtimeStats';
+
 const applyCommitBuff = (player: Player, buff: any) => {
     player.statusEffects.commitShield = buff.shield;
     player.statusEffects.speedBoost = Math.max(player.statusEffects.speedBoost, buff.speed);
     player.statusEffects.tempSpeedTimer = buff.duration;
+
+    // Telemetry
+    if (player.ring === 2) {
+        updateGameplayStats({ ring2EntryTime: getRuntimeStats().gameplay.ring2EntryTime ?? Date.now() });
+    }
+    if (player.ring === 3) {
+        updateGameplayStats({ ring3EntryTime: getRuntimeStats().gameplay.ring3EntryTime ?? Date.now() });
+    }
 };
 
 /**
