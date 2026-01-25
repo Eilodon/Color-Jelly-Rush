@@ -1,146 +1,114 @@
-
 import {
   FRICTION_BASE,
   MAX_SPEED_BASE,
   MAX_ENTITY_RADIUS,
 } from '../../../constants';
 import { Entity, Player, Bot, SizeTier } from '../../../types';
-import { PhysicsWorld } from '../PhysicsWorld';
 
 /**
- * DOD PHYSICS UPDATE (The Purge)
- * Iterates over Float32Arrays for maximum cache locality.
+ * PHASE 1: DIRECT ENTITY INTEGRATION (The Cure)
+ * Removes the need for a separate PhysicsWorld and syncing.
+ * Mutates Entity state directly.
  */
-export const updatePhysicsWorld = (world: PhysicsWorld, dt: number) => {
-  const count = world.capacity;
-  const frictionBase = Math.pow(FRICTION_BASE, dt * 60);
 
-  // 1. Integration Loop (SIMD-friendly if JIT optimizes)
-  for (let i = 0; i < count; i++) {
-    if ((world.flags[i] & 1) === 0) continue; // Inactive
+export const integrateEntity = (e: Player | Bot, dt: number) => {
+  // 1. Friction / Drag
+  // Use fixed time step assumption for determinism if possible, but here we use dt
+  const friction = Math.pow(FRICTION_BASE, dt * 60);
 
-    const px = i * 2;
-    const py = i * 2 + 1;
+  e.velocity.x *= friction;
+  e.velocity.y *= friction;
 
-    // Friction
-    world.velocities[px] *= frictionBase;
-    world.velocities[py] *= frictionBase;
+  // 2. Integration
+  e.position.x += e.velocity.x * dt * 10; // Scaling factor preserved from legacy
+  e.position.y += e.velocity.y * dt * 10;
 
-    // Position Integration
-    // Note: Using a scaler of 10 matches legacy logic
-    world.positions[px] += world.velocities[px] * dt * 10;
-    world.positions[py] += world.velocities[py] * dt * 10;
-
-    // Map Constraints (Circle)
-    // Hardcoded radius for now, should be passed in
-    const MAP_R = 2500;
-    const r2 = world.positions[px] * world.positions[px] + world.positions[py] * world.positions[py];
-    const myR = world.radii[i];
-
-    // Simple Boundary Check
-    if (Math.sqrt(r2) + myR > MAP_R) {
-      const angle = Math.atan2(world.positions[py], world.positions[px]);
-      const safeR = MAP_R - myR;
-      const nx = Math.cos(angle);
-      const ny = Math.sin(angle);
-
-      world.positions[px] = nx * safeR;
-      world.positions[py] = ny * safeR;
-
-      // Bounce
-      const dot = world.velocities[px] * nx + world.velocities[py] * ny;
-      if (dot > 0) {
-        world.velocities[px] -= 1.5 * dot * nx;
-        world.velocities[py] -= 1.5 * dot * ny;
-      }
-    }
-  }
-};
-
-/**
- * Legacy/Hybrid Bridge:
- * Applies game logic (input forces) to the Entity object.
- * AND syncs it to the PhysicsWorld.
- */
-export const applyPhysics = (entity: Player | Bot, dt: number) => {
-  // 1. Calculate Mass & Caps (Game Logic)
+  // 3. Max Speed Clamp (Soft Cap)
+  const speedSq = e.velocity.x * e.velocity.x + e.velocity.y * e.velocity.y;
+  // Calculate Cap
   const BASE_MASS_RADIUS = 28;
-  const mass = Math.max(1, Math.pow(entity.radius / BASE_MASS_RADIUS, 1.5));
-
+  const mass = Math.max(1, Math.pow(e.radius / BASE_MASS_RADIUS, 1.5));
   const speedScale = 1 / Math.pow(mass, 0.3);
-  const speedMultiplier = (entity.statusEffects?.speedBoost || 1);
-  const currentMaxSpeed = MAX_SPEED_BASE * speedScale * speedMultiplier;
+  const speedMultiplier = (e.statusEffects?.speedBoost || 1);
+  const maxSpeed = MAX_SPEED_BASE * speedScale * speedMultiplier;
 
-  // 2. Input Forces (Assume input handling modified velocity already)
-  // Clamp Speed
-  const s = Math.hypot(entity.velocity.x, entity.velocity.y);
-  if (s > currentMaxSpeed) {
-    const k = currentMaxSpeed / s;
-    entity.velocity.x *= k;
-    entity.velocity.y *= k;
+  if (speedSq > maxSpeed * maxSpeed) {
+    const speed = Math.sqrt(speedSq);
+    const k = maxSpeed / speed;
+    e.velocity.x *= k;
+    e.velocity.y *= k;
   }
-
-  // 3. Sync TO PhysicsWorld (if available) -> This would be done in batch in index.ts
-  // For now, we compute updated velocity here but let PhysicsWorld do the integration.
-  // Wait, if PhysicsWorld does integration, we shouldn't modify entity.position here?
-  // CORRECT.
-  // But for legacy compatibility with the rest of the file (factories etc), 
-  // we keep the local update as a fallback if World isn't running?
-  // No, we must switch.
-
-  // TEMPORARY: Detailed integration is done in updatePhysicsWorld.
-  // Here we just prepare data.
 };
 
 /**
- * Legacy Bridge: Resolves collisions using Entity objects but could rely on World.
+ * Resolves collisions using simple impulse or position correction.
+ * Should be called AFTER integration.
  */
 export const checkCollisions = (
   entity: Entity,
   others: Entity[],
   onCollide: (other: Entity) => void
 ) => {
-  // Standard pairwise check (Hybrid)
-  // In a full DOD system, this would iterate indices.
-  // For now, we keep object references for gameplay logic (eating).
-  others.forEach(other => {
-    if (entity === other) return;
+  const count = others.length;
+  for (let i = 0; i < count; i++) {
+    const other = others[i];
+    if (entity === other) continue;
+
     const dx = entity.position.x - other.position.x;
     const dy = entity.position.y - other.position.y;
-    const dist = Math.hypot(dx, dy);
-    const min = entity.radius + other.radius;
+    // Squared check first
+    const distSq = dx * dx + dy * dy;
+    const minR = entity.radius + other.radius;
 
-    if (dist < min) {
+    if (distSq < minR * minR) {
       onCollide(other);
-      // Soft Push
-      if (dist > 0 && !entity.isDead && !other.isDead && 'score' in other) {
-        const overlap = min - dist;
-        const push = overlap * 0.5;
+
+      // Physics Response (Push)
+      const dist = Math.sqrt(distSq);
+      if (dist > 0.001 && !entity.isDead && !other.isDead && 'score' in other) {
+        const overlap = minR - dist;
+        const push = overlap * 0.5; // Split overlap correction
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // Approximate mass
+        // Mass ratio
         const m1 = entity.radius;
         const m2 = other.radius;
-        const r1 = m2 / (m1 + m2);
+        const total = m1 + m2;
+        const r1 = m2 / total; // Inverse mass share
 
-        // Modify Entity state (will be synced to World next frame)
+        // Position Correction (Verlet-ish)
         entity.position.x += nx * push * r1;
         entity.position.y += ny * push * r1;
-        entity.velocity.x += nx * push;
-        entity.velocity.y += ny * push;
       }
     }
-  });
+  }
 };
 
 export const constrainToMap = (entity: Entity, radius: number) => {
-  // Handled in updatePhysicsWorld, but kept for non-synced entities
-  const dist = Math.hypot(entity.position.x, entity.position.y);
-  if (dist + entity.radius > radius) {
-    const angle = Math.atan2(entity.position.y, entity.position.x);
-    entity.position.x = Math.cos(angle) * (radius - entity.radius);
-    entity.position.y = Math.sin(angle) * (radius - entity.radius);
+  const x = entity.position.x;
+  const y = entity.position.y;
+  const distSq = x * x + y * y; // Optimization: avoid sqrt if inside
+
+  if (distSq + entity.radius * entity.radius > radius * radius) {
+    // Approximation check failed, do precise
+    const dist = Math.sqrt(distSq);
+    if (dist + entity.radius > radius) {
+      const angle = Math.atan2(y, x);
+      const safeR = radius - entity.radius;
+      const nx = Math.cos(angle);
+      const ny = Math.sin(angle);
+
+      entity.position.x = nx * safeR;
+      entity.position.y = ny * safeR;
+
+      // Bounce velocity
+      const dot = entity.velocity.x * nx + entity.velocity.y * ny;
+      if (dot > 0) {
+        entity.velocity.x -= dot * nx * 1.5; // 1.5 bounce
+        entity.velocity.y -= dot * ny * 1.5;
+      }
+    }
   }
 };
 
@@ -159,3 +127,5 @@ export const applyGrowth = (entity: Player | Bot, amount: number) => {
   entity.radius = Math.sqrt(newArea / Math.PI);
   if (entity.radius > MAX_ENTITY_RADIUS) entity.radius = MAX_ENTITY_RADIUS;
 };
+
+// Removed: updatePhysicsWorld, applyPhysics (Legacy)

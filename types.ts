@@ -342,7 +342,6 @@ export interface GameRuntimeState {
 export interface IGameEngine {
   spatialGrid: any;
   particlePool: any;
-  physicsWorld: any;
 }
 
 export interface GameState {
@@ -381,4 +380,5 @@ export interface GameState {
     space: boolean;
     w: boolean;
   };
+  inputEvents: Array<{ type: 'skill' | 'eject'; id: string }>; // Phase 3: Command Queue
 }

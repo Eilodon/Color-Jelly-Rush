@@ -140,6 +140,7 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
     },
     killStreak: 0,
     streakTimer: 0,
+    inputEvents: [], // Phase 3: Command Queue
   };
 };
 

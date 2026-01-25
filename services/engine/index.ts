@@ -39,7 +39,7 @@ import { createFloatingText } from './effects';
 import { distance, normalize, randomRange } from './math';
 import { updateAI } from './systems/ai';
 import { applyProjectileEffect, resolveCombat, consumePickup } from './systems/combat';
-import { applyPhysics, checkCollisions, constrainToMap } from './systems/physics';
+import { integrateEntity, checkCollisions, constrainToMap } from './systems/physics';
 import { applySkill } from './systems/skills';
 import { updateRingLogic } from '../cjr/ringSystem';
 import { updateWaveSpawner, resetWaveTimers } from '../cjr/waveSpawner';
@@ -54,7 +54,6 @@ import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
 import { resetContributionLog } from '../cjr/contribution';
 
-import { updatePhysicsWorld } from './systems/physics';
 
 // --- Main Game Loop ---
 export const updateGameState = (state: GameState, dt: number): GameState => {
@@ -72,40 +71,25 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   bindEngine(state.engine);
   const grid = getCurrentSpatialGrid();
   grid.clear();
-  const indexer = state.engine.physicsWorld;
 
-  // 1.5. SYNC ENTITIES TO PHYSICS WORLD (Hybrid Bridge)
-  const syncList = [...players, ...state.bots]; // Only sync movers
-  syncList.forEach(e => {
-    let idx = indexer.idToIndex.get(e.id);
-    if (idx === undefined) {
-      // Register Layout
-      // Calculate Mass for initial setup
-      const r = e.radius;
-      const m = r * r;
-      idx = indexer.addBody(e.id, e.position.x, e.position.y, e.radius, m, true);
-    }
-    // Sync Velocity/Input from Logic
-    indexer.velocities[idx * 2] = e.velocity.x;
-    indexer.velocities[idx * 2 + 1] = e.velocity.y;
-    indexer.radii[idx] = e.radius;
-    indexer.positions[idx * 2] = e.position.x; // Strict Sync In case Logic moved it
-    indexer.positions[idx * 2 + 1] = e.position.y;
+  // PHASE 1 REFACTOR: REMOVED PHYSICS WORLD SYNC
+  // Now we integrate directly in Step 2.
+
+  // 2. PHYSICS INTEGRATION (The Flow)
+  // Input Handling + Physics for Players
+  players.forEach(p => {
+    // Inputs already mapped to velocity in input handling or client prediction?
+    // Actually, updatePlayer calls handleInput which usually modifies velocity or target.
+    // We'll integrate movement here.
+    integrateEntity(p, dt);
   });
 
-  // 2. RUN DOD PHYSICS
-  updatePhysicsWorld(indexer, dt);
-
-  // 3. SYNC BACK TO ENTITIES
-  syncList.forEach(e => {
-    const idx = indexer.idToIndex.get(e.id);
-    if (idx !== undefined) {
-      e.position.x = indexer.positions[idx * 2];
-      e.position.y = indexer.positions[idx * 2 + 1];
-      e.velocity.x = indexer.velocities[idx * 2];
-      e.velocity.y = indexer.velocities[idx * 2 + 1];
-    }
+  // Physics for Bots
+  state.bots.forEach(b => {
+    if (!b.isDead) integrateEntity(b, dt);
   });
+
+  // 3. REMOVED SYNC BACK (Clean!)
 
   // 4. Game Time & Round Logic
   state.gameTime += dt;
@@ -170,8 +154,7 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
   const activeInputs = player.inputs ?? state.inputs;
   handleInput(player, activeInputs, dt, state);
 
-  // Physics
-  applyPhysics(player, dt);
+  // Physics (Integrated in updateGameState now)
   constrainToMap(player, MAP_RADIUS);
 
   // Interaction
@@ -262,8 +245,7 @@ const updateBot = (bot: Bot, state: GameState, dt: number) => {
   // AI Logic
   updateAI(bot, state, dt);
 
-  // Physics
-  applyPhysics(bot, dt);
+  // Physics (Integrated in updateGameState now)
   constrainToMap(bot, MAP_RADIUS);
 
   // Interaction
@@ -308,10 +290,19 @@ const handleInput = (player: Player, inputs: { space: boolean; w: boolean }, dt:
   // Movement vector is set by UI/Mouse elsewhere (player.targetPosition)
   // Here we just process actions like Space (Dash/Split in original, Skill in new)
 
-  if (inputs.space) {
-    // Trigger Skill
-    applySkill(player, undefined, state);
+  // Phase 3: Event Queue Processing
+  if (player.inputEvents && player.inputEvents.length > 0) {
+    player.inputEvents.forEach(evt => {
+      if (evt.type === 'skill') {
+        applySkill(player, undefined, state);
+      }
+      // handle 'eject' if separate
+    });
+    player.inputEvents = []; // Consume
   }
+
+  // Legacy / Continuous Hold Support (Optional)
+  // if (inputs.space) applySkill(player, undefined, state);
 
   // W for Eject? (Maybe keep for team play later)
 };
@@ -555,5 +546,6 @@ export const createInitialState = (level: number = 1): GameState => {
     result: null,
     vfxEvents: [],
     inputs: { space: false, w: false },
+    inputEvents: [],
   };
 };

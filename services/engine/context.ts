@@ -158,17 +158,13 @@ class ParticlePool {
 
 // --- S-TIER: GameEngine Class (Encapsulated Singletons) ---
 // Each GameState owns its own engine instance, preventing multi-mount issues.
-import { PhysicsWorld } from './PhysicsWorld';
-
 export class GameEngine {
   public spatialGrid: SpatialGrid;
   public particlePool: ParticlePool;
-  public physicsWorld: PhysicsWorld;
 
   constructor() {
     this.spatialGrid = new SpatialGrid();
     this.particlePool = new ParticlePool();
-    this.physicsWorld = new PhysicsWorld(5000); // Capacity 5000
   }
 }
 

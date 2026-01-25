@@ -234,7 +234,9 @@ const App: React.FC = () => {
     }
 
     if (settings.useMultiplayer && networkStatus === 'online') {
-      networkClient.sendInput(state.player.targetPosition, state.inputs, safeDt);
+      const events = [...inputQueueRef.current];
+      inputQueueRef.current = []; // Clear
+      networkClient.sendInput(state.player.targetPosition, state.inputs, safeDt, events);
     }
 
     // Audio Mix Update
@@ -312,14 +314,29 @@ const App: React.FC = () => {
     state.isPaused = ui.overlays.length > 0;
   }, [ui.overlays.length, ui.screen]);
 
+  const inputQueueRef = useRef<Array<{ type: 'skill' | 'eject'; id: string }>>([]);
+
+  // ... (keep usage of state.inputs as well for local prediction if needed, but Queue is primary for Network)
+
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => {
       const state = gameStateRef.current;
       if (!state) return;
       if (uiRef.current.screen !== 'playing') return;
       if (uiRef.current.overlays.length > 0) return;
-      if (e.code === 'Space') state.inputs.space = true;
-      if (e.code === 'KeyW') state.inputs.w = true;
+      if (e.code === 'Space') {
+        if (!state.inputs.space) {
+          // Edge Trigger
+          inputQueueRef.current.push({ type: 'skill', id: Math.random().toString(36) });
+        }
+        state.inputs.space = true;
+      }
+      if (e.code === 'KeyW') {
+        if (!state.inputs.w) {
+          inputQueueRef.current.push({ type: 'eject', id: Math.random().toString(36) });
+        }
+        state.inputs.w = true;
+      }
     };
     const handleUp = (e: KeyboardEvent) => {
       const state = gameStateRef.current;

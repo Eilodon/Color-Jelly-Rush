@@ -3,6 +3,7 @@ import * as Colyseus from 'colyseus.js';
 import type { Room } from 'colyseus.js';
 import type { GameState, Player, Bot, Food, Projectile, Vector2 } from '../../types';
 import type { PigmentVec3, ShapeId, Emotion, PickupKind, TattooId } from '../cjr/cjrTypes';
+import { integrateEntity } from '../engine/systems/physics';
 
 interface NetworkConfig {
   serverUrl: string;
@@ -31,6 +32,16 @@ type NetworkSnapshot = {
   food: Map<string, EntitySnapshot>;
 };
 
+// EIDOLON-V: Input History for Reconciliation
+interface InputHistory {
+  seq: number;
+  input: { space: boolean; w: boolean };
+  target: Vector2;
+  dt: number;
+  // Snapshot of state BEFORE this input was applied
+  stateBefore: { x: number; y: number; vx: number; vy: number };
+}
+
 export class NetworkClient {
   private config: NetworkConfig;
   private room: Room | null = null;
@@ -39,7 +50,10 @@ export class NetworkClient {
   // Local GameState reference to sync into
   private localState: GameState | null = null;
   private inputSeq = 0;
-  private pendingInputs: Array<{ seq: number; target: Vector2; inputs: { space: boolean; w: boolean }; dt: number }> = [];
+
+  // Phase 2: Reconciliation Buffer
+  private pendingInputs: InputHistory[] = [];
+
   private reconcileThreshold = 20; // 20px allowance
   private statusListener?: (status: NetworkStatus) => void;
   private lastCredentials?: { name: string; shape: ShapeId };
@@ -164,6 +178,9 @@ export class NetworkClient {
       let localPlayer = this.localState!.players.find(p => p.id === sessionId);
 
       if (!localPlayer) {
+        // ... (Creation Logic omitted for brevity, assumed stable)
+        // Re-using simplified creation from previous version or rely on factory?
+        // Let's implement minimal creation here to be safe
         localPlayer = {
           id: sessionId,
           position: { x: sPlayer.position.x, y: sPlayer.position.y },
@@ -230,6 +247,7 @@ export class NetworkClient {
         this.localState!.players.push(localPlayer);
       }
 
+      // Sync Props
       localPlayer.score = sPlayer.score;
       localPlayer.currentHealth = sPlayer.currentHealth;
       localPlayer.kills = sPlayer.kills;
@@ -240,59 +258,83 @@ export class NetworkClient {
       localPlayer.radius = sPlayer.radius;
 
       if (sessionId === this.room?.sessionId) {
+        // === CLIENT SIDE PREDICTION & RECONCILIATION ===
         const lastProcessed = sPlayer.lastProcessedInput || 0;
 
-        // Remove processed inputs
+        // 1. Remove processed inputs
+        // Retain inputs that are OLDER than lastProcessed? No, remove OLDER.
+        // Wait, remove inputs that HAVE been processed (<= lastProcessed)
+        // But we need to keep the ones > lastProcessed to REPLAY.
+
+        // Find the input corresponding to this state?
+        // Ideally, sPlayer state corresponds to 'lastProcessed'.
+
+        // Discard inputs <= lastProcessed
         this.pendingInputs = this.pendingInputs.filter(input => input.seq > lastProcessed);
 
-        // Reconciliation: Calculate expected position based on Server Pos + Pending Inputs
-        // Ideally we re-run physics. For MVP, we use simple velocity integration or just snap if diff is huge.
-        // If we trust the client prediction (which runs in index.ts), we just check if we drifted too far.
+        // 2. Error Check
+        // Project current server state (which is in the past relative to client)
+        // vs where we THOUGHT we were at that seq?
+        // We don't store "Predicted State at Seq N".
+        // Instead, we just take Server State, REPLAY all pending inputs, and see if it matches current Local State?
+        // No, that replaces current local state.
 
-        // Server says we are at sPlayer.position. But that position is from the PAST (processed inputs).
-        // To compare, we must either:
-        // A) Rewind client to that tick (complex)
-        // B) Forward simulate server state to now (Prediction)
+        // Correct Approach:
+        // Always reset to Server State (Authoritative Base)
+        // Then Replay all pending inputs to get back to "Now".
+        // Smooth out the visual correction if needed.
 
-        // Simplified CSP:
-        // Assume current local position is "Predicted".
-        // Check if server position matches where we THOUGHT we were 'lastProcessed' inputs ago.
-        // This is hard without storing history.
+        // Optimization: Only do this if we drifted significantly? 
+        // For "Single Source of Truth", let's just do it every tick or check threshold.
 
-        // Robust Approach (Snap & Re-Simulate):
-        // 1. Reset Local to Server State
-        // 2. Re-apply ALL pending inputs
+        // Let's check drift against Current Pos first (Naive check)
+        // Server Pos is "Input N". Local Pos is "Input N + K".
+        // Note: sPlayer.position is the result of applying inputs up to lastProcessed.
 
-        const dx = localPlayer.position.x - sPlayer.position.x;
-        const dy = localPlayer.position.y - sPlayer.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Reconstruct "Predicted Current State" starting from Server State
+        // Create a dummy entity to simulate forward
+        const simPlayer = { ...localPlayer };
+        simPlayer.position = { x: sPlayer.position.x, y: sPlayer.position.y };
+        simPlayer.velocity = { x: sPlayer.velocity.x, y: sPlayer.velocity.y };
 
-        // If distance > Threshold, force snap.
-        // We always snap for now because we don't have perfect deterministic physics sharing yet.
-        // BUT, if we snap every tick, it jitters.
-        // We only snap if the error is accumulating.
+        // Replay Loop
+        for (const input of this.pendingInputs) {
+          // Apply Input Forces (Logic from updatePlayer/handleInput)
+          // Ideally we'd have a 'applyInput' function. 
+          // For now, we assume updatePlayer handled input -> velocity mutation before integrateEntity.
+          // But here we need to re-apply the velocity changes?
+          // Complex.
+          // Simplified: Assume velocity is authoritative from server, plus our input delta.
+          // For MVP: JUST RE-INTEGRATE PHYSICS. Input handling (Space/W) is event based.
 
-        if (dist > this.reconcileThreshold) {
-          // Snap
-          localPlayer.position.x = sPlayer.position.x;
-          localPlayer.position.y = sPlayer.position.y;
-          localPlayer.velocity.x = sPlayer.velocity.x;
-          localPlayer.velocity.y = sPlayer.velocity.y;
+          // Note: If input affected velocity (acceleration), we need to re-run that logic.
+          // But velocity is part of state. 
 
-          // Re-simulate pending inputs (approximate)
-          // In full physics engine, we'd step physics. Here we just project.
-          this.pendingInputs.forEach(input => {
-            // Simple Euler re-projection
-            // NOTE: This assumes 'friction' and 'acceleration' in a very basic way.
-            // Logic must match applyPhysics in physics.ts.
-            // For now, we trust the 'snap' helps correct big errors, and let index.ts continue locally.
-          });
+          integrateEntity(simPlayer, input.dt);
+        }
+
+        // Measure Drift
+        const dx = localPlayer.position.x - simPlayer.position.x;
+        const dy = localPlayer.position.y - simPlayer.position.y;
+        const drift = Math.sqrt(dx * dx + dy * dy);
+
+        if (drift > this.reconcileThreshold) {
+          // SNAP & REPLAY
+          // console.log(`Reconcile Snap! Drift: ${drift.toFixed(2)}`);
+          localPlayer.position.x = simPlayer.position.x;
+          localPlayer.position.y = simPlayer.position.y;
+          localPlayer.velocity.x = simPlayer.velocity.x;
+          localPlayer.velocity.y = simPlayer.velocity.y;
         }
 
         this.localState!.player = localPlayer;
       } else {
+        // Other Players: Just Interpolate (handled in interpolateState usually, or here for hard sync)
         localPlayer.velocity.x = sPlayer.velocity.x;
         localPlayer.velocity.y = sPlayer.velocity.y;
+        // Don't snap position hard here, let interpolation handle it in interpolation loop?
+        // Or if we use Snapshots, we ignore this block for remote players usually.
+        // But syncPlayers provides the "Server Truth".
       }
     });
 
@@ -301,7 +343,6 @@ export class NetworkClient {
 
   private syncBots(serverBots: any) {
     if (!this.localState) return;
-
     const seenIds = new Set<string>();
 
     serverBots.forEach((sBot: any, id: string) => {
@@ -309,13 +350,13 @@ export class NetworkClient {
       let localBot = this.localState!.bots.find(b => b.id === id);
 
       if (!localBot) {
-        // Create new
+        // Create new (Simplified)
         localBot = {
           id: sBot.id,
           position: { x: sBot.position.x, y: sBot.position.y },
           velocity: { x: sBot.velocity.x, y: sBot.velocity.y },
           radius: sBot.radius,
-          color: '#fff', // Recalc from pigment later
+          color: '#fff',
           isDead: sBot.isDead,
           trail: [],
           name: sBot.name,
@@ -323,51 +364,42 @@ export class NetworkClient {
           kills: sBot.kills,
           maxHealth: sBot.maxHealth,
           currentHealth: sBot.currentHealth,
-          // ... defaults
           pigment: { r: sBot.pigment.r, g: sBot.pigment.g, b: sBot.pigment.b },
           targetPigment: { r: sBot.targetPigment.r, g: sBot.targetPigment.g, b: sBot.targetPigment.b },
           matchPercent: sBot.matchPercent,
           ring: sBot.ring,
           emotion: sBot.emotion,
           shape: sBot.shape,
-          statusEffects: { ...sBot.statusEffects }, // Simplified copy
+          statusEffects: { ...sBot.statusEffects },
           aiState: 'wander',
           personality: 'farmer',
           targetEntityId: null,
           aiReactionTimer: 0,
           tattoos: [],
-          tier: 0 as any, // fixme
+          tier: 0 as any,
           isInvulnerable: false
-          // fill rest with defaults
-        } as unknown as Bot; // Force cast for MVP quick sync
-
+        } as unknown as Bot;
         this.localState!.bots.push(localBot);
       }
 
-      // Update properties
-      localBot.velocity.x = sBot.velocity.x;
-      localBot.velocity.y = sBot.velocity.y;
+      // Sync Logic for Bots is simpler (just take server state usually)
       localBot.currentHealth = sBot.currentHealth;
       localBot.isDead = sBot.isDead;
       localBot.pigment = sBot.pigment;
       localBot.emotion = sBot.emotion;
       localBot.radius = sBot.radius;
-      // ... more props
+      // We rely on interpolation for position/velocity updates
     });
-
-    // Remove stale
-    this.localState.bots = this.localState.bots.filter(b => seenIds.has(b.id) || b.isDead); // Keep dead?
+    this.localState.bots = this.localState.bots.filter(b => seenIds.has(b.id) || b.isDead);
   }
 
   private syncFood(serverFood: any) {
     if (!this.localState) return;
-
     const seenIds = new Set<string>();
 
     serverFood.forEach((sFood: any, id: string) => {
       seenIds.add(id);
       let localFood = this.localState!.food.find(f => f.id === id);
-
       if (!localFood) {
         localFood = {
           id: sFood.id,
@@ -383,14 +415,11 @@ export class NetworkClient {
         };
         this.localState!.food.push(localFood);
       }
-
       if (sFood.isDead) localFood.isDead = true;
       localFood.radius = sFood.radius;
       localFood.kind = sFood.kind as PickupKind;
       localFood.pigment = { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b };
     });
-
-    // Cleanup
     this.localState.food = this.localState.food.filter(f => seenIds.has(f.id));
   }
 
@@ -531,19 +560,36 @@ export class NetworkClient {
     });
   }
 
-  sendInput(target: Vector2, inputs: { space: boolean; w: boolean }, dt: number) {
-    if (!this.room) return;
-    const seq = ++this.inputSeq;
-    this.pendingInputs.push({ seq, target: { ...target }, inputs: { ...inputs }, dt });
+  sendInput(target: Vector2, inputs: { space: boolean; w: boolean }, dt: number, events: Array<{ type: 'skill' | 'eject'; id: string }> = []) {
+    if (!this.room || !this.localState || !this.localState.player) return;
+
+    // EIDOLON-V: Capture snapshot of state BEFORE input
+    const p = this.localState.player;
+
+    const inputHistory: InputHistory = {
+      seq: ++this.inputSeq,
+      target: { ...target },
+      input: { ...inputs },
+      dt,
+      stateBefore: {
+        x: p.position.x,
+        y: p.position.y,
+        vx: p.velocity.x,
+        vy: p.velocity.y
+      }
+    };
+
+    this.pendingInputs.push(inputHistory);
+
     this.room.send('input', {
-      seq,
+      seq: inputHistory.seq,
       targetX: target.x,
       targetY: target.y,
       skill: inputs.space,
-      eject: inputs.w
+      eject: inputs.w,
+      events
     });
   }
-
   getRoomId() { return this.room?.roomId; }
 }
 
