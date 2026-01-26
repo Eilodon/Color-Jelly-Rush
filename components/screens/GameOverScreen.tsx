@@ -6,10 +6,11 @@ type Props = {
   onRetry: () => void;
   onNext: () => void;
   onLevels: () => void;
+  onHome: () => void;
   canNext: boolean;
 };
 
-const GameOverScreen: React.FC<Props> = ({ level, result, onRetry, onNext, onLevels, canNext }) => {
+const GameOverScreen: React.FC<Props> = ({ level, result, onRetry, onNext, onLevels, onHome, canNext }) => {
   const isWin = result === 'win';
 
   return (
@@ -22,18 +23,18 @@ const GameOverScreen: React.FC<Props> = ({ level, result, onRetry, onNext, onLev
           {isWin ? `Level ${level} cleared.` : `Level ${level} failed.`}
         </div>
         <div className="flex flex-wrap justify-center gap-3">
-        <button
-          onClick={onRetry}
-          className="ritual-button ritual-button-primary text-sm"
-        >
-          RETRY
-        </button>
-        <button
-          onClick={onLevels}
-          className="ritual-button ritual-button-ghost text-sm"
-        >
-          LEVELS
-        </button>
+          <button
+            onClick={onRetry}
+            className="ritual-button ritual-button-primary text-sm"
+          >
+            RETRY
+          </button>
+          <button
+            onClick={onLevels}
+            className="ritual-button ritual-button-ghost text-sm"
+          >
+            LEVELS
+          </button>
         </div>
         {isWin && canNext && (
           <button

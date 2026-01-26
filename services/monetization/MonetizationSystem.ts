@@ -112,22 +112,22 @@ export class MonetizationSystem {
       { id: 'golden_jelly', name: 'Golden Jelly', type: 'skin', rarity: 'epic', price: 1500, isPremium: false, isLimited: false },
       { id: 'shadow_jelly', name: 'Shadow Jelly', type: 'skin', rarity: 'legendary', price: 3000, isPremium: true, isLimited: false },
       { id: 'cosmic_jelly', name: 'Cosmic Jelly', type: 'skin', rarity: 'mythic', price: 5000, isPremium: true, isLimited: true },
-      
+
       // Trails
       { id: 'rainbow_trail', name: 'Rainbow Trail', type: 'trail', rarity: 'rare', price: 400, isPremium: false, isLimited: false },
       { id: 'fire_trail', name: 'Fire Trail', type: 'trail', rarity: 'epic', price: 1200, isPremium: false, isLimited: false },
       { id: 'galaxy_trail', name: 'Galaxy Trail', type: 'trail', rarity: 'legendary', price: 2500, isPremium: true, isLimited: false },
-      
+
       // Auras
       { id: 'speed_aura', name: 'Speed Aura', type: 'aura', rarity: 'common', price: 200, isPremium: false, isLimited: false },
       { id: 'power_aura', name: 'Power Aura', type: 'aura', rarity: 'rare', price: 600, isPremium: false, isLimited: false },
       { id: 'divine_aura', name: 'Divine Aura', type: 'aura', rarity: 'epic', price: 1800, isPremium: true, isLimited: false },
-      
+
       // Badges
       { id: 'veteran_badge', name: 'Veteran', type: 'badge', rarity: 'rare', price: 800, isPremium: false, isLimited: false },
       { id: 'champion_badge', name: 'Champion', type: 'badge', rarity: 'epic', price: 2000, isPremium: true, isLimited: false },
       { id: 'legend_badge', name: 'Legend', type: 'badge', rarity: 'legendary', price: 4000, isPremium: true, isLimited: true },
-      
+
       // Effects
       { id: 'explosion_effect', name: 'Explosion Effect', type: 'effect', rarity: 'rare', price: 700, isPremium: false, isLimited: false },
       { id: 'teleport_effect', name: 'Teleport Effect', type: 'effect', rarity: 'epic', price: 1500, isPremium: true, isLimited: false },
@@ -148,7 +148,7 @@ export class MonetizationSystem {
 
   private getFreeRewards(level: number): CosmeticItem[] {
     const rewards: CosmeticItem[] = [];
-    
+
     // Currency rewards every 5 levels
     if (level % 5 === 0) {
       rewards.push({
@@ -161,19 +161,19 @@ export class MonetizationSystem {
         isLimited: false,
       });
     }
-    
+
     // Cosmetic rewards every 10 levels
     if (level % 10 === 0) {
       const cosmetic = this.cosmetics.find(c => c.rarity === 'rare' && !c.isPremium);
       if (cosmetic) rewards.push(cosmetic);
     }
-    
+
     return rewards;
   }
 
   private getPremiumRewards(level: number): CosmeticItem[] {
     const rewards: CosmeticItem[] = [];
-    
+
     // Premium currency every 5 levels
     if (level % 5 === 0) {
       rewards.push({
@@ -186,13 +186,13 @@ export class MonetizationSystem {
         isLimited: false,
       });
     }
-    
+
     // Premium cosmetics every 5 levels
     if (level % 5 === 0) {
       const cosmetic = this.cosmetics.find(c => c.isPremium && c.rarity === 'epic');
       if (cosmetic) rewards.push(cosmetic);
     }
-    
+
     return rewards;
   }
 
@@ -239,7 +239,7 @@ export class MonetizationSystem {
     };
 
     this.playerInventory.premiumCurrency += currencyAmounts[packageId] || 0;
-    console.log(`💎 Purchased ${packageId} for $${price}`);
+
     return true;
   }
 
@@ -259,23 +259,23 @@ export class MonetizationSystem {
     }
 
     this.playerInventory.ownedCosmetics.push(itemId);
-    console.log(`🎨 Purchased ${cosmetic.name}`);
+
     return true;
   }
 
   purchaseBattlePass(premium: boolean = false): boolean {
     const price = premium ? this.config.premiumBattlePassPrice : this.config.battlePassPrice;
-    
+
     // In a real implementation, this would integrate with payment APIs
     this.playerInventory.hasPremiumPass = premium;
-    console.log(`🎯 Purchased ${premium ? 'Premium' : 'Standard'} Battle Pass for $${price}`);
+
     return true;
   }
 
   // Battle pass system
   addBattlePassXP(amount: number) {
     this.playerInventory.battlePassXP += amount;
-    
+
     // Check for level up
     while (this.playerInventory.battlePassXP >= this.getCurrentTierRequiredXP()) {
       this.playerInventory.battlePassXP -= this.getCurrentTierRequiredXP();
@@ -313,7 +313,7 @@ export class MonetizationSystem {
       });
     }
 
-    console.log(`🎯 Battle Pass Level ${this.playerInventory.battlePassLevel} rewards claimed!`);
+
   }
 
   // Retention mechanics
@@ -334,7 +334,7 @@ export class MonetizationSystem {
       this.playerInventory.currency += Math.floor(bonus);
       this.playerInventory.lastDailyClaim = now;
 
-      console.log(`🎁 Daily bonus claimed: ${Math.floor(bonus)} coins (Streak: ${this.playerInventory.dailyStreak})`);
+
       return true;
     }
 
@@ -344,12 +344,12 @@ export class MonetizationSystem {
   // Cosmetic management
   equipCosmetic(itemId: string, slot: keyof PlayerInventory['equippedCosmetics']): boolean {
     if (!this.playerInventory.ownedCosmetics.includes(itemId)) return false;
-    
+
     const cosmetic = this.cosmetics.find(c => c.id === itemId);
     if (!cosmetic || cosmetic.type !== slot) return false;
 
     this.playerInventory.equippedCosmetics[slot] = itemId;
-    console.log(`🎨 Equipped ${cosmetic.name} in ${slot} slot`);
+
     return true;
   }
 

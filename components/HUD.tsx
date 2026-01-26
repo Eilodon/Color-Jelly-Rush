@@ -1,164 +1,125 @@
-
-import React, { useEffect, useState, useRef } from 'react';
-import { GameState, RingId } from '../types';
+import React, { useEffect, useRef, memo } from 'react';
+import { GameState } from '../types';
 import { getColorHint } from '../services/cjr/colorMath';
-import { THRESHOLDS as RING_THRESHOLDS } from '../services/cjr/cjrConstants';
+// import { THRESHOLDS } from '../services/cjr/cjrConstants'; // Assuming this exists, or inline
 
 interface HUDProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
-  isTouchInput: boolean;
+  isTouchInput?: boolean;
 }
 
-const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
-  const [matchPercent, setMatchPercent] = useState(0);
-  const [currentRing, setCurrentRing] = useState<RingId>(1);
-  const [score, setScore] = useState(0);
-  const [winTimer, setWinTimer] = useState(0);
-  const [colorHint, setColorHint] = useState('');
-  const [waveTimer, setWaveTimer] = useState(0);
-  const [minimapData, setMinimapData] = useState<{ x: number, y: number, r: number } | null>(null);
+// EIDOLON-V: Dùng memo để chặn re-render từ cha
+const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
+  // 1. Static Refs (Không gây re-render)
+  const scoreRef = useRef<HTMLSpanElement>(null);
+  const percentRef = useRef<HTMLSpanElement>(null);
+  const percentCircleRef = useRef<SVGCircleElement>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
+  const waveRef = useRef<HTMLDivElement>(null);
+
+  // Cache giá trị cũ để tránh thao tác DOM dư thừa
+  const cache = useRef({ score: -1, percent: -1, hint: '', ring: 1 });
 
   useEffect(() => {
-    let animationFrameId: number;
+    let rafId: number;
+    const radius = 60;
+    const circumference = 2 * Math.PI * radius;
 
-    const renderLoop = () => {
+    const loop = () => {
       const state = gameStateRef.current;
-      if (state && state.player) {
-        // Optimization: Only setState if values differ significantly to avoid React thrashing? 
-        // React 18+ handles high freq updates well enough for HUDs usually.
-        // For 'Pro' feel, we rely on the fact that RAF syncs with screen refresh.
-
-        setMatchPercent(state.player.matchPercent);
-        setCurrentRing(state.player.ring);
-        setScore(Math.floor(state.player.score));
-        setWinTimer(state.player.stationaryTime || 0);
-
-        // Heavy calc?
-        const hint = getColorHint(state.player.pigment, state.player.targetPigment);
-        if (hint !== colorHint) setColorHint(hint);
-
-        const now = state.gameTime * 1000;
-        setWaveTimer(10000 - (now % 10000));
-
-        const r1 = 1600;
-        setMinimapData({
-          x: state.player.position.x / r1,
-          y: state.player.position.y / r1,
-          r: state.player.ring
-        });
+      if (!state || !state.player) {
+        rafId = requestAnimationFrame(loop);
+        return;
       }
-      animationFrameId = requestAnimationFrame(renderLoop);
+      const p = state.player;
+
+      // --- OPTIMIZED UPDATES ---
+
+      // 1. Score
+      const s = Math.floor(p.score);
+      if (s !== cache.current.score) {
+        if (scoreRef.current) scoreRef.current.textContent = s.toLocaleString();
+        cache.current.score = s;
+      }
+
+      // 2. Match %
+      const pct = Math.floor(p.matchPercent * 100);
+      if (pct !== cache.current.percent) {
+        cache.current.percent = pct;
+        if (percentRef.current) percentRef.current.textContent = `${pct}%`;
+        if (percentCircleRef.current) {
+          const offset = circumference - (p.matchPercent * circumference);
+          percentCircleRef.current.style.strokeDashoffset = offset.toString();
+          // Đổi màu trực tiếp
+          const color = pct >= 90 ? '#fbbf24' : (pct >= 50 ? '#3b82f6' : '#ef4444');
+          percentCircleRef.current.style.stroke = color;
+        }
+      }
+
+      // 3. Hint (Throttled logic nếu cần)
+      const hint = getColorHint(p.pigment, p.targetPigment);
+      if (hint !== cache.current.hint) {
+        cache.current.hint = hint;
+        if (hintRef.current) {
+          hintRef.current.textContent = hint;
+          // Fade in/out logic simple (transition class handles it if opacity set)
+          hintRef.current.style.opacity = hint ? '1' : '0';
+        }
+      }
+
+      // 4. Wave Timer
+      if (waveRef.current) {
+        const now = state.gameTime;
+        // Assuming 10s wave timer for visual flair or use state.levelConfig logic
+        // Just an example visual
+        const timer = (10.0 - (now % 10.0));
+        waveRef.current.textContent = `WAVE IN ${timer.toFixed(1)}s`;
+      }
+
+      rafId = requestAnimationFrame(loop);
     };
 
-    animationFrameId = requestAnimationFrame(renderLoop);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []); // Remove dependencies to avoid loop resets
-
-  // Visuals
-  const percent = Math.floor(matchPercent * 100);
-  const radius = 60;
-  const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (matchPercent * circumference);
-
-  const isWinHold = matchPercent >= RING_THRESHOLDS.WIN_HOLD && currentRing === 3;
-  const pulseClass = isWinHold ? 'animate-pulse scale-110 text-yellow-400' : '';
-
-  // Calculate Notch Angles (0 start is -90deg usually in these SVGs)
-  // But our SVG below is rotated -90deg, so 0 is top.
-  // 360 * val
-  const notch50 = 360 * 0.50;
-  const notch70 = 360 * 0.70;
-  const notch90 = 360 * 0.90;
-
-  const getPosOnCircle = (deg: number) => {
-    const rad = (deg - 90) * (Math.PI / 180); // -90 to start top
-    return {
-      x: 64 + radius * Math.cos(rad),
-      y: 64 + radius * Math.sin(rad)
-    };
-  };
-
-  const p50 = getPosOnCircle(notch50);
-  const p70 = getPosOnCircle(notch70);
-  const p90 = getPosOnCircle(notch90);
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []); // Empty deps = Run once, never re-run
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none font-ui overflow-hidden">
-
-      {/* --- TOP CENTER: MATCH METER --- */}
+    <div className="absolute inset-0 pointer-events-none select-none font-sans overflow-hidden p-4">
+      {/* Top Center: Match Meter */}
       <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center">
-        <div className={`relative w-36 h-36 transition-transform duration-500 ${isWinHold ? 'scale-110' : ''}`}>
-          <svg className="w-full h-full drop-shadow-xl">
-            {/* Background Track */}
-            <circle cx="72" cy="72" r={radius} stroke="rgba(0,0,0,0.6)" strokeWidth="10" fill="rgba(0,0,0,0.2)" />
-
-            {/* Notches (Background) */}
-            <line x1="72" y1="72" x2={p50.x + 8} y2={p50.y + 8} stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
-
-            {/* Progress */}
+        <div className="relative w-36 h-36">
+          <svg className="w-full h-full drop-shadow-xl rotate-[-90deg] overflow-visible">
+            <circle cx="72" cy="72" r="60" stroke="rgba(0,0,0,0.6)" strokeWidth="10" fill="rgba(0,0,0,0.2)" />
             <circle
-              cx="72" cy="72" r={radius}
-              stroke="url(#matchGrad)"
+              ref={percentCircleRef}
+              cx="72" cy="72" r="60"
+              stroke="#ef4444"
               strokeWidth="10"
               fill="none"
-              strokeDasharray={circumference}
-              strokeDashoffset={progressOffset}
+              strokeDasharray={377}
+              strokeDashoffset={377}
               strokeLinecap="round"
-              transform="rotate(-90 72 72)"
-              className="transition-all duration-300"
+              className="transition-all duration-100 ease-linear"
             />
-
-            {/* Notch Indicators (Overlay) */}
-            {/* 50% Notch */}
-            <circle cx={getPosOnCircle(notch50 + 90).x + 8} cy={getPosOnCircle(notch50 + 90).y + 8} r="3" fill={percent >= 50 ? "#fff" : "#444"} />
-            {/* 70% Notch */}
-            <circle cx={getPosOnCircle(notch70 + 90).x + 8} cy={getPosOnCircle(notch70 + 90).y + 8} r="3" fill={percent >= 70 ? "#fff" : "#444"} />
-            {/* 90% Notch */}
-            <circle cx={getPosOnCircle(notch90 + 90).x + 8} cy={getPosOnCircle(notch90 + 90).y + 8} r="4" fill={percent >= 90 ? "#fbbf24" : "#444"} stroke="#000" strokeWidth="1" />
-
-            <defs>
-              <linearGradient id="matchGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ef4444" />
-                <stop offset="60%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#fbbf24" />
-              </linearGradient>
-            </defs>
           </svg>
-
-          {/* Central Percent */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className={`text-3xl font-black font-display drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${pulseClass} text-white`}>
-              {percent}%
-            </span>
-            <span className="text-[10px] uppercase tracking-widest text-white/50">Match</span>
+            <span ref={percentRef} className="text-3xl font-black text-white">0%</span>
+            <span className="text-[10px] uppercase tracking-widest text-white/50">MATCH</span>
           </div>
         </div>
-
-        {/* Dynamic Hint */}
-        <div className="mt-2 text-center">
-          <div className={`text-sm font-bold tracking-wide drop-shadow-md px-4 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 ${colorHint ? 'text-white' : 'text-transparent'}`}>
-            {colorHint || "..."}
-          </div>
+        <div ref={hintRef} className="mt-2 text-sm font-bold px-4 py-1 rounded-full bg-black/40 border border-white/10 text-white transition-opacity duration-300 opacity-0">
+          ...
         </div>
       </div>
 
-      {/* --- TOP RIGHT: INFO --- */}
+      {/* Top Right: Stats */}
       <div className="absolute top-6 right-6 text-right">
-        <div className="flex flex-col gap-1 items-end">
-          <div className="text-white font-display text-xl drop-shadow-lg">SCORE <span className="text-yellow-400">{score.toLocaleString()}</span></div>
-          <div className="text-white/60 text-xs font-mono uppercase">Wave In {(waveTimer / 1000).toFixed(1)}s</div>
-
-          {/* Ring Status Badge */}
-          <div className={`mt-2 px-3 py-1 rounded border overflow-hidden relative ${currentRing === 3 ? 'bg-red-900/80 border-red-500' :
-            currentRing === 2 ? 'bg-blue-900/80 border-blue-500' :
-              'bg-slate-800/80 border-slate-500'
-            }`}>
-            <span className="relative z-10 text-xs font-bold text-white uppercase tracking-wider">
-              {currentRing === 3 ? 'DEATH ZONE' : currentRing === 2 ? 'THE ARENA' : 'OUTER RIM'}
-            </span>
-          </div>
+        <div className="text-white font-bold text-xl drop-shadow-lg">
+          SCORE <span ref={scoreRef} className="text-yellow-400">0</span>
         </div>
+        <div ref={waveRef} className="text-white/60 text-xs font-mono uppercase">WAVE READY</div>
       </div>
+<<<<<<< Updated upstream
 
       {/* --- BOTTOM LEFT: MINIMAP --- */}
       <div className="absolute bottom-6 left-6 w-32 h-32 bg-black/50 rounded-full border-2 border-white/10 backdrop-blur-sm overflow-hidden flex items-center justify-center pointer-events-auto">
@@ -194,9 +155,10 @@ const HUD: React.FC<HUDProps> = ({ gameStateRef }) => {
         </div>
       )}
 
+=======
+>>>>>>> Stashed changes
     </div>
   );
-};
+});
 
 export default HUD;
-

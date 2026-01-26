@@ -2,6 +2,7 @@ import React from 'react';
 
 type ErrorBoundaryProps = {
   children: React.ReactNode;
+  fallback?: React.ReactNode; // EIDOLON-V: Optional fallback instead of error screen
 };
 
 type ErrorBoundaryState = {
@@ -21,6 +22,12 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
 
   render() {
     if (this.state.error) {
+      // EIDOLON-V: If fallback provided, use it instead of error screen
+      if (this.props.fallback !== undefined) {
+        console.warn('[ErrorBoundary] Error caught, using fallback:', this.state.error.message);
+        return this.props.fallback;
+      }
+      
       return (
         <div className="w-full h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
           <div className="max-w-lg w-full bg-slate-900/80 border border-slate-700 rounded-2xl p-6">

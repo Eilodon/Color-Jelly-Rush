@@ -167,7 +167,7 @@ export const consume = (
 
 
   // 5. Effects
-  createDeathExplosion(prey.position, prey.color, prey.radius);
+  createDeathExplosion(prey.position, prey.color, prey.radius, state);
   createFloatingText(prey.position, '+Mass', '#22c55e', 20, state);
 
   if (predator.tattoos?.includes(TattooId.GrimHarvest)) {
@@ -283,7 +283,7 @@ export const reduceHealth = (
   if (victim.currentHealth <= 0) {
     victim.currentHealth = 0;
     victim.isDead = true;
-    createDeathExplosion(victim.position, victim.color, victim.radius);
+    createDeathExplosion(victim.position, victim.color, victim.radius, state);
 
     if (attacker && 'score' in attacker) {
       const killer = attacker as Player;

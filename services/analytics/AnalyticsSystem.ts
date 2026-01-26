@@ -187,21 +187,21 @@ export class AnalyticsSystem {
     for (const test of this.abTests) {
       const variant = this.selectVariant(test);
       this.activeTests.set(test.id, variant.id);
-      console.log(`🧪 A/B Test: ${test.name} - Assigned to ${variant.name}`);
+
     }
   }
 
   private selectVariant(test: ABTest): ABTestVariant {
     const random = Math.random() * 100;
     let cumulative = 0;
-    
+
     for (let i = 0; i < test.variants.length; i++) {
       cumulative += test.trafficSplit[i];
       if (random <= cumulative) {
         return test.variants[i];
       }
     }
-    
+
     return test.variants[test.variants.length - 1];
   }
 
@@ -279,7 +279,7 @@ export class AnalyticsSystem {
 
     this.events.push(event);
     this.updatePlayerMetrics(event);
-    
+
     // Auto-flush if batch is full
     if (this.events.length >= this.batchSize) {
       this.flushEvents();
@@ -331,36 +331,36 @@ export class AnalyticsSystem {
     switch (event.type) {
       case 'game_start':
         this.playerMetrics.gamesPlayed++;
-        this.playerMetrics.engagementMetrics.featureUsage['games'] = 
+        this.playerMetrics.engagementMetrics.featureUsage['games'] =
           (this.playerMetrics.engagementMetrics.featureUsage['games'] || 0) + 1;
         break;
-        
+
       case 'game_win':
         this.playerMetrics.wins++;
         break;
-        
+
       case 'game_loss':
         this.playerMetrics.losses++;
         break;
-        
+
       case 'purchase':
         this.playerMetrics.spendMetrics.purchases++;
         this.playerMetrics.spendMetrics.totalSpent += event.data.amount || 0;
         this.playerMetrics.spendMetrics.lastPurchaseTime = Date.now();
         break;
-        
+
       case 'tutorial_complete':
         this.playerMetrics.engagementMetrics.tutorialCompleted = true;
         break;
-        
+
       case 'achievement_unlock':
         this.playerMetrics.engagementMetrics.achievementsUnlocked++;
         break;
-        
+
       case 'social_interaction':
         this.playerMetrics.engagementMetrics.socialInteractions++;
         break;
-        
+
       case 'performance_issue':
         this.playerMetrics.performanceMetrics.crashCount++;
         break;
@@ -368,7 +368,7 @@ export class AnalyticsSystem {
 
     // Update last active time
     this.playerMetrics.lastActiveTime = Date.now();
-    
+
     // Calculate total play time
     this.playerMetrics.totalPlayTime = Date.now() - this.playerMetrics.startTime;
   }
@@ -377,10 +377,10 @@ export class AnalyticsSystem {
   getTestVariant(testId: string): ABTestVariant | null {
     const variantId = this.activeTests.get(testId);
     if (!variantId) return null;
-    
+
     const test = this.abTests.find(t => t.id === testId);
     if (!test) return null;
-    
+
     return test.variants.find(v => v.id === variantId) || null;
   }
 
@@ -429,8 +429,8 @@ export class AnalyticsSystem {
     this.events = [];
 
     // In a real implementation, this would send to analytics server
-    console.log(`📊 Flushing ${eventsToSend.length} analytics events`);
-    
+
+
     // Simulate network send
     this.sendToAnalyticsServer(eventsToSend);
   }
@@ -440,12 +440,12 @@ export class AnalyticsSystem {
     // For demo purposes, we'll just log and store locally
     const storedEvents = JSON.parse(localStorage.getItem('cjr_analytics') || '[]');
     storedEvents.push(...events);
-    
+
     // Keep only last 1000 events to prevent storage bloat
     if (storedEvents.length > 1000) {
       storedEvents.splice(0, storedEvents.length - 1000);
     }
-    
+
     localStorage.setItem('cjr_analytics', JSON.stringify(storedEvents));
   }
 
@@ -470,7 +470,7 @@ export class AnalyticsSystem {
     const cutoff = now - (days * 24 * 60 * 60 * 1000);
     const playersActiveAtStart = this.getUniquePlayersAtTime(cutoff - (24 * 60 * 60 * 1000));
     const playersActiveNow = this.getUniquePlayersAtTime(cutoff);
-    
+
     if (playersActiveAtStart === 0) return 0;
     return (playersActiveNow / playersActiveAtStart) * 100;
   }
@@ -484,7 +484,7 @@ export class AnalyticsSystem {
   private calculateAverageSessionLength(): number {
     const sessionEvents = this.events.filter(e => e.type === 'session_end');
     if (sessionEvents.length === 0) return 0;
-    
+
     const totalLength = sessionEvents.reduce((sum, event) => sum + (event.data.duration || 0), 0);
     return totalLength / sessionEvents.length;
   }
@@ -497,9 +497,9 @@ export class AnalyticsSystem {
     loadTime: number;
   }) {
     this.trackEvent('performance', metrics);
-    
+
     // Update player performance metrics
-    this.playerMetrics.performanceMetrics.averageFPS = 
+    this.playerMetrics.performanceMetrics.averageFPS =
       (this.playerMetrics.performanceMetrics.averageFPS + metrics.fps) / 2;
     this.playerMetrics.performanceMetrics.networkLatency = metrics.networkLatency;
     this.playerMetrics.performanceMetrics.deviceLoadTime = metrics.loadTime;

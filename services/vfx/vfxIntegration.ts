@@ -1,92 +1,34 @@
-/**
- * VFX INTEGRATION - Premium Game Juice
- * 
- * Integrating all VFX systems into the main game loop
- * Creating seamless visual feedback for every player action
- */
-
 import { GameState, Player } from '../../types';
-import { RingId } from '../cjr/cjrTypes';
-import { TattooId } from '../cjr/cjrTypes';
+import { RingId, TattooId } from '../cjr/cjrTypes';
 import { vfxSystem } from './vfxSystem';
 import { tattooVFXSystem } from './tattooVFX';
-
-// ============================================
-// VFX INTEGRATION MANAGER
-// ============================================
 
 export class VFXIntegrationManager {
   private lastRingCommit: Map<string, number> = new Map();
   private lastTattooActivation: Map<string, Map<TattooId, number>> = new Map();
   private vfxEnabled: boolean = true;
-  private qualityLevel: 'low' | 'medium' | 'high' | 'ultra' = 'high';
 
-  constructor() {
-    // Initialize tracking maps
-  }
-
-  /**
-   * Enable/disable VFX for performance optimization
-   */
   setVFXEnabled(enabled: boolean): void {
     this.vfxEnabled = enabled;
   }
 
-  /**
-   * Set quality level for different devices
-   */
-  setQualityLevel(level: 'low' | 'medium' | 'high' | 'ultra'): void {
-    this.qualityLevel = level;
-  }
-
-  /**
-   * Handle ring commit VFX - The most important visual feedback
-   */
   handleRingCommit(player: Player, ringId: RingId, state: GameState): void {
     if (!this.vfxEnabled) return;
-
-    const lastCommit = this.lastRingCommit.get(player.id) || 0;
     const now = Date.now();
+    const last = this.lastRingCommit.get(player.id) || 0;
+    if (now - last < 1000) return; // Debounce 1s
 
-    // Prevent spam - minimum 1 second between commits
-    if (now - lastCommit < 1000) return;
-
-    // Play ring commit VFX
     vfxSystem.playRingCommitVFX(player, ringId, state);
-
-    // Update last commit time
     this.lastRingCommit.set(player.id, now);
-
-    // Create additional effects based on quality level
-    if (this.qualityLevel === 'high' || this.qualityLevel === 'ultra') {
-      this.createRingCommitEnhancements(player, ringId, state);
-    }
   }
 
-  /**
-   * Handle tattoo activation VFX
-   */
   handleTattooActivation(player: Player, tattooId: TattooId, state: GameState): void {
     if (!this.vfxEnabled) return;
-
-    const playerTattoos = this.lastTattooActivation.get(player.id) || new Map();
-    const lastActivation = playerTattoos.get(tattooId) || 0;
-    const now = Date.now();
-
-    // Prevent spam - minimum 2 seconds between same tattoo activation
-    if (now - lastActivation < 2000) return;
-
-    // Play tattoo activation VFX
+    // Logic debounce có thể thêm nếu cần
     tattooVFXSystem.playTattooActivationVFX(player, tattooId, state);
-
-    // Update last activation time
-    playerTattoos.set(tattooId, now);
-    this.lastTattooActivation.set(player.id, playerTattoos);
-
-    // Create synergy effects if applicable
-    this.checkTattooSynergies(player, tattooId, state);
   }
 
+<<<<<<< Updated upstream
   /**
    * Create enhancements for ring commit based on quality level
    */
@@ -299,19 +241,15 @@ export class VFXIntegrationManager {
   /**
    * Update all VFX systems
    */
+=======
+>>>>>>> Stashed changes
   update(state: GameState, dt: number): void {
     if (!this.vfxEnabled) return;
-
-    // Update main VFX system
+    // Chỉ update logic shake, còn particle do Pixi lo
     vfxSystem.updateEffects(state, dt);
-
-    // Update tattoo VFX system
-    tattooVFXSystem.updateEffects(state, dt);
-
-    // Clean up old tracking data
-    this.cleanupTrackingData();
   }
 
+<<<<<<< Updated upstream
   /**
    * Clean up old tracking data to prevent memory leaks
    */
@@ -344,32 +282,15 @@ export class VFXIntegrationManager {
    * Get screen shake offset for camera
    */
   getScreenShakeOffset(): { x: number; y: number } {
+=======
+  getScreenShakeOffset() {
+>>>>>>> Stashed changes
     return vfxSystem.getScreenShakeOffset();
-  }
-
-  /**
-   * Get VFX statistics for debugging
-   */
-  getVFXStats(): {
-    enabled: boolean;
-    qualityLevel: string;
-    activeEffects: number;
-    trackedPlayers: number;
-  } {
-    return {
-      enabled: this.vfxEnabled,
-      qualityLevel: this.qualityLevel,
-      activeEffects: vfxSystem['activeEffects'].size + tattooVFXSystem['activeEffects'].size,
-      trackedPlayers: this.lastRingCommit.size
-    };
   }
 }
 
-// ============================================
-// GLOBAL VFX INTEGRATION INSTANCE
-// ============================================
-
 export const vfxIntegrationManager = new VFXIntegrationManager();
+<<<<<<< Updated upstream
 
 // ============================================
 // EXTENDED PARTICLE TYPES
@@ -392,3 +313,5 @@ declare module '../../types' {
     attractionForce?: number;
   }
 }
+=======
+>>>>>>> Stashed changes

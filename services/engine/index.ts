@@ -180,6 +180,7 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
     handleCollision(player, other, state, dt);
   });
 
+<<<<<<< Updated upstream
   const catalystSense = player.tattoos.includes(TattooId.CatalystSense);
   const magnetRadius = player.magneticFieldRadius || 0;
   if (magnetRadius > 0 || catalystSense) {
@@ -195,8 +196,49 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
         const pull = 120 * dt;
         f.velocity.x += (dx / dist) * pull;
         f.velocity.y += (dy / dist) * pull;
+=======
+  // EIDOLON-V: OPTIMIZED MAGNET LOGIC (Spatial Grid Lookups)
+  const catalystSense = player.tattoos.includes(TattooId.CatalystSense);
+  const magnetRadius = player.magneticFieldRadius || 0;
+
+  // EIDOLON-V: OPTIMIZED MAGNET LOGIC (Spatial Grid Lookups)
+  // const catalystSense = player.tattoos.includes(TattooId.CatalystSense); // Removed, declared above
+  // const magnetRadius = player.magneticFieldRadius || 0; // Removed, declared above
+
+  if (magnetRadius > 0 || catalystSense) {
+    const catalystRange = (player.statusEffects.catalystSenseRange || 2.0) * 130;
+    // Tìm bán kính quét lớn nhất
+    const searchRadius = catalystSense ? Math.max(catalystRange, magnetRadius) : magnetRadius;
+    const searchRadiusSq = searchRadius * searchRadius;
+    const pullPower = 120 * dt;
+
+    // CHÌA KHÓA: Chỉ lấy food trong lưới không gian gần player
+    // Thay vì state.food.forEach (quét hàng nghìn item), ta chỉ quét vài chục item.
+    const nearbyEntities = getCurrentSpatialGrid().getNearby(player, searchRadius);
+
+    for (let i = 0; i < nearbyEntities.length; i++) {
+      const entity = nearbyEntities[i];
+      // Kiểm tra nhanh xem entity có phải là Food không (có thuộc tính 'value')
+      if (!('value' in entity)) continue;
+
+      const f = entity as unknown as any; // Cast về Food
+      if (f.isDead) continue;
+
+      // Logic lọc Catalyst Sense
+      if (catalystSense && f.kind !== 'catalyst' && magnetRadius <= 0) continue;
+
+      const dx = player.position.x - f.position.x;
+      const dy = player.position.y - f.position.y;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < searchRadiusSq && distSq > 1) {
+        const dist = Math.sqrt(distSq);
+        const factor = pullPower / dist; // Normalize force
+        f.velocity.x += dx * factor;
+        f.velocity.y += dy * factor;
+>>>>>>> Stashed changes
       }
-    });
+    }
   }
 
   // Regen / Decay

@@ -1,68 +1,41 @@
+<<<<<<< Updated upstream
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GameState } from './types';
 import { TattooId } from './services/cjr/cjrTypes';
 import { ShapeId } from './services/cjr/cjrTypes';
 import { createInitialState, updateClientVisuals, updateGameState } from './services/engine';
+=======
+import React, { Suspense, useEffect } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
+import { useGameSession } from './hooks/useGameSession';
+import { UiOverlayManager } from './components/UiOverlayManager';
+import { inputManager } from './services/input/InputManager';
+>>>>>>> Stashed changes
 import MainMenu from './components/MainMenu';
 import HUD from './components/HUD';
 import MobileControls from './components/MobileControls';
-import TattooPicker from './components/TattooPicker';
-import ErrorBoundary from './components/ErrorBoundary';
-import BootScreen from './components/screens/BootScreen';
+import GameOverScreen from './components/screens/GameOverScreen';
 import LevelSelectScreen from './components/screens/LevelSelectScreen';
 import MatchmakingScreen from './components/screens/MatchmakingScreen';
-import GameOverScreen from './components/screens/GameOverScreen';
-import PauseOverlay from './components/overlays/PauseOverlay';
-import SettingsOverlay from './components/overlays/SettingsOverlay';
-import TutorialOverlay from './components/overlays/TutorialOverlay';
-import {
-  clearOverlays,
-  initialUiState,
-  popOverlay,
-  pushOverlay,
-  topOverlay,
-  type UiState,
-} from './services/ui/screenMachine';
-import {
-  defaultProgression,
-  defaultSettings,
-  loadProgression,
-  loadSettings,
-  saveProgression,
-  saveSettings,
-  type Progression,
-  type Settings,
-} from './services/ui/storage';
-import { applyTattoo } from './services/cjr/tattoos';
-import { networkClient } from './services/networking/NetworkClient';
-import { audioExcellence } from './services/audio/AudioExcellence';
-import {
-  cancelQueue,
-  createMatchmakingState,
-  markMatched,
-  startQueue,
-  type MatchmakingState,
-} from './services/meta/matchmaking';
-import {
-  createTournamentQueue,
-  enqueueTournament,
-  markTournamentReady,
-  resetTournamentQueue,
-  type TournamentQueueState,
-  type TournamentParticipant,
-} from './services/meta/tournaments';
 import TournamentLobbyScreen from './components/screens/TournamentLobbyScreen';
-import { updateProfileStats, unlockBadge } from './services/profile';
-import BackgroundCanvas from './components/BackgroundCanvas';
+import BootScreen from './components/screens/BootScreen';
+import GameCanvas from './components/GameCanvas';
 
 const PixiGameCanvas = React.lazy(() => import('./components/PixiGameCanvas'));
 
-const clampLevel = (n: number) => Math.max(1, Math.min(20, Math.round(n)));
-
 const App: React.FC = () => {
-  const [ui, setUi] = useState<UiState>(initialUiState);
-  const uiRef = useRef(ui);
+  const session = useGameSession();
+  const { ui, state, actions, refs, settings, isTouch, meta } = session;
+
+  const isPlaying = ui.screen === 'playing' && refs.gameState.current;
+  const inputEnabled = isPlaying && ui.overlays.length === 0;
+
+  // Render Strategy: Choose renderer based on settings
+  const usePixi = settings.usePixi;
+
+  // Initialize Input Manager
   useEffect(() => {
+<<<<<<< Updated upstream
     uiRef.current = ui;
   }, [ui]);
 
@@ -362,85 +335,44 @@ const App: React.FC = () => {
   const inputEnabled = ui.screen === 'playing' && ui.overlays.length === 0;
   const top = useMemo(() => topOverlay(ui), [ui]);
 
+=======
+    inputManager.init();
+  }, []);
+
+>>>>>>> Stashed changes
   return (
-    <div className="app-shell select-none">
-      <BackgroundCanvas gameStateRef={gameStateRef} />
+    <div className="app-shell select-none relative w-full h-full bg-ink-950 overflow-hidden">
       <ErrorBoundary>
-        {ui.screen === 'boot' && <BootScreen />}
 
-        {ui.screen === 'menu' && (
-          <MainMenu
-            level={selectedLevel}
-            unlockedLevel={progression.unlockedLevel}
-            usePixi={settings.usePixi}
-            useMultiplayer={settings.useMultiplayer}
-            networkStatus={networkStatus}
-            name={menuName}
-            shape={menuShape}
-            onTogglePixi={(next) => setSettings((s) => ({ ...s, usePixi: next }))}
-            onOpenLevels={() => setUi((s) => ({ ...clearOverlays(s), screen: 'levelSelect' }))}
-            onOpenTutorial={() => setUi((s) => pushOverlay(s, { type: 'tutorial', step: 0 }))}
-            onOpenSettings={() => setUi((s) => pushOverlay(s, { type: 'settings' }))}
-            onOpenMatchmaking={() => setUi((s) => ({ ...clearOverlays(s), screen: 'matchmaking' }))}
-            onOpenTournament={() => setUi((s) => ({ ...clearOverlays(s), screen: 'tournament' }))}
-            onStart={(name, shape) => startGame(name.trim(), shape, selectedLevel)}
-            onNameChange={setMenuName}
-            onShapeChange={setMenuShape}
-          />
+        {/* GAME WORLD LAYER */}
+        {isPlaying && (
+          <Suspense fallback={<div className="absolute center text-gold-400">Summoning...</div>}>
+            {usePixi ? (
+              <PixiGameCanvas
+                gameStateRef={refs.gameState}
+                inputEnabled={inputEnabled}
+                alphaRef={refs.alpha}
+              />
+            ) : (
+              <GameCanvas
+                gameStateRef={refs.gameState}
+                width={window.innerWidth}
+                height={window.innerHeight}
+                enablePointerInput={inputEnabled}
+                onMouseMove={(x, y) => {
+                  // Keep pure for GameCanvas if needed, or wire to inputManager here
+                  // For now, GameCanvas handles its own mouse listeners internally mostly, 
+                  // or we can bridge if we update GameCanvas.
+                }}
+              />
+            )}
+          </Suspense>
         )}
 
-        {ui.screen === 'levelSelect' && (
-          <LevelSelectScreen
-            currentLevel={selectedLevel}
-            unlockedLevel={progression.unlockedLevel}
-            onBack={() => setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }))}
-            onPlay={(lvl) => {
-              const next = clampLevel(lvl);
-              setSelectedLevel(next);
-              const last = lastStartRef.current;
-              if (last) startGame(last.name, last.shape, next);
-              else setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
-            }}
-          />
-        )}
-
-        {ui.screen === 'matchmaking' && (
-          <MatchmakingScreen
-            name={menuName}
-            shape={menuShape}
-            region={matchmakingRegion}
-            status={matchmaking.status}
-            queuedAt={matchmaking.queuedAt}
-            networkStatus={networkStatus}
-            onRegionChange={setMatchmakingRegion}
-            onQueue={() => setMatchmaking((state) => startQueue(state, matchmakingRegion))}
-            onCancel={() => setMatchmaking(() => cancelQueue())}
-            onBack={() => {
-              setMatchmaking(() => cancelQueue());
-              setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
-            }}
-            onEnterMatch={() => {
-              setMatchmaking(() => cancelQueue());
-              setSettings((s) => ({ ...s, useMultiplayer: true }));
-              startGame(menuName.trim(), menuShape, selectedLevel, true);
-            }}
-          />
-        )}
-
-        {ui.screen === 'tournament' && (
-          <TournamentLobbyScreen
-            queue={tournamentQueue}
-            onQueue={(id) => setTournamentQueue(() => enqueueTournament(id))}
-            onCancel={() => setTournamentQueue(() => resetTournamentQueue())}
-            onBack={() => {
-              setTournamentQueue(() => resetTournamentQueue());
-              setUi((s) => ({ ...clearOverlays(s), screen: 'menu' }));
-            }}
-          />
-        )}
-
-        {ui.screen === 'playing' && gameStateRef.current && (
+        {/* UI LAYER */}
+        {isPlaying && (
           <>
+<<<<<<< Updated upstream
             <Suspense fallback={<div className="text-white">Loading Renderer…</div>}>
               <PixiGameCanvas gameStateRef={gameStateRef} inputEnabled={inputEnabled} />
             </Suspense>
@@ -472,29 +404,18 @@ const App: React.FC = () => {
                 }
               }}
             />
+=======
+            <HUD gameStateRef={refs.gameState} isTouchInput={isTouch} />
+            {isTouch && <MobileControls />}
+>>>>>>> Stashed changes
           </>
         )}
 
-        {ui.screen === 'gameOver' && (
-          <GameOverScreen
-            level={gameStateRef.current?.level ?? selectedLevel}
-            result={gameStateRef.current?.result ?? 'lose'}
-            canNext={(gameStateRef.current?.level ?? selectedLevel) < 20}
-            onRetry={() => {
-              const last = lastStartRef.current;
-              if (!last) return setUi({ screen: 'menu', overlays: [] });
-              startGame(last.name, last.shape, gameStateRef.current?.level ?? selectedLevel);
-            }}
-            onNext={() => {
-              const last = lastStartRef.current;
-              if (!last) return setUi({ screen: 'menu', overlays: [] });
-              const next = clampLevel((gameStateRef.current?.level ?? selectedLevel) + 1);
-              startGame(last.name, last.shape, next);
-            }}
-            onLevels={() => setUi({ screen: 'levelSelect', overlays: [] })}
-          />
-        )}
+        {/* SCREENS */}
+        <div className="absolute inset-0 pointer-events-none [&>*]:pointer-events-auto">
+          {ui.screen === 'boot' && <BootScreen />}
 
+<<<<<<< Updated upstream
         {top?.type === 'pause' && (
           <PauseOverlay
             onResume={() => setUi((s) => popOverlay(s, 'pause'))}
@@ -513,36 +434,87 @@ const App: React.FC = () => {
             onSettings={() => setUi((s) => pushOverlay(s, { type: 'settings' }))}
           />
         )}
+=======
+          {ui.screen === 'menu' && (
+            <MainMenu
+              level={meta.selectedLevel}
+              unlockedLevel={session.progression.unlockedLevel}
+              usePixi={settings.usePixi}
+              useMultiplayer={settings.useMultiplayer}
+              networkStatus={meta.networkStatus || 'offline'}
+              name={meta.menuName}
+              shape={meta.menuShape}
+              onStart={(n, s) => actions.game.start(n, s, meta.selectedLevel)}
+              onNameChange={actions.meta.setName}
+              onShapeChange={actions.meta.setShape}
+              onTogglePixi={actions.ui.togglePixi}
+              onOpenLevels={() => actions.ui.setScreen('levelSelect')}
+              onOpenSettings={() => actions.ui.pushOverlay({ type: 'settings' })}
+              onOpenTutorial={() => actions.ui.pushOverlay({ type: 'tutorial', step: 0 })}
+              onOpenMatchmaking={() => actions.ui.setScreen('matchmaking')}
+              onOpenTournament={() => actions.ui.setScreen('tournament')}
+            />
+          )}
+>>>>>>> Stashed changes
 
-        {top?.type === 'settings' && (
-          <SettingsOverlay
-            usePixi={settings.usePixi}
-            useMultiplayer={settings.useMultiplayer}
-            onTogglePixi={(next) => setSettings((s) => ({ ...s, usePixi: next }))}
-            onToggleMultiplayer={(next) => setSettings((s) => ({ ...s, useMultiplayer: next }))}
-            onClose={() => setUi((s) => popOverlay(s, 'settings'))}
+          {ui.screen === 'levelSelect' && (
+            <LevelSelectScreen
+              currentLevel={meta.selectedLevel}
+              unlockedLevel={session.progression.unlockedLevel}
+              onBack={() => actions.ui.setScreen('menu')}
+              onPlay={(l) => { actions.meta.setLevel(l); actions.ui.setScreen('menu'); }}
+            />
+          )}
+
+          {ui.screen === 'matchmaking' && (
+            <MatchmakingScreen
+              name={meta.menuName}
+              shape={meta.menuShape}
+              region={meta.matchmakingRegion}
+              status={meta.matchmaking.status}
+              queuedAt={meta.matchmaking.queuedAt}
+              networkStatus={meta.networkStatus}
+              onRegionChange={actions.ui.setMatchmakingRegion}
+              onQueue={actions.meta.startQueue}
+              onCancel={actions.meta.cancelQueue}
+              onBack={() => { actions.meta.cancelQueue(); actions.ui.setScreen('menu'); }}
+              onEnterMatch={() => {
+                actions.meta.cancelQueue();
+                actions.ui.toggleMultiplayer(true);
+                actions.game.start(meta.menuName, meta.menuShape, meta.selectedLevel, true);
+              }}
+            />
+          )}
+
+          {ui.screen === 'tournament' && (
+            <TournamentLobbyScreen
+              queue={meta.tournamentQueue}
+              onQueue={actions.meta.startTournamentQueue}
+              onCancel={actions.meta.cancelTournamentQueue}
+              onBack={() => { actions.meta.cancelTournamentQueue(); actions.ui.setScreen('menu'); }}
+            />
+          )}
+
+          {ui.screen === 'gameOver' && (
+            <GameOverScreen
+              level={state.level ?? meta.selectedLevel}
+              result={state.lastResult ?? 'lose'}
+              canNext={(state.level ?? meta.selectedLevel) < 20}
+              onRetry={actions.game.retry}
+              onNext={actions.game.nextLevel}
+              onLevels={() => actions.ui.setScreen('levelSelect')}
+              onHome={actions.ui.returnToMenu}
+            />
+          )}
+
+          <UiOverlayManager
+            overlays={ui.overlays}
+            actions={actions.ui}
+            gameStateRef={refs.gameState}
+            settings={settings}
           />
-        )}
+        </div>
 
-        {top?.type === 'tutorial' && (
-          <TutorialOverlay
-            step={top.step}
-            onNext={() => setUi((s) => ({ ...s, overlays: [...s.overlays.slice(0, -1), { type: 'tutorial', step: top.step + 1 }] }))}
-            onPrev={() => setUi((s) => ({ ...s, overlays: [...s.overlays.slice(0, -1), { type: 'tutorial', step: Math.max(0, top.step - 1) }] }))}
-            onClose={(didFinish) => {
-              setUi((s) => popOverlay(s, 'tutorial'));
-              if (didFinish) setProgression((p) => ({ ...p, tutorialSeen: true }));
-              const state = gameStateRef.current;
-              if (state && uiRef.current.screen === 'playing') {
-                if (!state.result && !state.tattooChoices) state.isPaused = false;
-              }
-            }}
-          />
-        )}
-
-        {top?.type === 'tattooPick' && gameStateRef.current?.tattooChoices && (
-          <TattooPicker choices={gameStateRef.current.tattooChoices} onSelect={handleTattooSelect} />
-        )}
       </ErrorBoundary>
     </div>
   );

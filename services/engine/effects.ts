@@ -1,29 +1,17 @@
+// services/engine/effects.ts
+import { GameState, Vector2, Player, Bot } from '../../types';
 
-import {
-  Entity,
-  GameState,
-  Particle,
-  Player,
-  Bot,
-  Vector2
-} from '../../types';
-import { createParticle } from './factories';
-// factories.ts I rewrote didn't export createFloatingText. I need to add it or inline it.
-// I'll inline it here or export it from factories.
-// Let's check factories.ts content I wrote.
-// I didn't verify if I added createFloatingText.
-// Assuming I missed it, I will implement it here or update factories.
-// Better to implement here if it's effects related.
-import { getCurrentEngine } from './context';
-
-export const createExplosion = (position: Vector2, color: string, count: number) => {
-  for (let i = 0; i < count; i++) {
-    createParticle(position.x, position.y, color, 8);
-  }
+export const createExplosion = (position: Vector2, color: string, count: number, state: GameState) => {
+  // Format: "explode:x:y:color:count"
+  state.vfxEvents.push(`explode:${position.x.toFixed(1)}:${position.y.toFixed(1)}:${color}:${count}`);
 };
 
-export const createDeathExplosion = (position: Vector2, color: string, radius: number) => {
-  createExplosion(position, color, Math.floor(radius / 2));
+export const createDeathExplosion = (position: Vector2, color: string, radius: number, state: GameState) => {
+  // Đã thêm `state` vào tham số
+  createExplosion(position, color, Math.floor(radius / 2), state);
+
+  // Thêm shockwave event nếu muốn
+  // state.vfxEvents.push(`shockwave:${position.x}:${position.y}:${radius}`);
 };
 
 export const createFloatingText = (
@@ -33,7 +21,6 @@ export const createFloatingText = (
   size: number,
   state: GameState
 ) => {
-  // Simple push to state
   state.floatingTexts.push({
     id: Math.random().toString(),
     position: { ...position },
@@ -45,7 +32,4 @@ export const createFloatingText = (
   });
 };
 
-export const notifyPlayerDamage = (victim: Player | Bot) => {
-  // Visual flash logic handled in renderer based on damageFlash timer (if implemented)
-  // Here maybe sound?
-};
+export const notifyPlayerDamage = (victim: Player | Bot) => { };
