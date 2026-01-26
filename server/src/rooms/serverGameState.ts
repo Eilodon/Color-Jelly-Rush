@@ -186,7 +186,8 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
     isPaused: false,
     result: null,
     vfxEvents: [],
-    inputs: { space: false, w: false }
+    inputs: { space: false, w: false },
+    inputEvents: [],
   };
 
   return gameState;

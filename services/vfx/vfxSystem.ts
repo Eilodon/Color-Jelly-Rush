@@ -1,6 +1,6 @@
 import { GameState, Player, Vector2 } from '../../types';
 import { RingId } from '../cjr/cjrTypes';
-// import { audioEngine } from '../audio/AudioEngine'; // Tạm thời comment vì chưa rõ cấu trúc AudioEngine
+import { audioEngine } from '../audio/AudioEngine';
 
 export class VFXSystem {
   private screenShake: ScreenShakeController;
@@ -9,23 +9,17 @@ export class VFXSystem {
     this.screenShake = new ScreenShakeController();
   }
 
-  // --- EVENTS (Server/Client Safe) ---
-
   playRingCommitVFX(player: Player, ringId: RingId, state: GameState): void {
-    // 1. Push Event String: "commit:x:y:playerId:ringId"
-    // Client (PixiGameCanvas) sẽ parse chuỗi này và gọi CrystalVFX.shockwave/spiral
+    // EIDOLON-V: Push Event String "commit:x:y:id:ringId"
     state.vfxEvents.push(`commit:${player.position.x}:${player.position.y}:${player.id}:${ringId}`);
 
-    // 2. Audio (Placeholder)
-    // if (typeof window !== 'undefined') {
-    //      audioEngine.play(`ring_commit_${ringId}`);
-    // }
+    if (typeof window !== 'undefined') {
+      audioEngine.play(`ring_commit_${ringId}`);
+    }
 
-    // 3. Screen Shake (Logic)
     const intensity = ringId === 3 ? 0.7 : (ringId === 2 ? 0.5 : 0.3);
     this.screenShake.applyShake({ intensity, duration: 0.5, frequency: 20 });
 
-    // 4. Floating Text (Giữ trong state vì nó là UI info)
     state.floatingTexts.push({
       id: Math.random().toString(),
       position: { ...player.position, y: player.position.y - 50 },
@@ -68,7 +62,7 @@ class ScreenShakeController {
     this.currentTime += dt;
     const progress = this.currentTime / this.duration;
     const fadeOut = 1 - progress;
-    const shakeX = Math.sin(this.currentTime * this.frequency) * this.intensity * fadeOut * 20; // Scale 20px
+    const shakeX = Math.sin(this.currentTime * this.frequency) * this.intensity * fadeOut * 20;
     const shakeY = Math.cos(this.currentTime * this.frequency * 1.3) * this.intensity * fadeOut * 20;
     this.currentOffset = { x: shakeX, y: shakeY };
   }

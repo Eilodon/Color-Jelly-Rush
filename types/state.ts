@@ -76,4 +76,5 @@ export interface GameState {
         space: boolean;
         w: boolean;
     };
+    inputEvents: any[];
 }

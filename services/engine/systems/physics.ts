@@ -62,7 +62,7 @@ export const updatePhysicsWorld = (world: PhysicsWorld, dt: number) => {
  * Applies game logic (input forces) to the Entity object.
  * AND syncs it to the PhysicsWorld.
  */
-export const applyPhysics = (entity: Player | Bot, dt: number) => {
+export const integrateEntity = (entity: Player | Bot, dt: number) => {
   // 1. Calculate Mass & Caps (Game Logic)
   const BASE_MASS_RADIUS = 28;
   const mass = Math.max(1, Math.pow(entity.radius / BASE_MASS_RADIUS, 1.5));

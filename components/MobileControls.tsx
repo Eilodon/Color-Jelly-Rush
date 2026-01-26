@@ -23,8 +23,6 @@ const MobileControls: React.FC = memo(() => {
     }
 
     stickRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
-
-    // Normalize -1..1 and send to InputManager
     inputManager.setJoystick(dx / maxDist, dy / maxDist);
   };
 
@@ -38,8 +36,7 @@ const MobileControls: React.FC = memo(() => {
   };
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-50">
-      {/* Joystick Area */}
+    <div className="absolute inset-0 pointer-events-none z-50 select-none">
       <div
         ref={baseRef}
         className="absolute bottom-8 left-8 w-40 h-40 bg-white/10 rounded-full pointer-events-auto backdrop-blur-sm border-2 border-white/20"
@@ -59,18 +56,16 @@ const MobileControls: React.FC = memo(() => {
         <div ref={stickRef} className="absolute top-1/2 left-1/2 w-16 h-16 -ml-8 -mt-8 bg-white rounded-full shadow-lg pointer-events-none" />
       </div>
 
-      {/* Buttons - Direct calls to InputManager */}
       <div className="absolute bottom-8 right-8 flex gap-6 pointer-events-auto items-end">
         <button
-          className="w-16 h-16 bg-red-500/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-2 border-white/20"
+          className="w-16 h-16 bg-red-600/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-2 border-white/20"
           onTouchStart={(e) => { e.preventDefault(); inputManager.setButton('eject', true); }}
           onTouchEnd={(e) => { e.preventDefault(); inputManager.setButton('eject', false); }}
         >
-          EJECT
+          <span className="text-xs">EJECT</span>
         </button>
-
         <button
-          className="w-24 h-24 bg-blue-500/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-4 border-white/20"
+          className="w-24 h-24 bg-blue-600/80 rounded-full font-bold text-white shadow-lg backdrop-blur-sm active:scale-90 transition-transform flex items-center justify-center border-4 border-white/20"
           onTouchStart={(e) => { e.preventDefault(); inputManager.setButton('skill', true); }}
           onTouchEnd={(e) => { e.preventDefault(); inputManager.setButton('skill', false); }}
         >
