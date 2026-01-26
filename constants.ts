@@ -23,7 +23,7 @@ export const GROWTH_DECAY_END = 155;
 export const TURN_SPEED_BASE = 0.25;
 export const ACCELERATION_BASE = 1.0;
 export const FRICTION_BASE = 0.93;
-export const MAX_SPEED_BASE = 6.8;
+export const MAX_SPEED_BASE = 2.3; // EIDOLON-V FIX: Reduced to 1/3 as requested
 
 export const FOOD_COUNT = 260;
 export const BOT_COUNT = 28;
@@ -91,9 +91,9 @@ export const COMMIT_BUFFS = {
 export const COLOR_PALETTE = {
   background: '#111111',
   rings: {
-    r1: '#475569', // Slate
-    r2: '#3b82f6', // Blue
-    r3: '#ef4444'  // Red
+    r1: '#475569',
+    r2: '#3b82f6',
+    r3: '#ef4444'
   }
 };
 
@@ -123,4 +123,27 @@ export const WAVE_CONFIG = {
 export const BOSS_CONFIGS = {
   BOSS_1_TRIGGER: 'RING_2_ACTIVE',
   BOSS_2_TRIGGER: 'RING_3_ACTIVE',
+};
+
+
+// --- EIDOLON-V: GPU-READY COLOR DATA ---
+// Pre-normalized vectors for Shader/Math usage.
+// 0 alloc at runtime.
+
+const hexToVec3 = (hex: string): Float32Array => {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return new Float32Array([r, g, b]);
+};
+
+export const COLOR_DATA = {
+  // #475569
+  R1: hexToVec3(COLOR_PALETTE.rings.r1),
+  // #3b82f6
+  R2: hexToVec3(COLOR_PALETTE.rings.r2),
+  // #ef4444
+  R3: hexToVec3(COLOR_PALETTE.rings.r3),
+  // #111111
+  BG: hexToVec3(COLOR_PALETTE.background)
 };

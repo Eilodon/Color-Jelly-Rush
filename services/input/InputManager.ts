@@ -54,8 +54,22 @@ export const inputManager = {
     // --- Core Logic ---
     updateMoveVector() {
         // Ưu tiên Joystick nếu có input
-        if (Math.abs(this.joystickVector.x) > 0.1 || Math.abs(this.joystickVector.y) > 0.1) {
-            this.state.move = { ...this.joystickVector };
+        if (Math.abs(this.joystickVector.x) > 0.01 || Math.abs(this.joystickVector.y) > 0.01) {
+            // EIDOLON-V FIX: Normalize and clamp to prevent runaway vectors or NaN
+            let jx = this.joystickVector.x;
+            let jy = this.joystickVector.y;
+
+            // NaN Check
+            if (isNaN(jx)) jx = 0;
+            if (isNaN(jy)) jy = 0;
+
+            const len = Math.sqrt(jx * jx + jy * jy);
+            if (len > 1.0) {
+                jx /= len;
+                jy /= len;
+            }
+
+            this.state.move = { x: jx, y: jy };
             return;
         }
 

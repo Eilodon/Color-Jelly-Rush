@@ -37,9 +37,20 @@ export class NetworkClient {
   private client: Colyseus.Client;
 
   // Local GameState reference to sync into
-  private localState: GameState | null = null;
-  private inputSeq = 0;
-  private pendingInputs: Array<{ seq: number; target: Vector2; inputs: { space: boolean; w: boolean }; dt: number }> = [];
+  private localState?: GameState;
+  private playerMap: Map<string, Player> = new Map();
+  private botMap: Map<string, Bot> = new Map();
+  private foodMap: Map<string, Food> = new Map();
+
+  // Client-Side Prediction
+  private pendingInputs: {
+    seq: number;
+    target: { x: number; y: number };
+    inputs: { space: boolean; w: boolean };
+    dt: number;
+  }[] = [];
+  private inputSeq: number = 0;
+
   private reconcileThreshold = 20; // 20px allowance
   private statusListener?: (status: NetworkStatus) => void;
   private lastCredentials?: { name: string; shape: ShapeId };
@@ -158,14 +169,18 @@ export class NetworkClient {
   private syncPlayers(serverPlayers: any) {
     if (!this.localState || !this.room) return;
 
-    const seenIds = new Set<string>();
+    const activeIds = new Set<string>();
+
+    // O(N) Iteration over server state
     serverPlayers.forEach((sPlayer: any, sessionId: string) => {
-      seenIds.add(sessionId);
-      let localPlayer = this.localState!.players.find(p => p.id === sessionId);
+      activeIds.add(sessionId);
+      let localPlayer = this.playerMap.get(sessionId);
 
       if (!localPlayer) {
+        // Create new player (Once)
         localPlayer = {
           id: sessionId,
+          // ... (Initialize with server values)
           position: { x: sPlayer.position.x, y: sPlayer.position.y },
           velocity: { x: sPlayer.velocity.x, y: sPlayer.velocity.y },
           radius: sPlayer.radius,
@@ -187,49 +202,37 @@ export class NetworkClient {
           emotion: sPlayer.emotion,
           shape: sPlayer.shape,
           tattoos: [...(sPlayer.tattoos ?? [])],
-          lastHitTime: 0,
-          lastEatTime: 0,
-          matchStuckTime: 0,
-          ring3LowMatchTime: 0,
-          emotionTimer: 0,
-          acceleration: 1,
-          maxSpeed: 1,
-          friction: 1,
-          isInvulnerable: sPlayer.isInvulnerable,
-          skillCooldown: sPlayer.skillCooldown,
-          maxSkillCooldown: 5,
-          defense: 1,
-          damageMultiplier: 1,
-          critChance: 0,
-          critMultiplier: 1,
-          lifesteal: 0,
-          armorPen: 0,
-          reflectDamage: 0,
-          visionMultiplier: 1,
-          sizePenaltyMultiplier: 1,
-          skillCooldownMultiplier: 1,
-          skillPowerMultiplier: 1,
-          skillDashMultiplier: 1,
-          killGrowthMultiplier: 1,
-          poisonOnHit: false,
-          doubleCast: false,
-          reviveAvailable: false,
-          magneticFieldRadius: 0,
+          statusEffects: { ...sPlayer.statusEffects },
+          // Defaults to avoid nulls
+          lastHitTime: 0, lastEatTime: 0, matchStuckTime: 0, ring3LowMatchTime: 0, emotionTimer: 0,
+          acceleration: 1, maxSpeed: 1, friction: 1, isInvulnerable: false,
+          skillCooldown: 0, maxSkillCooldown: 5, defense: 1, damageMultiplier: 1,
+          critChance: 0, critMultiplier: 1, lifesteal: 0, armorPen: 0, reflectDamage: 0,
+          visionMultiplier: 1, sizePenaltyMultiplier: 1, skillCooldownMultiplier: 1,
+          skillPowerMultiplier: 1, skillDashMultiplier: 1, killGrowthMultiplier: 1,
+          poisonOnHit: false, doubleCast: false, reviveAvailable: false, magneticFieldRadius: 0,
           mutationCooldowns: {
-            speedSurge: 0,
-            invulnerable: 0,
-            rewind: 0,
-            lightning: 0,
-            chaos: 0,
-            kingForm: 0
+            speedSurge: 0, invulnerable: 0, rewind: 0, lightning: 0, chaos: 0, kingForm: 0
           },
-          rewindHistory: [],
-          stationaryTime: 0,
-          statusEffects: { ...sPlayer.statusEffects }
-        } as unknown as Player;
+          rewindHistory: [], stationaryTime: 0
+        } as unknown as Player; // Cast for now
+
+
+        this.playerMap.set(sessionId, localPlayer);
         this.localState!.players.push(localPlayer);
+
+        // EIDOLON-V FIX: Sync to PhysicsWorld
+        this.localState!.engine.physicsWorld.addBody(
+          sessionId,
+          localPlayer.position.x,
+          localPlayer.position.y,
+          localPlayer.radius,
+          1, // Mass (calculated later or defaulting) - TODO: Calculate mass properly
+          true
+        );
       }
 
+      // Sync Properties (O(1))
       localPlayer.score = sPlayer.score;
       localPlayer.currentHealth = sPlayer.currentHealth;
       localPlayer.kills = sPlayer.kills;
@@ -239,90 +242,77 @@ export class NetworkClient {
       localPlayer.isDead = sPlayer.isDead;
       localPlayer.radius = sPlayer.radius;
 
+      // Local Player Reconciliation
       if (sessionId === this.room?.sessionId) {
-        const lastProcessed = sPlayer.lastProcessedInput || 0;
-
-        // Remove processed inputs
-        this.pendingInputs = this.pendingInputs.filter(input => input.seq > lastProcessed);
-
-        // Reconciliation: Calculate expected position based on Server Pos + Pending Inputs
-        // Ideally we re-run physics. For MVP, we use simple velocity integration or just snap if diff is huge.
-        // If we trust the client prediction (which runs in index.ts), we just check if we drifted too far.
-
-        // Server says we are at sPlayer.position. But that position is from the PAST (processed inputs).
-        // To compare, we must either:
-        // A) Rewind client to that tick (complex)
-        // B) Forward simulate server state to now (Prediction)
-
-        // Simplified CSP:
-        // Assume current local position is "Predicted".
-        // Check if server position matches where we THOUGHT we were 'lastProcessed' inputs ago.
-        // This is hard without storing history.
-
-        // Robust Approach (Snap & Re-Simulate):
-        // 1. Reset Local to Server State
-        // 2. Re-apply ALL pending inputs
-
-        const dx = localPlayer.position.x - sPlayer.position.x;
-        const dy = localPlayer.position.y - sPlayer.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        // If distance > Threshold, force snap.
-        // We always snap for now because we don't have perfect deterministic physics sharing yet.
-        // BUT, if we snap every tick, it jitters.
-        // We only snap if the error is accumulating.
-
-        if (dist > this.reconcileThreshold) {
-          // Snap
-          localPlayer.position.x = sPlayer.position.x;
-          localPlayer.position.y = sPlayer.position.y;
-          localPlayer.velocity.x = sPlayer.velocity.x;
-          localPlayer.velocity.y = sPlayer.velocity.y;
-
-          // Re-simulate pending inputs (approximate)
-          // In full physics engine, we'd step physics. Here we just project.
-          this.pendingInputs.forEach(input => {
-            // EIDOLON-V FIX: Add actual replay logic to prevent teleportation
-            // Calculate velocity based on target position (matches updatePlayer logic)
-            const dx = input.target.x - localPlayer.position.x;
-            const dy = input.target.y - localPlayer.position.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist > 5) { // Deadzone to prevent jitter
-              const speed = localPlayer.maxSpeed * (localPlayer.statusEffects?.speedBoost || 1);
-              const nx = dx / dist;
-              const ny = dy / dist;
-              
-              // Apply steering force (matches engine logic)
-              const steerFactor = 0.2;
-              localPlayer.velocity.x += (nx * speed - localPlayer.velocity.x) * steerFactor;
-              localPlayer.velocity.y += (ny * speed - localPlayer.velocity.y) * steerFactor;
-            }
-            
-            // Replay movement (matches integrateEntity logic)
-            localPlayer.position.x += localPlayer.velocity.x * input.dt * 10;
-            localPlayer.position.y += localPlayer.velocity.y * input.dt * 10;
-          });
-        }
-
+        this.reconcileLocalPlayer(localPlayer, sPlayer);
         this.localState!.player = localPlayer;
       } else {
+        localPlayer.position.x = sPlayer.position.x;
+        localPlayer.position.y = sPlayer.position.y;
         localPlayer.velocity.x = sPlayer.velocity.x;
         localPlayer.velocity.y = sPlayer.velocity.y;
       }
+
+      // EIDOLON-V FIX: Update PhysicsWorld
+      this.localState!.engine.physicsWorld.syncBody(
+        sessionId,
+        localPlayer.position.x,
+        localPlayer.position.y,
+        localPlayer.velocity.x,
+        localPlayer.velocity.y
+      );
     });
 
-    this.localState.players = this.localState.players.filter(p => seenIds.has(p.id) || p.isDead);
+    // Cleanup Dead (O(M) where M is local count)
+    if (this.playerMap.size > activeIds.size) {
+      for (const [id, p] of this.playerMap) {
+        if (!activeIds.has(id)) {
+          p.isDead = true;
+          this.localState!.engine.physicsWorld.removeBody(id); // EIDOLON-V FIX: Remove from PhysicsWorld
+          this.playerMap.delete(id);
+        }
+      }
+      // Rebuild array only when size mismatches
+      this.localState.players = Array.from(this.playerMap.values());
+    }
+  }
+
+  private reconcileLocalPlayer(localPlayer: Player, sPlayer: any) {
+    const lastProcessed = sPlayer.lastProcessedInput || 0;
+    this.pendingInputs = this.pendingInputs.filter(input => input.seq > lastProcessed);
+
+    const dx = localPlayer.position.x - sPlayer.position.x;
+    const dy = localPlayer.position.y - sPlayer.position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > this.reconcileThreshold) {
+      localPlayer.position.x = sPlayer.position.x;
+      localPlayer.position.y = sPlayer.position.y;
+      localPlayer.velocity.x = sPlayer.velocity.x;
+      localPlayer.velocity.y = sPlayer.velocity.y;
+
+      this.pendingInputs.forEach(input => {
+        const dx = input.target.x - localPlayer.position.x;
+        const dy = input.target.y - localPlayer.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 5) {
+          const speed = localPlayer.maxSpeed * (localPlayer.statusEffects?.speedBoost || 1);
+          // Simple physics replay
+          localPlayer.position.x += (dx / dist) * speed * input.dt * 10;
+          localPlayer.position.y += (dy / dist) * speed * input.dt * 10;
+        }
+      });
+    }
   }
 
   private syncBots(serverBots: any) {
     if (!this.localState) return;
 
-    const seenIds = new Set<string>();
+    const activeIds = new Set<string>();
 
     serverBots.forEach((sBot: any, id: string) => {
-      seenIds.add(id);
-      let localBot = this.localState!.bots.find(b => b.id === id);
+      activeIds.add(id);
+      let localBot = this.botMap.get(id);
 
       if (!localBot) {
         // Create new
@@ -331,7 +321,7 @@ export class NetworkClient {
           position: { x: sBot.position.x, y: sBot.position.y },
           velocity: { x: sBot.velocity.x, y: sBot.velocity.y },
           radius: sBot.radius,
-          color: '#fff', // Recalc from pigment later
+          color: '#fff',
           isDead: sBot.isDead,
           trail: [],
           name: sBot.name,
@@ -339,28 +329,40 @@ export class NetworkClient {
           kills: sBot.kills,
           maxHealth: sBot.maxHealth,
           currentHealth: sBot.currentHealth,
-          // ... defaults
           pigment: { r: sBot.pigment.r, g: sBot.pigment.g, b: sBot.pigment.b },
           targetPigment: { r: sBot.targetPigment.r, g: sBot.targetPigment.g, b: sBot.targetPigment.b },
           matchPercent: sBot.matchPercent,
           ring: sBot.ring,
           emotion: sBot.emotion,
           shape: sBot.shape,
-          statusEffects: { ...sBot.statusEffects }, // Simplified copy
+          statusEffects: { ...sBot.statusEffects },
           aiState: 'wander',
           personality: 'farmer',
           targetEntityId: null,
           aiReactionTimer: 0,
           tattoos: [],
-          tier: 0 as any, // fixme
+          tier: 0 as any,
           isInvulnerable: false
-          // fill rest with defaults
-        } as unknown as Bot; // Force cast for MVP quick sync
+        } as unknown as Bot;
 
+
+        this.botMap.set(id, localBot);
         this.localState!.bots.push(localBot);
+
+        // EIDOLON-V FIX: Sync to PhysicsWorld
+        this.localState!.engine.physicsWorld.addBody(
+          id,
+          localBot.position.x,
+          localBot.position.y,
+          localBot.radius,
+          1, // Mass
+          true
+        );
       }
 
-      // Update properties
+      // Sync Props
+      localBot.position.x = sBot.position.x;
+      localBot.position.y = sBot.position.y;
       localBot.velocity.x = sBot.velocity.x;
       localBot.velocity.y = sBot.velocity.y;
       localBot.currentHealth = sBot.currentHealth;
@@ -368,21 +370,38 @@ export class NetworkClient {
       localBot.pigment = sBot.pigment;
       localBot.emotion = sBot.emotion;
       localBot.radius = sBot.radius;
-      // ... more props
+
+      // EIDOLON-V FIX: Update PhysicsWorld
+      this.localState!.engine.physicsWorld.syncBody(
+        id,
+        localBot.position.x,
+        localBot.position.y,
+        localBot.velocity.x,
+        localBot.velocity.y
+      );
     });
 
-    // Remove stale
-    this.localState.bots = this.localState.bots.filter(b => seenIds.has(b.id) || b.isDead); // Keep dead?
+    // Cleanup Dead
+    if (this.botMap.size > activeIds.size) {
+      for (const [id, b] of this.botMap) {
+        if (!activeIds.has(id)) {
+          b.isDead = true;
+          this.localState!.engine.physicsWorld.removeBody(id); // EIDOLON-V FIX: Remove from PhysicsWorld
+          this.botMap.delete(id);
+        }
+      }
+      this.localState.bots = Array.from(this.botMap.values());
+    }
   }
 
   private syncFood(serverFood: any) {
     if (!this.localState) return;
 
-    const seenIds = new Set<string>();
+    const activeIds = new Set<string>();
 
     serverFood.forEach((sFood: any, id: string) => {
-      seenIds.add(id);
-      let localFood = this.localState!.food.find(f => f.id === id);
+      activeIds.add(id);
+      let localFood = this.foodMap.get(id);
 
       if (!localFood) {
         localFood = {
@@ -397,6 +416,7 @@ export class NetworkClient {
           kind: sFood.kind as PickupKind,
           pigment: { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b }
         };
+        this.foodMap.set(id, localFood);
         this.localState!.food.push(localFood);
       }
 
@@ -406,8 +426,15 @@ export class NetworkClient {
       localFood.pigment = { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b };
     });
 
-    // Cleanup
-    this.localState.food = this.localState.food.filter(f => seenIds.has(f.id));
+    if (this.foodMap.size > activeIds.size) {
+      for (const [id, f] of this.foodMap) {
+        if (!activeIds.has(id)) {
+          f.isDead = true;
+          this.foodMap.delete(id);
+        }
+      }
+      this.localState.food = Array.from(this.foodMap.values());
+    }
   }
 
   private pushSnapshot(state: any) {

@@ -59,7 +59,7 @@ export const MICROSERVICES: ServiceDefinition[] = [
     name: 'API Gateway',
     description: 'Central API gateway for routing and authentication',
     version: '1.0.0',
-    port: 3000,
+    port: 8080,
     healthCheck: '/health',
     dependencies: ['auth-service', 'user-service', 'game-service', 'analytics-service'],
     database: { type: 'redis' },
@@ -203,7 +203,7 @@ export const MICROSERVICES: ServiceDefinition[] = [
     version: '1.0.0',
     port: 3003,
     healthCheck: '/health',
-    dependencies: ['user-service', 'analytics-service', 'matchmaking-service'],
+    dependencies: ['user-service', 'analytics-service'],
     database: { type: 'postgresql', connectionPool: 20 },
     scaling: {
       minInstances: 3,
@@ -394,33 +394,33 @@ export const MICROSERVICES: ServiceDefinition[] = [
 export class ServiceRegistryManager {
   private static instance: ServiceRegistryManager;
   private registry: ServiceRegistry;
-  
+
   private constructor() {
     this.registry = {
       services: new Map(),
       dependencies: new Map(),
       healthStatus: new Map()
     };
-    
+
     this.initializeServices();
   }
-  
+
   static getInstance(): ServiceRegistryManager {
     if (!ServiceRegistryManager.instance) {
       ServiceRegistryManager.instance = new ServiceRegistryManager();
     }
     return ServiceRegistryManager.instance;
   }
-  
+
   private initializeServices(): void {
     // Register all microservices
     for (const service of MICROSERVICES) {
       this.registry.services.set(service.id, service);
-      
+
       // Initialize dependencies
       const deps = new Set(service.dependencies);
       this.registry.dependencies.set(service.id, deps);
-      
+
       // Initialize health status
       this.registry.healthStatus.set(service.id, {
         serviceId: service.id,
@@ -433,27 +433,27 @@ export class ServiceRegistryManager {
       });
     }
   }
-  
+
   // EIDOLON-V PHASE3: Get service definition
   getService(serviceId: string): ServiceDefinition | undefined {
     return this.registry.services.get(serviceId);
   }
-  
+
   // EIDOLON-V PHASE3: Get all services
   getAllServices(): ServiceDefinition[] {
     return Array.from(this.registry.services.values());
   }
-  
+
   // EIDOLON-V PHASE3: Get service dependencies
   getDependencies(serviceId: string): Set<string> {
     return this.registry.dependencies.get(serviceId) || new Set();
   }
-  
+
   // EIDOLON-V PHASE3: Get service health status
   getHealthStatus(serviceId: string): ServiceHealth | undefined {
     return this.registry.healthStatus.get(serviceId);
   }
-  
+
   // EIDOLON-V PHASE3: Update service health status
   updateHealthStatus(serviceId: string, status: Partial<ServiceHealth>): void {
     const current = this.registry.healthStatus.get(serviceId);
@@ -461,19 +461,19 @@ export class ServiceRegistryManager {
       this.registry.healthStatus.set(serviceId, { ...current, ...status, lastCheck: new Date() });
     }
   }
-  
+
   // EIDOLON-V PHASE3: Get dependency graph
   getDependencyGraph(): Map<string, Set<string>> {
     return new Map(this.registry.dependencies);
   }
-  
+
   // EIDOLON-V PHASE3: Validate service dependencies
   validateDependencies(): {
     valid: boolean;
     errors: string[];
   } {
     const errors: string[] = [];
-    
+
     for (const [serviceId, dependencies] of this.registry.dependencies) {
       for (const depId of dependencies) {
         if (!this.registry.services.has(depId)) {
@@ -481,23 +481,23 @@ export class ServiceRegistryManager {
         }
       }
     }
-    
+
     // Check for circular dependencies
     const visited = new Set<string>();
     const recursionStack = new Set<string>();
-    
+
     const hasCircularDependency = (serviceId: string): boolean => {
       if (recursionStack.has(serviceId)) {
         return true; // Circular dependency detected
       }
-      
+
       if (visited.has(serviceId)) {
         return false;
       }
-      
+
       visited.add(serviceId);
       recursionStack.add(serviceId);
-      
+
       const deps = this.registry.dependencies.get(serviceId);
       if (deps) {
         for (const depId of deps) {
@@ -506,46 +506,46 @@ export class ServiceRegistryManager {
           }
         }
       }
-      
+
       recursionStack.delete(serviceId);
       return false;
     };
-    
+
     for (const serviceId of this.registry.services.keys()) {
       if (hasCircularDependency(serviceId)) {
         errors.push(`Circular dependency detected involving service ${serviceId}`);
       }
     }
-    
+
     return {
       valid: errors.length === 0,
       errors
     };
   }
-  
+
   // EIDOLON-V PHASE3: Get deployment order (topological sort)
   getDeploymentOrder(): string[] {
     const visited = new Set<string>();
     const order: string[] = [];
-    
+
     const visit = (serviceId: string) => {
       if (visited.has(serviceId)) return;
-      
+
       const deps = this.registry.dependencies.get(serviceId);
       if (deps) {
         for (const depId of deps) {
           visit(depId);
         }
       }
-      
+
       visited.add(serviceId);
       order.push(serviceId);
     };
-    
+
     for (const serviceId of this.registry.services.keys()) {
       visit(serviceId);
     }
-    
+
     return order;
   }
 }

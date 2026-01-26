@@ -5,11 +5,11 @@ import glsl from 'vite-plugin-glsl'; // EIDOLON-V: REAL PLUGIN - not fake!
 
 export default defineConfig({
   server: {
-    port: 3000,
+    port: 5173,
     host: '0.0.0.0'
   },
   plugins: [
-    react(), 
+    react(),
     glsl() // REAL PLUGIN with #include support
   ],
   resolve: {

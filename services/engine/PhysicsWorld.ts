@@ -67,6 +67,7 @@ export class PhysicsWorld {
         this.freeIndices.push(idx);
     }
 
+
     // Helper to sync from Entity object
     syncBody(id: string, x: number, y: number, vx: number, vy: number) {
         const idx = this.idToIndex.get(id);
@@ -75,6 +76,33 @@ export class PhysicsWorld {
             this.positions[idx * 2 + 1] = y;
             this.velocities[idx * 2] = vx;
             this.velocities[idx * 2 + 1] = vy;
+        }
+    }
+
+    // Accessors for Cursor Pattern
+    getX(id: string): number {
+        const idx = this.idToIndex.get(id);
+        return idx !== undefined ? this.positions[idx * 2] : 0;
+    }
+
+    getY(id: string): number {
+        const idx = this.idToIndex.get(id);
+        return idx !== undefined ? this.positions[idx * 2 + 1] : 0;
+    }
+
+    getRadius(id: string): number {
+        const idx = this.idToIndex.get(id);
+        return idx !== undefined ? this.radii[idx] : 0;
+    }
+
+    // Sync from PhysicsWorld back to Entity object (for rendering compatibility)
+    syncBackToEntity(id: string, entity: { position: { x: number, y: number }, velocity: { x: number, y: number } }) {
+        const idx = this.idToIndex.get(id);
+        if (idx !== undefined) {
+            entity.position.x = this.positions[idx * 2];
+            entity.position.y = this.positions[idx * 2 + 1];
+            entity.velocity.x = this.velocities[idx * 2];
+            entity.velocity.y = this.velocities[idx * 2 + 1];
         }
     }
 }

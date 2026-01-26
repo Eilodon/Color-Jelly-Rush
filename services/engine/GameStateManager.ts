@@ -32,7 +32,13 @@ export class GameStateManager {
 
   // EIDOLON-V FIX: Single source of truth for state updates
   public updateGameState(dt: number): GameState {
-    if (!this.currentState || this.currentState.isPaused) {
+    if (!this.currentState) {
+      // Logic expects a state. If none, create default or throw.
+      // For safety in loop, we throw to signal initialization failure.
+      throw new Error("Game state not initialized");
+    }
+
+    if (this.currentState.isPaused) {
       return this.currentState;
     }
 
@@ -44,6 +50,8 @@ export class GameStateManager {
 
     return this.currentState;
   }
+
+
 
   // EIDOLON-V FIX: Single source of truth for client visual updates
   public updateClientVisuals(dt: number): void {
@@ -129,8 +137,9 @@ export class GameStateManager {
   }
 
   private notifySubscribers(): void {
-    if (this.currentState) {
-      this.subscribers.forEach(callback => callback(this.currentState));
+    const state = this.currentState;
+    if (state) {
+      this.subscribers.forEach(callback => callback(state));
     }
   }
 

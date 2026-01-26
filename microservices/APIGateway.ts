@@ -369,11 +369,11 @@ export class APIGateway {
   }
 
   // EIDOLON-V PHASE3: Start gateway
-  async start(): Promise<void> {
-    const port = this.config.port;
+  async start(port?: number): Promise<void> {
+    const listenPort = port || this.config.port;
 
     return new Promise((resolve, reject) => {
-      this.app.listen(port, (err?: Error) => {
+      this.app.listen(listenPort, (err?: Error) => {
         if (err) {
           logger.error('Failed to start API Gateway', { port, error: err.message }, err);
           reject(err);

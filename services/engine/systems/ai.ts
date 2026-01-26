@@ -108,29 +108,55 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       (bot as any).aiState = 'wander';
     }
 
-    // Execute Movement
+    // Execute Movement - EIDOLON-V FIX: Zero allocation vector math
     const speed = bot.maxSpeed;
     let tx = 0, ty = 0;
 
     if (bot.aiState === 'flee' && threat) {
-      const dir = normalize({ x: (bot as any).position.x - (threat as any).position.x, y: (bot as any).position.y - (threat as any).position.y });
-      tx = dir.x * speed;
-      ty = dir.y * speed;
+      // EIDOLON-V FIX: Direct math, no object allocation
+      const dx = (bot as any).position.x - (threat as any).position.x;
+      const dy = (bot as any).position.y - (threat as any).position.y;
+      const distSq = dx * dx + dy * dy;
+      
+      if (distSq > 0.001) {
+        const invDist = 1.0 / Math.sqrt(distSq);
+        tx = dx * invDist * speed;
+        ty = dy * invDist * speed;
+      }
     } else if (bot.aiState === 'chase' && targetEntity) {
-      const dir = normalize({ x: (targetEntity as any).position.x - (bot as any).position.x, y: (targetEntity as any).position.y - (bot as any).position.y });
-      tx = dir.x * speed;
-      ty = dir.y * speed;
+      // EIDOLON-V FIX: Direct math, no object allocation
+      const dx = (targetEntity as any).position.x - (bot as any).position.x;
+      const dy = (targetEntity as any).position.y - (bot as any).position.y;
+      const distSq = dx * dx + dy * dy;
+      
+      if (distSq > 0.001) {
+        const invDist = 1.0 / Math.sqrt(distSq);
+        tx = dx * invDist * speed;
+        ty = dy * invDist * speed;
+      }
     } else if (bot.aiState === 'forage' && targetFood) {
-      const dir = normalize({ x: (targetFood as any).position.x - (bot as any).position.x, y: (targetFood as any).position.y - (bot as any).position.y });
-      tx = dir.x * speed;
-      ty = dir.y * speed;
+      // EIDOLON-V FIX: Direct math, no object allocation
+      const dx = (targetFood as any).position.x - (bot as any).position.x;
+      const dy = (targetFood as any).position.y - (bot as any).position.y;
+      const distSq = dx * dx + dy * dy;
+      
+      if (distSq > 0.001) {
+        const invDist = 1.0 / Math.sqrt(distSq);
+        tx = dx * invDist * speed;
+        ty = dy * invDist * speed;
+      }
     } else {
       // Wander Center bias
-      const distCenter = distance(bot.position, { x: 0, y: 0 });
-      if (distCenter > MAP_RADIUS * 0.9) {
-        const dir = normalize({ x: -bot.position.x, y: -bot.position.y });
-        tx = dir.x * speed;
-        ty = dir.y * speed;
+      const botX = (bot as any).position.x;
+      const botY = (bot as any).position.y;
+      const distCenterSq = botX * botX + botY * botY;
+      
+      if (distCenterSq > (MAP_RADIUS * 0.9) * (MAP_RADIUS * 0.9)) {
+        // EIDOLON-V FIX: Direct math for center bias
+        const dist = Math.sqrt(distCenterSq);
+        const invDist = 1.0 / dist;
+        tx = -botX * invDist * speed;
+        ty = -botY * invDist * speed;
       } else {
         tx = (Math.random() - 0.5) * speed;
         ty = (Math.random() - 0.5) * speed;

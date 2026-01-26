@@ -71,7 +71,9 @@ export interface GameState {
     unlockedTattoos: string[];
     isPaused: boolean;
     result: 'win' | 'lose' | null;
-    vfxEvents: string[];
+    // EIDOLON-V FIX: Replace string array with VFX ring buffer reference
+    // vfxEvents: string[]; // Removed - replaced by VFXRingBuffer
+    vfxEvents: string[]; // EIDOLON-V FIX: Restored for VFX system compatibility
 
     inputs: {
         space: boolean;

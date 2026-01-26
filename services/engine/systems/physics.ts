@@ -7,6 +7,7 @@ import {
 import { Entity, Player, Bot, SizeTier } from '../../../types';
 import { PhysicsWorld } from '../PhysicsWorld';
 import { fastMath } from '../../math/FastMath'; // EIDOLON-V FIX: Import FastMath
+import { getCurrentEngine } from '../context';
 
 /**
  * DOD PHYSICS UPDATE (The Purge)
@@ -42,7 +43,7 @@ export const updatePhysicsWorld = (world: PhysicsWorld, dt: number) => {
     // EIDOLON-V FIX: Use squared distance comparison (no sqrt)
     const MAP_R_sq = MAP_R * MAP_R;
     const maxDistSq = (MAP_R - myR) * (MAP_R - myR);
-    
+
     if (r2 > maxDistSq) {
       const angle = Math.atan2(world.positions[py], world.positions[px]);
       const safeR = MAP_R - myR;
@@ -81,7 +82,7 @@ export const integrateEntity = (entity: Player | Bot, dt: number) => {
   // EIDOLON-V FIX: Use squared distance comparison (no sqrt)
   const speedSq = entity.velocity.x * entity.velocity.x + entity.velocity.y * entity.velocity.y;
   const maxSpeedSq = currentMaxSpeed * currentMaxSpeed;
-  
+
   if (speedSq > maxSpeedSq) {
     const speed = fastMath.fastSqrt(speedSq);
     const k = currentMaxSpeed / speed;
@@ -89,20 +90,22 @@ export const integrateEntity = (entity: Player | Bot, dt: number) => {
     entity.velocity.y *= k;
   }
 
-  // 3. Sync TO PhysicsWorld (if available) -> This would be done in batch in index.ts
-  // For now, we compute updated velocity here but let PhysicsWorld do the integration.
-  // Wait, if PhysicsWorld does integration, we shouldn't modify entity.position here?
-  // CORRECT.
-  // But for legacy compatibility with the rest of the file (factories etc), 
-  // we keep the local update as a fallback if World isn't running?
-  // No, we must switch.
 
-  // TEMPORARY: Detailed integration is done in updatePhysicsWorld.
-  // Here we just prepare data.
+  // 3. Sync TO PhysicsWorld (if available)
+  // EIDOLON-V FIX: Delegate integration to PhysicsWorld
+  // We sync the updated velocity/mass to the SoA system.
+  // The PhysicsWorld.update() loop will handle the actual position integration.
 
-  // EIDOLON-V FIX: Restore movement until ECS is fully active
-  entity.position.x += entity.velocity.x * dt * 10; // Scaler 10 matches legacy feel
-  entity.position.y += entity.velocity.y * dt * 10;
+  if (entity.id) {
+    const world = getCurrentEngine().physicsWorld;
+    // We only need to sync if the body exists (it should)
+    // We pass velocity (which might have been clamped/modified above)
+    world.syncBody(entity.id, entity.position.x, entity.position.y, entity.velocity.x, entity.velocity.y);
+  }
+
+  // LEGACY POSITION UPDATE REMOVED
+  // entity.position.x += entity.velocity.x * dt * 10;
+  // entity.position.y += entity.velocity.y * dt * 10;
 };
 
 /**
@@ -120,7 +123,7 @@ export const checkCollisions = (
     if (entity === other) return;
     const dx = entity.position.x - other.position.x;
     const dy = entity.position.y - other.position.y;
-    
+
     // EIDOLON-V FIX: Use squared distance comparison (no sqrt)
     const distSq = dx * dx + dy * dy;
     const minDist = entity.radius + other.radius;
@@ -156,7 +159,7 @@ export const constrainToMap = (entity: Entity, radius: number) => {
   // EIDOLON-V FIX: Use squared distance comparison (no sqrt)
   const distSq = entity.position.x * entity.position.x + entity.position.y * entity.position.y;
   const maxDistSq = (radius - entity.radius) * (radius - entity.radius);
-  
+
   if (distSq > maxDistSq) {
     const dist = fastMath.fastSqrt(distSq);
     const angle = Math.atan2(entity.position.y, entity.position.x);

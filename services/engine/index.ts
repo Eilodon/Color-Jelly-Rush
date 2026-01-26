@@ -321,7 +321,9 @@ export const createInitialState = (level: number = 1): GameState => {
     unlockedTattoos: [],
     isPaused: false,
     result: null,
-    vfxEvents: [],
+    // EIDOLON-V FIX: Replace string array with VFX ring buffer
+    // vfxEvents: [], // Removed - replaced by VFXRingBuffer
+    vfxEvents: [], // EIDOLON-V FIX: Restored for VFX system compatibility
     inputs: { space: false, w: false },
     inputEvents: [],
   };

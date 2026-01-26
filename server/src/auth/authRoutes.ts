@@ -17,13 +17,13 @@ interface AuthenticatedRequest extends Request {
 const router = express.Router();
 
 // EIDOLON-V PHASE1: Login endpoint
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     if (!username || !password) {
-      return res.status(400).json({ 
-        error: 'Username and password required' 
+      return res.status(400).json({
+        error: 'Username and password required'
       });
     }
 
@@ -31,11 +31,11 @@ router.post('/login', (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
     console.log(`🔐 PHASE1: Login attempt from ${clientIp} for user: ${username}`);
 
-    const authResult = AuthService.authenticate(username, password);
-    
+    const authResult = await AuthService.authenticate(username, password);
+
     if (!authResult) {
-      return res.status(401).json({ 
-        error: 'Invalid credentials' 
+      return res.status(401).json({
+        error: 'Invalid credentials'
       });
     }
 
@@ -59,7 +59,7 @@ router.post('/guest', (req, res) => {
     console.log(`🔐 PHASE1: Guest login from ${clientIp}`);
 
     const guestResult = AuthService.createGuestUser();
-    
+
     res.json({
       success: true,
       token: guestResult.token,
@@ -99,7 +99,7 @@ router.get('/verify', optionalAuthMiddleware, (req: AuthenticatedRequest, res) =
 router.post('/logout', authMiddleware, (req: AuthenticatedRequest, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
-    
+
     if (token) {
       AuthService.logout(token);
     }

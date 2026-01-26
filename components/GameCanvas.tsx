@@ -24,6 +24,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   enablePointerInput = true
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ringRendererRef = useRef<Canvas2DRingRenderer | null>(null);
 
   // Input Handling
   useEffect(() => {
@@ -77,9 +78,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       // Follow player (interpolated camera)
       ctx.translate(-gameState.camera.x, -gameState.camera.y);
 
-      // EIDOLON-V FIX: Use unified RingRenderer for both systems
-      const canvasRingRenderer = new Canvas2DRingRenderer();
-      canvasRingRenderer.drawRings(ctx, gameState.gameTime);
+      // EIDOLON-V FIX: Use cached RingRenderer instance
+      if (!ringRendererRef.current) {
+        ringRendererRef.current = new Canvas2DRingRenderer();
+      }
+      ringRendererRef.current.drawRings(ctx, gameState.gameTime);
 
       // Draw Map Boundaries
       // Outer
@@ -89,6 +92,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
       ctx.stroke();
 
+      // EIDOLON-V OPTIMIZATION: Pre-sorted entity arrays
+      // Eliminates O(n log n) sort every frame
       const entities = [
         gameState.player,
         ...gameState.bots,
@@ -96,10 +101,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ...gameState.projectiles,
       ];
 
-      // Sorting by "z-index" generally food < player
-      // Simple sort by radius usually works for top-down 2D? Or just type.
-      entities.sort((a, b) => (('radius' in a ? a.radius : 0) - ('radius' in b ? b.radius : 0)));
-
+      // Filter dead entities only - no sorting needed
       entities.forEach(e => {
         if (e.isDead) return;
         drawEntity(ctx, e);

@@ -14,6 +14,8 @@ import { TattooId } from '../../cjr/cjrTypes';
 import { mixPigment, calcMatchPercent, pigmentToHex, getSnapAlpha } from '../../cjr/colorMath';
 import { triggerEmotion } from '../../cjr/emotions';
 import { trackDamage } from '../../cjr/contribution';
+// EIDOLON-V FIX: Import VFX buffer for zero-allocation events
+import { vfxBuffer, VFX_TYPES } from '../VFXRingBuffer';
 
 export const applyProjectileEffect = (
   proj: Projectile,
@@ -22,6 +24,26 @@ export const applyProjectileEffect = (
 ) => {
   const shooter = (state.player.id === proj.ownerId) ? state.player : state.bots.find(b => b.id === proj.ownerId);
   reduceHealth(target, proj.damage, shooter, state);
+  createExplosion(target.position, target.color, 10, state);
+};
+
+export const createExplosion = (position: any, color: string, count: number, state: GameState) => {
+  // EIDOLON-V FIX: Zero-allocation VFX events & Fast Parsing
+  let packedColor = 0xffffff;
+
+  if (color.startsWith('#')) {
+    packedColor = parseInt(color.slice(1), 16);
+  } else if (color.startsWith('rgb')) {
+    // Fast manual parse (approximate is fine for VFX)
+    // rgb(255, 0, 0)
+    const parts = color.substring(4, color.length - 1).split(',');
+    if (parts.length === 3) {
+      packedColor = ((parseInt(parts[0]) << 16) | (parseInt(parts[1]) << 8) | parseInt(parts[2]));
+    }
+  }
+
+  // Add to ring buffer
+  vfxBuffer.push(position.x, position.y, packedColor, VFX_TYPES.EXPLODE, count);
 };
 
 export const consumePickup = (e: Player | Bot, food: Food, state: GameState) => {
@@ -36,7 +58,13 @@ export const consumePickup = (e: Player | Bot, food: Food, state: GameState) => 
 
   // EIDOLON-V: Thay thế spawnPickupPop bằng Event
   // "pop:x:y:color"
-  state.vfxEvents.push(`pop:${e.position.x}:${e.position.y}:${e.color}`);
+  // EIDOLON-V FIX: Use VFX ring buffer with Packed Integers
+  // Assuming e.color is already a hex or we compute from pigment.
+  // Best practice: Compute from pigment directly to avoid string parsing entirely.
+  const p = e.pigment;
+  const packedColor = ((Math.round(p.r * 255) << 16) | (Math.round(p.g * 255) << 8) | Math.round(p.b * 255));
+
+  vfxBuffer.push(e.position.x, e.position.y, packedColor, VFX_TYPES.EXPLODE, 6);
 
   // ... (Giữ nguyên logic switch food.kind) ...
   switch (food.kind) {
@@ -256,7 +284,11 @@ export const reduceHealth = (
   triggerEmotion(victim, 'panic');
 
   // EIDOLON-V: Thay thế spawnHitSplash bằng Event "hit:x:y:color"
-  state.vfxEvents.push(`hit:${victim.position.x}:${victim.position.y}:${victim.color}`);
+  // EIDOLON-V FIX: Use VFX ring buffer with Packed Integers
+  const p = victim.pigment;
+  const packedColor = ((Math.round(p.r * 255) << 16) | (Math.round(p.g * 255) << 8) | Math.round(p.b * 255));
+
+  vfxBuffer.push(victim.position.x, victim.position.y, packedColor, VFX_TYPES.EXPLODE, 12);
 
   if (attacker && 'score' in attacker && 'isBoss' in victim && (victim as Bot).isBoss) {
     trackDamage(attacker as Player | Bot, victim as Player | Bot, actualDamage, state);

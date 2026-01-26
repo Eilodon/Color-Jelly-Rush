@@ -14,10 +14,23 @@
   },
   "dependencies": {
     "@spd789562/particle-emitter": "^1.0.2",
+    "bcrypt": "^6.0.0",
     "colyseus.js": "^0.16.22",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "http-proxy-middleware": "^3.0.5",
+    "joi": "^18.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "pg": "^8.17.2",
     "pixi.js": "^8.15.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "redis": "^5.10.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

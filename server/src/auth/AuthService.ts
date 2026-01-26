@@ -1,13 +1,14 @@
 /**
- * PHASE 1 EMERGENCY: Basic Authentication System
- * Simple JWT-based auth for immediate security
+ * PHASE 2: MILITARY GRADE SECURITY (Argon2id)
+ * Replaces weak SHA-256 with memory-hard hashing to prevent GPU cracking.
  */
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import * as argon2 from 'argon2';
 import { Request } from 'express';
 
-// EIDOLON-V PHASE1: Extend Express Request interface
+// Extend Express Request interface
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -15,16 +16,16 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-// EIDOLON-V PHASE1: Simple in-memory user store (upgrade to DB in Phase 2)
-const users = new Map<string, { 
-  id: string; 
-  username: string; 
+// Simple in-memory user store (upgrade to DB in later phases)
+const users = new Map<string, {
+  id: string;
+  username: string;
   passwordHash: string;
   createdAt: number;
   lastLogin?: number;
 }>();
 
-// EIDOLON-V PHASE1: Session store
+// Session store
 const sessions = new Map<string, {
   userId: string;
   username: string;
@@ -48,36 +49,51 @@ export interface AuthToken {
 }
 
 export class AuthService {
-  // EIDOLON-V PHASE1: Create default admin user
-  static createDefaultAdmin() {
+  // Create default admin user
+  static async createDefaultAdmin() {
     const adminId = 'admin-001';
     const adminUsername = 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123'; // Change in production!
-    
+
     if (!users.has(adminId)) {
-      const passwordHash = crypto.createHash('sha256').update(adminPassword).digest('hex');
+      const passwordHash = await this.hashPassword(adminPassword);
       users.set(adminId, {
         id: adminId,
         username: adminUsername,
         passwordHash,
         createdAt: Date.now()
       });
-      console.log('🔐 PHASE1: Default admin user created');
+      console.log('🔐 PHASE2: Default admin user created (Argon2id Secured)');
     }
   }
 
-  // EIDOLON-V PHASE1: Simple password hashing
-  static hashPassword(password: string): string {
-    return crypto.createHash('sha256').update(password + 'cjr-salt').digest('hex');
+  // EIDOLON-V FIX: Argon2id Hashing
+  static async hashPassword(password: string): Promise<string> {
+    return await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16, // 64 MB
+      timeCost: 3,         // 3 Iterations
+      parallelism: 1,      // 1 Thread
+    });
   }
 
-  // EIDOLON-V PHASE1: Authenticate user
-  static authenticate(username: string, password: string): AuthToken | null {
+  // EIDOLON-V FIX: Argon2id Verification
+  static async verifyPassword(password: string, hash: string): Promise<boolean> {
+    try {
+      return await argon2.verify(hash, password);
+    } catch (err) {
+      console.error('Password verification error:', err);
+      return false; // Fail secure
+    }
+  }
+
+  // Authenticate user
+  static async authenticate(username: string, password: string): Promise<AuthToken | null> {
     const user = Array.from(users.values()).find(u => u.username === username);
     if (!user) return null;
 
-    const passwordHash = this.hashPassword(password);
-    if (user.passwordHash !== passwordHash) return null;
+    const isValid = await this.verifyPassword(password, user.passwordHash);
+    if (!isValid) return null;
 
     // Update last login
     user.lastLogin = Date.now();
@@ -107,15 +123,15 @@ export class AuthService {
     };
   }
 
-  // EIDOLON-V PHASE1: Verify token
+  // Verify token (Sync - JWT verification is fast enough)
   static verifyToken(token: string): User | null {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
-      
+
       // Check session exists and is not expired
       const session = sessions.get(token);
       if (!session) return null;
-      
+
       // Check session timeout
       if (Date.now() - session.lastActivity > SESSION_TIMEOUT) {
         sessions.delete(token);
@@ -130,17 +146,17 @@ export class AuthService {
         username: decoded.username
       };
     } catch (error) {
-      console.warn('🔐 PHASE1: Invalid token:', error);
+      // console.warn('🔐 Invalid token');
       return null;
     }
   }
 
-  // EIDOLON-V PHASE1: Logout
+  // Logout
   static logout(token: string): boolean {
     return sessions.delete(token);
   }
 
-  // EIDOLON-V PHASE1: Cleanup expired sessions
+  // Cleanup expired sessions
   static cleanupSessions() {
     const now = Date.now();
     for (const [token, session] of sessions.entries()) {
@@ -150,7 +166,7 @@ export class AuthService {
     }
   }
 
-  // EIDOLON-V PHASE1: Get session stats
+  // Get session stats
   static getSessionStats() {
     return {
       activeUsers: sessions.size,
@@ -160,11 +176,11 @@ export class AuthService {
     };
   }
 
-  // EIDOLON-V PHASE1: Create guest user (for quick testing)
+  // Create guest user (for quick testing)
   static createGuestUser(): AuthToken {
     const guestId = `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const guestUsername = `Guest${Math.floor(Math.random() * 10000)}`;
-    
+
     const tokenPayload = {
       userId: guestId,
       username: guestUsername,
@@ -190,10 +206,10 @@ export class AuthService {
   }
 }
 
-// EIDOLON-V PHASE1: Authentication middleware
+// Authentication middleware
 export const authMiddleware = (req: AuthenticatedRequest, res: any, next: any) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  
+
   if (!token) {
     return res.status(401).json({ error: 'No token provided' });
   }
@@ -207,22 +223,22 @@ export const authMiddleware = (req: AuthenticatedRequest, res: any, next: any) =
   next();
 };
 
-// EIDOLON-V PHASE1: Optional auth middleware (allows guests)
+// Optional auth middleware (allows guests)
 export const optionalAuthMiddleware = (req: AuthenticatedRequest, res: any, next: any) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  
+
   if (token) {
     const user = AuthService.verifyToken(token);
     if (user) {
       req.user = user;
     }
   }
-  
+
   next();
 };
 
-// Initialize default admin
-AuthService.createDefaultAdmin();
+// Initialize default admin (fire and forget)
+AuthService.createDefaultAdmin().catch(console.error);
 
 // Cleanup sessions every 5 minutes
 setInterval(() => {

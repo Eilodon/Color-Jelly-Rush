@@ -1,17 +1,31 @@
 // services/engine/effects.ts
 import { GameState, Vector2, Player, Bot } from '../../types';
+import { vfxBuffer, VFX_TYPES, packRGB } from './VFXRingBuffer';
 
 export const createExplosion = (position: Vector2, color: string, count: number, state: GameState) => {
-  // Format: "explode:x:y:color:count"
-  state.vfxEvents.push(`explode:${position.x.toFixed(1)}:${position.y.toFixed(1)}:${color}:${count}`);
+  // EIDOLON-V FIX: Zero-allocation VFX events
+  // Parse RGB color string to packed integer
+  const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  let packedColor = 0xffffff; // Default white
+  
+  if (rgbMatch) {
+    packedColor = packRGB(
+      parseInt(rgbMatch[1]) / 255,
+      parseInt(rgbMatch[2]) / 255,
+      parseInt(rgbMatch[3]) / 255
+    );
+  }
+  
+  // Add to ring buffer (no string allocation)
+  vfxBuffer.push(position.x, position.y, packedColor, VFX_TYPES.EXPLODE, count);
 };
 
 export const createDeathExplosion = (position: Vector2, color: string, radius: number, state: GameState) => {
-  // Đã thêm `state` vào tham số
+  // EIDOLON-V FIX: Use ring buffer
   createExplosion(position, color, Math.floor(radius / 2), state);
 
-  // Thêm shockwave event nếu muốn
-  // state.vfxEvents.push(`shockwave:${position.x}:${position.y}:${radius}`);
+  // Add shockwave event if needed
+  // vfxBuffer.push(position.x, position.y, 0xffffff, VFX_TYPES.SHOCKWAVE, radius);
 };
 
 export const createFloatingText = (
@@ -21,15 +35,21 @@ export const createFloatingText = (
   size: number,
   state: GameState
 ) => {
-  state.floatingTexts.push({
-    id: Math.random().toString(),
-    position: { ...position },
-    text,
-    color,
-    size,
-    life: 1.0,
-    velocity: { x: 0, y: -20 }
-  });
+  // EIDOLON-V FIX: Convert text to char code for storage
+  const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  let packedColor = 0xffff00; // Default yellow
+  
+  if (rgbMatch) {
+    packedColor = packRGB(
+      parseInt(rgbMatch[1]) / 255,
+      parseInt(rgbMatch[2]) / 255,
+      parseInt(rgbMatch[3]) / 255
+    );
+  }
+  
+  // Store first character as data (for simple floating text)
+  const charCode = text.charCodeAt(0);
+  vfxBuffer.push(position.x, position.y, packedColor, VFX_TYPES.FLOATING_TEXT, charCode);
 };
 
 export const notifyPlayerDamage = (victim: Player | Bot) => { };

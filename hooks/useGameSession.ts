@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState } from '../types';
 import { createInitialState, updateClientVisuals, updateGameState } from '../services/engine';
 import { gameStateManager } from '../services/engine/GameStateManager'; // EIDOLON-V FIX: Import GameStateManager
@@ -55,12 +55,12 @@ export const useGameSession = () => {
 
     // EIDOLON-V FIX: Initialize AudioEngine and Input Manager
     useEffect(() => {
-      inputManager.init();
-      audioEngine.initialize();
+        inputManager.init();
+        audioEngine.initialize();
 
-      return () => {
-        audioEngine.dispose();
-      };
+        return () => {
+            audioEngine.dispose();
+        };
     }, []);
 
     // 3. GAME LOOP HANDLERS
@@ -133,44 +133,49 @@ export const useGameSession = () => {
     }, []);
 
     // 4. ACTIONS
-    const actions = {
+    // 4. ACTIONS
+    // 4. ACTIONS
+
+    // Core Actions defined as stable callbacks to allow internal reuse
+    const startGame = useCallback((name: string, shape: ShapeId, level: number, multiplayer = false) => {
+        gameStateManager.stopGameLoop();
+
+        const state = gameStateManager.createInitialState(level);
+        state.player.name = name;
+        state.player.shape = shape;
+        gameStateRef.current = state;
+
+        gameStateManager.setGameLoopCallbacks(onUpdate, onRender);
+
+        if (multiplayer) {
+            networkClient.connectWithRetry(name, shape);
+            networkClient.setLocalState(state);
+        }
+
+        setUi(s => ({ ...clearOverlays(s), screen: 'playing' }));
+        gameStateManager.startGameLoop(60);
+
+        inputManager.state.actions = { skill: false, eject: false };
+    }, [onUpdate, onRender, settings.useMultiplayer]); // settings.useMultiplayer needed if referenced? No, passed as arg? No, logic uses it? checking...
+
+    const quitGame = useCallback(() => {
+        gameStateManager.stopGameLoop();
+        networkClient.disconnect();
+        gameStateRef.current = null;
+        setUi(s => ({ ...clearOverlays(s), screen: 'menu' }));
+    }, []);
+
+    const actions = React.useMemo(() => ({
         game: {
-            start: (name: string, shape: ShapeId, level: number, multiplayer = false) => {
-                gameStateManager.stopGameLoop(); // EIDOLON-V FIX: Stop existing loop
-
-                const state = gameStateManager.createInitialState(level);
-                state.player.name = name;
-                state.player.shape = shape;
-                gameStateRef.current = state;
-
-                // EIDOLON-V FIX: Set callbacks in GameStateManager
-                gameStateManager.setGameLoopCallbacks(onUpdate, onRender);
-
-                if (multiplayer) {
-                    networkClient.connectWithRetry(name, shape);
-                    networkClient.setLocalState(state);
-                }
-
-                setUi(s => ({ ...clearOverlays(s), screen: 'playing' }));
-
-                gameStateManager.startGameLoop(60); // EIDOLON-V FIX: Use GameStateManager
-
-                // Reset Input
-                inputManager.state.actions = { skill: false, eject: false };
-            },
-            quit: () => {
-                gameStateManager.stopGameLoop(); // EIDOLON-V FIX: Use GameStateManager
-                networkClient.disconnect();
-                gameStateRef.current = null;
-                setUi(s => ({ ...clearOverlays(s), screen: 'menu' }));
-            },
+            start: startGame,
+            quit: quitGame,
             retry: () => {
                 const state = gameStateRef.current;
-                if (state) actions.game.start(state.player.name, state.player.shape as ShapeId, state.level, settings.useMultiplayer);
+                if (state) startGame(state.player.name, state.player.shape as ShapeId, state.level, settings.useMultiplayer);
             },
             nextLevel: () => {
                 const state = gameStateRef.current;
-                if (state) actions.game.start(state.player.name, state.player.shape as ShapeId, state.level + 1, false);
+                if (state) startGame(state.player.name, state.player.shape as ShapeId, state.level + 1, false);
             }
         },
         ui: {
@@ -186,7 +191,7 @@ export const useGameSession = () => {
                 return next;
             }),
             returnToMenu: () => {
-                actions.game.quit();
+                quitGame();
             },
             togglePixi: (v: boolean) => setSettings(s => ({ ...s, usePixi: v })),
             toggleMultiplayer: (v: boolean) => setSettings(s => ({ ...s, useMultiplayer: v })),
@@ -198,7 +203,7 @@ export const useGameSession = () => {
             setName: (name: string) => setMeta(m => ({ ...m, menuName: name })),
             setShape: (shape: ShapeId) => setMeta(m => ({ ...m, menuShape: shape })),
             setLevel: (lvl: number) => setMeta(m => ({ ...m, selectedLevel: lvl })),
-            startQueue: () => { /* ... matchmaking logic ... */ },
+            startQueue: () => { /* ... */ },
             cancelQueue: () => { /* ... */ },
             startTournamentQueue: () => { /* ... */ },
             cancelTournamentQueue: () => { /* ... */ }
@@ -207,7 +212,8 @@ export const useGameSession = () => {
             togglePixi: (v: boolean) => setSettings(s => ({ ...s, usePixi: v })),
             toggleMultiplayer: (v: boolean) => setSettings(s => ({ ...s, useMultiplayer: v }))
         }
-    };
+    }), [startGame, quitGame, settings.useMultiplayer]); // Rebuild actions if these change
+
 
     return { ui, state: { level: gameStateRef.current?.level, lastResult: gameStateRef.current?.result }, actions, refs: { gameState: gameStateRef, alpha: alphaRef }, settings, progression, isTouch, meta };
 };

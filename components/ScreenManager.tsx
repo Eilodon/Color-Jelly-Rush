@@ -1,4 +1,5 @@
 import React from 'react';
+import ErrorBoundary from './ErrorBoundary';
 import MainMenu from './MainMenu';
 import HUD from './HUD';
 import MobileControls from './MobileControls';
@@ -10,6 +11,8 @@ import BootScreen from './screens/BootScreen';
 import GameCanvas from './GameCanvas';
 import { UiOverlayManager } from './UiOverlayManager';
 import { useGameSession } from '../hooks/useGameSession';
+import { isWebGLSupported } from '../services/graphics/WebGLCheck';
+import { inputManager } from '../services/input/InputManager';
 
 // Lazy load Pixi Canvas for performance
 const PixiGameCanvas = React.lazy(() => import('./PixiGameCanvas'));
@@ -22,18 +25,38 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
   const { ui, refs, settings } = session;
   const isPlaying = ui.screen === 'playing' && refs.gameState.current;
   const inputEnabled = isPlaying && ui.overlays.length === 0;
-  const usePixi = settings.usePixi;
+
+  // EIDOLON-V FIX: Auto-fallback if WebGL is missing
+  const isWebGL = React.useMemo(() => isWebGLSupported(), []);
+  const usePixi = settings.usePixi && isWebGL;
 
   if (!isPlaying) return null;
 
   return (
     <React.Suspense fallback={<div className="absolute center text-gold-400">Summoning...</div>}>
       {usePixi ? (
-        <PixiGameCanvas
-          gameStateRef={refs.gameState}
-          inputEnabled={inputEnabled}
-          alphaRef={refs.alpha}
-        />
+        <ErrorBoundary
+          fallback={
+            <div className="absolute inset-0 flex items-center justify-center bg-ink-950">
+              <div className="text-center">
+                <div className="text-red-400 text-xl mb-4">PixiJS Failed to Load</div>
+                <div className="text-mist-400 text-sm mb-4">Falling back to Canvas renderer...</div>
+                <button
+                  onClick={() => session.actions.ui.togglePixi(false)}
+                  className="px-4 py-2 bg-gold-400 text-ink-950 rounded font-bold"
+                >
+                  Use Canvas
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <PixiGameCanvas
+            gameStateRef={refs.gameState}
+            inputEnabled={inputEnabled}
+            alphaRef={refs.alpha}
+          />
+        </ErrorBoundary>
       ) : (
         <GameCanvas
           gameStateRef={refs.gameState}
@@ -41,8 +64,14 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
           height={window.innerHeight}
           enablePointerInput={inputEnabled}
           onMouseMove={(x, y) => {
-            // GameCanvas legacy mouse handling
+            // Normalize inputs for InputManager (Screen center relative -> -1..1)
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            // x, y from GameCanvas are already centered offsets
+            inputManager.setJoystick(x / centerX, y / centerY);
           }}
+          onMouseDown={() => inputManager.setButton('skill', true)}
+          onMouseUp={() => inputManager.setButton('skill', false)}
         />
       )}
     </React.Suspense>

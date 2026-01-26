@@ -1,10 +1,10 @@
 // EIDOLON-V FIX: Optimized Game Engine with Batch Processing
 // Eliminates O(n²) complexity and reduces function call overhead
 
-import { GameState, Player, Bot, Food, Entity } from '../../types';
+import { GameState, Player, Bot, Food, Entity, Projectile } from '../../types';
 import { gameStateManager } from './GameStateManager';
 import { bindEngine, getCurrentSpatialGrid } from './context';
-import { integrateEntity, checkCollisions, constrainToMap } from './systems/physics';
+import { integrateEntity, checkCollisions, constrainToMap, updatePhysicsWorld } from './systems/physics';
 import { updateAI } from './systems/ai';
 import { applyProjectileEffect, resolveCombat, consumePickup } from './systems/combat';
 import { applySkill } from './systems/skills';
@@ -21,7 +21,8 @@ import { getLevelConfig } from '../cjr/levels';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
 import { resetContributionLog } from '../cjr/contribution';
-import { inputManager } from '../input/InputManager';
+
+import { pooledEntityFactory } from '../pooling/ObjectPool'; // EIDOLON-V FIX: Import pooling
 
 // EIDOLON-V FIX: Batch processing system to reduce function call overhead
 interface EntityBatch {
@@ -32,7 +33,6 @@ interface EntityBatch {
   all: Entity[];
 }
 
-// EIDOLON-V FIX: Object pool for entity arrays
 // EIDOLON-V FIX: Object pool for entity arrays
 class PersistentBatch {
   public players: Player[] = [];
@@ -58,7 +58,8 @@ class OptimizedGameEngine {
   private frameCount: number = 0;
 
   private constructor() {
-    this.spatialGrid = getCurrentSpatialGrid();
+    // EIDOLON-V FIX: Don't require spatial grid in constructor
+    // It will be bound when engine is properly initialized
     this.batch = new PersistentBatch();
   }
 
@@ -115,16 +116,23 @@ class OptimizedGameEngine {
 
   // EIDOLON-V FIX: Batch physics integration
   private integratePhysics(batch: EntityBatch, dt: number): void {
-    // Process all entities in single loop
-    const allEntities = batch.all;
+    // 1. Sync Logic/Velocity TO PhysicsWorld (via integrateEntity)
     const length = batch.players.length + batch.bots.length;
 
+    // Only integrate Players and Bots for physics prep (velocity clamping, etc)
     for (let i = 0; i < length; i++) {
-      const entity = allEntities[i];
-      // Only integrate Players and Bots for physics here? Or checks type?
-      // Based on original code: integrateEntity(p, dt)
-      // We know first `length` items are players and bots.
-      integrateEntity(entity as Player | Bot, dt);
+      integrateEntity(batch.all[i] as Player | Bot, dt);
+    }
+
+    // 2. Execute Physics Integration (SIMD-optimized array operations)
+    const world = getCurrentEngine().physicsWorld;
+    updatePhysicsWorld(world, dt);
+
+    // 3. Sync Position FROM PhysicsWorld BACK to Entities (for Rendering)
+    const all = batch.all;
+    for (let i = 0; i < all.length; i++) {
+      const ent = all[i];
+      if (ent.id) world.syncBackToEntity(ent.id, ent);
     }
   }
 
@@ -189,7 +197,7 @@ class OptimizedGameEngine {
   private updatePlayer(player: Player, state: GameState, dt: number): void {
     if (player.isDead) return;
 
-    this.handleInput(player, state);
+    // Input handled externally (by useGameSession or NetworkClient)
 
     // Optimized movement calculation
     const dx = player.targetPosition.x - player.position.x;
@@ -378,25 +386,59 @@ class OptimizedGameEngine {
   }
 
   private cleanupTransientEntities(state: GameState): void {
+    const grid = this.spatialGrid;
+
+    // Remove dead food
+    if (state.food.length > 0) {
+      const deadFood: Food[] = [];
+      const aliveFood: Food[] = [];
+
+      // Single pass filter to avoid double iteration allocation overhead (though filter does alloc)
+      // Ideally we swap-remove, but strict order isn't required for food.
+      for (let i = 0; i < state.food.length; i++) {
+        const f = state.food[i];
+        if (f.isDead) {
+          deadFood.push(f);
+        } else {
+          aliveFood.push(f);
+        }
+      }
+
+      // Release to pool and grid
+      for (let i = 0; i < deadFood.length; i++) {
+        const food = deadFood[i];
+        grid.removeStatic(food);
+        pooledEntityFactory.createPooledFood().release(food);
+      }
+
+      state.food = aliveFood;
+    }
+
+    // Remove dead projectiles
+    if (state.projectiles.length > 0) {
+      const deadProj: any[] = []; // Type safety escape locally
+      const aliveProj: Projectile[] = [];
+
+      for (let i = 0; i < state.projectiles.length; i++) {
+        const p = state.projectiles[i];
+        if (p.isDead) {
+          deadProj.push(p);
+        } else {
+          aliveProj.push(p);
+        }
+      }
+
+      for (let i = 0; i < deadProj.length; i++) {
+        pooledEntityFactory.createPooledProjectile().release(deadProj[i]);
+      }
+
+      state.projectiles = aliveProj;
+    }
+
     // Remove dead entities
     state.bots = state.bots.filter(b => !b.isDead);
     state.particles = state.particles.filter(p => p.life > 0);
     state.delayedActions = state.delayedActions.filter(a => a.timer > 0);
-  }
-
-  private handleInput(player: Player, state: GameState): void {
-    // Input handling logic
-    const events = inputManager.popEvents();
-    if (events.length > 0) {
-      if (!player.inputEvents) player.inputEvents = [];
-      player.inputEvents.push(...events);
-    }
-
-    const move = inputManager.state.move;
-    if (move.x !== 0 || move.y !== 0) {
-      player.targetPosition.x = player.position.x + move.x * 200;
-      player.targetPosition.y = player.position.y + move.y * 200;
-    }
   }
 
   private updateCamera(state: GameState): void {
@@ -419,11 +461,13 @@ class OptimizedGameEngine {
 
   // EIDOLON-V FIX: Main optimized update method
   public updateGameState(state: GameState, dt: number): GameState {
+    // EIDOLON-V FIX: Bind engine and spatial grid at update time
+    bindEngine(state.engine);
+    this.spatialGrid = getCurrentSpatialGrid();
+
     if (state.isPaused) return state;
 
     this.frameCount++;
-
-    bindEngine(state.engine);
 
     // Collect entities once
     const batch = this.collectEntities(state);
@@ -464,14 +508,17 @@ class OptimizedGameEngine {
   }
 
   public updateClientVisuals(state: GameState, dt: number): void {
+    // EIDOLON-V FIX: Bind engine and spatial grid at update time
     bindEngine(state.engine);
+    this.spatialGrid = getCurrentSpatialGrid();
+
     this.updateFloatingTexts(state, dt);
     vfxIntegrationManager.update(state, dt);
     this.updateCamera(state);
 
-    const shakeOffset = vfxIntegrationManager.getScreenShakeOffset();
-    state.camera.x += shakeOffset.x;
-    state.camera.y += shakeOffset.y;
+    const visualShakeOffset = vfxIntegrationManager.getScreenShakeOffset();
+    state.camera.x += visualShakeOffset.x;
+    state.camera.y += visualShakeOffset.y;
   }
 
   // EIDOLON-V FIX: Performance monitoring
