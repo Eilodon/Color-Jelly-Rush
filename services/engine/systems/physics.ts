@@ -90,6 +90,10 @@ export const integrateEntity = (entity: Player | Bot, dt: number) => {
 
   // TEMPORARY: Detailed integration is done in updatePhysicsWorld.
   // Here we just prepare data.
+
+  // EIDOLON-V FIX: Restore movement until ECS is fully active
+  entity.position.x += entity.velocity.x * dt * 10; // Scaler 10 matches legacy feel
+  entity.position.y += entity.velocity.y * dt * 10;
 };
 
 /**

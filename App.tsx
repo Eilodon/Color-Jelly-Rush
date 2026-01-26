@@ -29,6 +29,14 @@ const App: React.FC = () => {
   // Initialize Input Manager
   useEffect(() => {
     inputManager.init();
+
+    // EIDOLON-V FIX: Boot Sequence
+    // Simulate asset loading or just delay for effect
+    const timer = setTimeout(() => {
+      actions.ui.setScreen('menu');
+    }, 1500); // 1.5s boot time
+
+    return () => clearTimeout(timer);
   }, []);
 
   return (

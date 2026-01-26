@@ -47,6 +47,7 @@ export const useGameSession = () => {
     const gameStateRef = useRef<GameState | null>(null);
     const loopRef = useRef<FixedGameLoop | null>(null);
     const alphaRef = useRef(0);
+    // Auto-detect touch device
     const isTouch = useRef(typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)).current;
 
     // Persist settings/progression
@@ -55,6 +56,7 @@ export const useGameSession = () => {
 
     // 3. GAME LOOP HANDLERS
     const onUpdate = useCallback((dt: number) => {
+        // console.log('DEBUG: Loop Tick', dt, gameStateRef.current?.isPaused); // EIDOLON-V LOG
         const state = gameStateRef.current;
         if (!state || state.isPaused) return;
 

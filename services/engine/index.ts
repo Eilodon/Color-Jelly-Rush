@@ -120,6 +120,33 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
 
   handleInput(player, state);
 
+  // EIDOLON-V FIX: Player Movement Logic (Steering)
+  const dx = player.targetPosition.x - player.position.x;
+  const dy = player.targetPosition.y - player.position.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // Deadzone to prevent jitter
+  if (dist > 5) { // 5px deadzone
+    const speed = player.maxSpeed * (player.statusEffects.speedBoost || 1);
+
+    // Normalize desired velocity
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    const desiredX = nx * speed;
+    const desiredY = ny * speed;
+
+    // Steering Force (Responsiveness)
+    // High factor = snappy (0.2), Low factor = drift (0.05)
+    const steerFactor = 0.2;
+
+    player.velocity.x += (desiredX - player.velocity.x) * steerFactor;
+    player.velocity.y += (desiredY - player.velocity.y) * steerFactor;
+  } else {
+    // Decelerate if no input (Friction handles this, but we can help it)
+    // actually physics.ts handles friction, so we just stop adding force.
+  }
+
   constrainToMap(player, MAP_RADIUS);
 
   const nearby = getCurrentSpatialGrid().getNearby(player, 300);
