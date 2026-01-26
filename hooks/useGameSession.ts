@@ -8,10 +8,9 @@ import { inputManager } from '../services/input/InputManager';
 import { loadSettings, loadProgression, defaultSettings, defaultProgression, saveSettings, saveProgression } from '../services/ui/storage';
 import { initialUiState, pushOverlay, popOverlay, clearOverlays, UiState, Screen } from '../services/ui/screenMachine';
 import { ShapeId } from '../services/cjr/cjrTypes';
+import { MatchmakingStatus } from '../services/meta/matchmaking';
 
 // Define missing types locally or import if available
-// Assuming MatchmakingStatus and TournamentQueueStatus are strings based on error message 'string' not assignable
-export type MatchmakingStatus = 'idle' | 'searching' | 'found' | 'error';
 export type TournamentQueueStatus = 'idle' | 'queued' | 'ready';
 
 interface MetaState {

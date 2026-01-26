@@ -6,7 +6,7 @@
  */
 
 // Extend Player interface with synergy status effects
-declare module '../../types' {
+declare module '../../types/player' {
   interface Player {
     // Tattoo Synergy Effects - Phase 2 Gameplay Depth
     neutralPurification?: boolean;
@@ -38,7 +38,7 @@ declare module '../../types' {
 }
 
 // Extend Particle interface with synergy effects
-declare module '../../types' {
+declare module '../../types/entity' {
   interface Particle {
     // Synergy pattern effects
     isSynergyFusion?: boolean;
@@ -52,7 +52,7 @@ declare module '../../types' {
     geometricRadius?: number;
     rotationSpeed?: number;
     geometricColor?: string;
-    
+
     // Additional synergy effects
     isSynergyEffect?: boolean;
     synergyColor?: string;

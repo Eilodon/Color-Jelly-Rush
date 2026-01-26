@@ -33,12 +33,15 @@ export const randomPigment = (): PigmentVec3 => ({
   b: Math.random(),
 });
 
+import { SynergyComponent } from '../ecs/components/SynergyComponent';
+
 export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime: number = 0): Player => {
   const position = randomPosInRing(1);
   const pigment = randomPigment();
+  const id = Math.random().toString(36).substr(2, 9);
 
-  return {
-    id: Math.random().toString(36).substr(2, 9),
+  const player: Player = {
+    id,
     position,
     velocity: { x: 0, y: 0 },
     radius: PLAYER_START_RADIUS,
@@ -140,7 +143,12 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
     },
     killStreak: 0,
     streakTimer: 0,
+    components: new Map(),
   };
+
+  player.components!.set('SynergyComponent', new SynergyComponent(player.id));
+
+  return player;
 };
 
 export const createBot = (id: string, spawnTime: number = 0): Bot => {

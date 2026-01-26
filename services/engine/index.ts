@@ -51,7 +51,8 @@ import { getTattooChoices } from '../cjr/tattoos';
 import { TattooId } from '../cjr/cjrTypes';
 import { getLevelConfig } from '../cjr/levels';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
-import { tattooSynergyManager } from '../cjr/tattooSynergies';
+// import { tattooSynergyManager } from '../cjr/tattooSynergies'; // Deprecated
+import { synergySystem } from '../ecs/systems/SynergySystem';
 import { resetContributionLog } from '../cjr/contribution';
 
 import { updatePhysicsWorld } from './systems/physics';
@@ -144,8 +145,11 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   checkTattooUnlock(state);
   vfxIntegrationManager.update(state, dt);
 
-  players.forEach(player => tattooSynergyManager.checkSynergies(player, state));
-  tattooSynergyManager.updateSynergies(state, dt);
+  checkTattooUnlock(state);
+  vfxIntegrationManager.update(state, dt);
+
+  // EIDOLON-V: ECS Synergy System
+  synergySystem.update(state, dt);
 
   const shakeOffset = vfxIntegrationManager.getScreenShakeOffset();
   state.camera.x += shakeOffset.x;
@@ -489,7 +493,6 @@ export const createInitialState = (level: number = 1): GameState => {
   resetWaveTimers(runtime, levelConfig);
   resetBossState(runtime);
   resetContributionLog(runtime);
-  tattooSynergyManager.reset();
 
   const initialFood = Math.max(50, levelConfig.burstSizes.ring1 * 8); // INCREASED FOR TESTING
 

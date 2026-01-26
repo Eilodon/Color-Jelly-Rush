@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Application, Container, Graphics, Mesh, Geometry, Shader } from 'pixi.js';
+import { Application, Container, Graphics, Mesh, MeshGeometry, Shader } from 'pixi.js';
 import { GameState, isPlayerOrBot } from '../types';
 import { TattooId } from '../services/cjr/cjrTypes';
 import { CrystalVFX } from '../services/vfx/CrystalVFX';
@@ -18,7 +18,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
   const vfxRef = useRef<CrystalVFX | null>(null);
 
   // Caches
-  const geometryCache = useRef<Geometry | null>(null);
+  const geometryCache = useRef<MeshGeometry | null>(null);
   const shaderCache = useRef<Shader | null>(null);
   const meshesRef = useRef<Map<string, Mesh | Graphics>>(new Map());
   const cameraSmoothRef = useRef({ x: 0, y: 0 });
@@ -97,8 +97,8 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
 
         // -- CAMERA LOGIC --
         const p = state.player;
-        const pX = p.prevPosition ? (p.prevPosition.x + (p.position.x - p.prevPosition.x) * alpha) : p.position.x;
-        const pY = p.prevPosition ? (p.prevPosition.y + (p.position.y - p.prevPosition.y) * alpha) : p.position.y;
+        const pX = p.position.x;
+        const pY = p.position.y;
 
         // Target opposite to player
         const targetX = -pX;
@@ -131,12 +131,10 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
 
   const initResources = () => {
     // Quad Geometry
-    const geometry = new Geometry({
-      attributes: {
-        aVertexPosition: [-1, -1, 1, -1, 1, 1, -1, 1],
-        aUvs: [0, 0, 1, 0, 1, 1, 0, 1],
-      },
-      indexBuffer: [0, 1, 2, 0, 2, 3]
+    const geometry = new MeshGeometry({
+      positions: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]),
+      uvs: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3])
     });
     geometryCache.current = geometry;
 
@@ -219,6 +217,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
               uEmotion: 0, uEnergy: 0, uPulsePhase: 0.0,
             }
           });
+          // @ts-ignore - TextureShader vs Shader mismatch in v8
           mesh = new Mesh({ geometry: geometryCache.current, shader: entityShader });
           mesh.zIndex = 10;
         } else {
@@ -239,10 +238,9 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
       }
 
       // Interpolation
-      const prev = e.prevPosition || e.position;
       const curr = e.position;
-      const x = prev.x + (curr.x - prev.x) * alpha;
-      const y = prev.y + (curr.y - prev.y) * alpha;
+      const x = curr.x;
+      const y = curr.y;
       mesh.position.set(x, y);
 
       // Update Props (Shader/Tint)

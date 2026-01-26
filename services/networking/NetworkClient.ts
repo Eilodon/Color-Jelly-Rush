@@ -531,7 +531,7 @@ export class NetworkClient {
     });
   }
 
-  sendInput(target: Vector2, inputs: { space: boolean; w: boolean }, dt: number) {
+  sendInput(target: Vector2, inputs: { space: boolean; w: boolean }, dt: number, events: any[] = []) {
     if (!this.room) return;
     const seq = ++this.inputSeq;
     this.pendingInputs.push({ seq, target: { ...target }, inputs: { ...inputs }, dt });
