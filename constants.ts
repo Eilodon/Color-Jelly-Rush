@@ -1,7 +1,7 @@
 
 import { PigmentVec3 } from './services/cjr/cjrTypes';
 
-// World Settings
+// World Settings (Core Engine Constants)
 export const WORLD_WIDTH = 3400;
 export const WORLD_HEIGHT = 3400;
 export const MAP_RADIUS = 1600;
@@ -55,23 +55,21 @@ export const KING_BOUNTY_SCORE = 200;
 // Mutations
 export const MUTATION_CHOICES = 3;
 
-// --- CJR SPECIFIC CONSTANTS (Moved from cjrConstants.ts to here for single source of truth or compatibility) ---
-// Ring radii (distance from center)
+// EIDOLON-V FIX: Add CJR constants to main file for single source of truth
+// These were previously duplicated in services/cjr/cjrConstants.ts
 export const RING_RADII = {
-  R1_OUTER: 1600,
-  R2_BOUNDARY: 1000,
-  R3_BOUNDARY: 500,
-  CENTER: 150,
+  R1: 1600,
+  R2: 1000,
+  R3: 400,
+  CENTER: 100,
 };
 
-// Match thresholds
 export const THRESHOLDS = {
   INTO_RING2: 0.50,
   INTO_RING3: 0.70,
   WIN_HOLD: 0.90,
 };
 
-// Commit buffs
 export const COMMIT_BUFFS = {
   SHIELD_DURATION: 2.0,
   SPEED_BOOST: 1.10,
@@ -79,14 +77,33 @@ export const COMMIT_BUFFS = {
 };
 
 export const COLOR_PALETTE = {
-  background: '#020617', // Void color
-  grid: 'rgba(255,255,255,0.05)',
-  zone: 'rgba(20, 0, 20, 0.5)',
-  zoneBorder: '#ef4444',
-  text: '#ffffff',
-  indicatorSafe: '#22c55e',
-  indicatorDanger: '#ef4444',
-  indicatorCombat: '#eab308',
-  indicatorCounter: '#3b82f6',
-  indicatorCountered: '#f97316',
+  background: '#111111',
+  rings: {
+    r1: '#475569', // Slate
+    r2: '#3b82f6', // Blue
+    r3: '#ef4444'  // Red
+  }
+};
+
+export const WAVE_CONFIG = {
+  INTERVAL: {
+    1: 8000,
+    2: 10000,
+    3: 14000,
+  },
+  SPAWN_WEIGHTS: {
+    pigment: 0.60,
+    neutral: 0.25,
+    special: 0.15
+  },
+  SPAWN_COUNTS: {
+    R1: 5,
+    R2: 4,
+    R3: 3
+  }
+};
+
+export const BOSS_CONFIGS = {
+  BOSS_1_TRIGGER: 'RING_2_ACTIVE',
+  BOSS_2_TRIGGER: 'RING_3_ACTIVE',
 };

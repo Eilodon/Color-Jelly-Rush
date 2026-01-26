@@ -85,6 +85,7 @@ export interface StatusEffects {
 }
 
 export interface Player extends Entity {
+    // #region Identity & Core Stats
     name: string;
     score: number;
     kills: number;
@@ -97,8 +98,9 @@ export interface Player extends Entity {
     tier: SizeTier;
     targetPosition: Vector2; // Mouse/Input target
     spawnTime: number;
+    // #endregion
 
-    // CJR Core Fields
+    // #region CJR Core Game Logic
     pigment: PigmentVec3;
     targetPigment: PigmentVec3;
     matchPercent: number; // 0..1
@@ -112,13 +114,16 @@ export interface Player extends Entity {
     ring3LowMatchTime: number;
     emotionTimer: number;
     emotionOverride?: Emotion;
+    // #endregion
 
-    // Physics Props
+    // #region Physics Properties
+    // TODO: EIDOLON-V - Extract to PhysicsBody component in future ECS refactor
     acceleration: number;
     maxSpeed: number;
     friction: number;
+    // #endregion
 
-    // Mechanics
+    // #region Game Mechanics
     isInvulnerable: boolean;
     skillCooldown: number;
     maxSkillCooldown: number;
@@ -127,12 +132,12 @@ export interface Player extends Entity {
         w: boolean;
     };
     inputSeq?: number;
+    // #endregion
 
-    // RPG Stats (Simplified)
+    // #region Combat & RPG Stats
+    // TODO: EIDOLON-V - Extract to CombatStats component in future ECS refactor
     defense: number;
     damageMultiplier: number;
-
-    // Tattoo Stats (formerly mutations, now consolidated)
     critChance: number;
     critMultiplier: number;
     lifesteal: number;
@@ -148,7 +153,9 @@ export interface Player extends Entity {
     doubleCast: boolean;
     reviveAvailable: boolean;
     magneticFieldRadius: number;
+    // #endregion
 
+    // #region Ability System
     mutationCooldowns: {
         speedSurge: number;
         invulnerable: number;
@@ -159,9 +166,12 @@ export interface Player extends Entity {
     };
     rewindHistory: { position: Vector2; health: number; time: number }[];
     stationaryTime: number;
+    // #endregion
 
-    // Status Effects
+    // #region Status Effects & Buffs
+    // TODO: EIDOLON-V - Extract to StatusEffects component in future ECS refactor
     statusEffects: StatusEffects;
+    // #endregion
 }
 
 export interface Bot extends Player {

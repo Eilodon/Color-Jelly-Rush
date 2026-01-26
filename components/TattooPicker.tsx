@@ -2,6 +2,7 @@
 import React from 'react';
 import { MutationTier, TattooChoice } from '../types';
 import { TattooId } from '../services/cjr/cjrTypes';
+import { triggerHaptic } from '../services/haptics';
 
 interface TattooPickerProps {
     choices: TattooChoice[];
@@ -61,7 +62,10 @@ const TattooPicker: React.FC<TattooPickerProps> = ({ choices, onSelect }) => {
                     {choices.map((choice) => (
                         <button
                             key={choice.id}
-                            onClick={() => onSelect(choice.id)}
+                            onClick={() => {
+    triggerHaptic('medium'); // EIDOLON-V: Add haptic feedback for power selection moment
+    onSelect(choice.id);
+}}
                             className={`group relative p-6 rounded-2xl border-2 text-left hover:scale-[1.03] transition-all duration-300 shadow-xl overflow-hidden
                 bg-[linear-gradient(140deg,rgba(29,22,33,0.95),rgba(13,10,16,0.95))] border-[color:rgba(225,214,200,0.12)]
                 ${tierColor(choice.tier)}`}

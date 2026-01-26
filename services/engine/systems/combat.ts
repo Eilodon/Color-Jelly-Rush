@@ -180,11 +180,12 @@ export const resolveCombat = (
   const r1 = e1.radius;
   const r2 = e2.radius;
 
+  // EIDOLON-V FIX: Check consumption first, return early if consumed
   if (r1 > r2 * (1 / EAT_THRESHOLD_RATIO) && c1) {
     const dist = Math.hypot(e1.position.x - e2.position.x, e1.position.y - e2.position.y);
     if (dist < r1 - r2 * 0.5) {
       consume(e1, e2, state);
-      return;
+      return; // EIDOLON-V: Early return to prevent damage calculation on dead entity
     }
   }
 
@@ -192,15 +193,16 @@ export const resolveCombat = (
     const dist = Math.hypot(e1.position.x - e2.position.x, e1.position.y - e2.position.y);
     if (dist < r2 - r1 * 0.5) {
       consume(e2, e1, state);
-      return;
+      return; // EIDOLON-V: Early return to prevent damage calculation on dead entity
     }
   }
 
-  if (c1) {
+  // Only apply damage if neither entity was consumed
+  if (c1 && !e2.isDead) {
     const dmg = 10 * dt * e1.damageMultiplier;
     reduceHealth(e2, dmg, e1, state);
   }
-  if (c2) {
+  if (c2 && !e1.isDead) {
     const dmg = 10 * dt * e2.damageMultiplier;
     reduceHealth(e1, dmg, e2, state);
   }

@@ -61,9 +61,22 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
     state.isPaused = true;
   }
 
-  // 3. SPATIAL GRID INSERTION
-  const allEntities = [...players, ...state.bots, ...state.food, ...state.projectiles];
-  allEntities.forEach(entity => grid.insert(entity));
+  // 3. SPATIAL GRID OPTIMIZATION (EIDOLON-V FIX)
+  // Only clear and re-insert DYNAMIC entities each frame
+  // Static food remains in grid persistently for massive performance gain
+  // TODO: EIDOLON-V - Implement Static/Dynamic Grid separation
+  // Food (260+ static objects) should be in a separate static grid
+  // Only update static grid when food is eaten or spawned
+  // This will prevent re-hashing hundreds of static objects 60 times per second
+  const dynamicEntities = [...players, ...state.bots, ...state.projectiles];
+  
+  // Clear only dynamic buckets (much faster than full clear)
+  grid.clearDynamic();
+  
+  // Insert dynamic entities
+  dynamicEntities.forEach(entity => grid.insert(entity));
+  
+  // Static food is only inserted when spawned or removed (see cleanupTransientEntities)
 
   // 4. LOGIC UPDATES
   players.forEach(player => updatePlayer(player, state, dt));
@@ -125,6 +138,11 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
   const dy = player.targetPosition.y - player.position.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
 
+  // DEBUG: Log movement data
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+    console.log('DEBUG: Player movement - Pos:', player.position, 'Target:', player.targetPosition, 'Distance:', dist);
+  }
+
   // Deadzone to prevent jitter
   if (dist > 5) { // 5px deadzone
     const speed = player.maxSpeed * (player.statusEffects.speedBoost || 1);
@@ -142,6 +160,8 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
 
     player.velocity.x += (desiredX - player.velocity.x) * steerFactor;
     player.velocity.y += (desiredY - player.velocity.y) * steerFactor;
+    
+    console.log('DEBUG: Applying velocity - Desired:', {x: desiredX, y: desiredY}, 'New Velocity:', player.velocity);
   } else {
     // Decelerate if no input (Friction handles this, but we can help it)
     // actually physics.ts handles friction, so we just stop adding force.
@@ -293,15 +313,30 @@ const updateFloatingTexts = (state: GameState, dt: number) => {
 };
 
 const cleanupTransientEntities = (state: GameState) => {
-  if (state.food.length > 0) state.food = state.food.filter(f => !f.isDead);
+  const grid = getCurrentSpatialGrid();
+  
+  if (state.food.length > 0) {
+    // Remove dead food from static grid
+    const deadFood = state.food.filter(f => f.isDead);
+    deadFood.forEach(food => grid.removeStatic(food));
+    
+    // Keep only alive food
+    state.food = state.food.filter(f => !f.isDead);
+  }
   if (state.projectiles.length > 0) state.projectiles = state.projectiles.filter(p => !p.isDead);
 };
 
 // ... (Giữ nguyên updateCamera, checkTattooUnlock, createInitialState) ...
 const updateCamera = (state: GameState) => {
   if (state.player && !state.player.isDead) {
+    const prevCamera = { x: state.camera.x, y: state.camera.y };
     state.camera.x += (state.player.position.x - state.camera.x) * 0.1;
     state.camera.y += (state.player.position.y - state.camera.y) * 0.1;
+    
+    // DEBUG: Log camera movement
+    if (Math.abs(state.camera.x - prevCamera.x) > 1 || Math.abs(state.camera.y - prevCamera.y) > 1) {
+      console.log('DEBUG: Camera movement - Player:', state.player.position, 'Camera:', state.camera);
+    }
   }
 };
 
@@ -333,6 +368,11 @@ export const createInitialState = (level: number = 1): GameState => {
   tattooSynergyManager.reset();
   const initialFood = Math.max(50, levelConfig.burstSizes.ring1 * 8);
 
+  // Create food and insert as static entities
+  const foodArray = Array.from({ length: initialFood }, () => createFood());
+  const grid = getCurrentSpatialGrid();
+  foodArray.forEach(food => grid.insertStatic(food));
+
   return {
     player,
     players: [player],
@@ -343,7 +383,7 @@ export const createInitialState = (level: number = 1): GameState => {
     }),
     creeps: [],
     boss: null,
-    food: Array.from({ length: initialFood }, () => createFood()),
+    food: foodArray,
     particles: [], // Không dùng nữa, để trống
     projectiles: [],
     floatingTexts: [],
@@ -354,7 +394,7 @@ export const createInitialState = (level: number = 1): GameState => {
     zoneRadius: MAP_RADIUS,
     gameTime: 0,
     currentRound: 1,
-    camera: { x: 0, y: 0 },
+    camera: { x: player.position.x, y: player.position.y }, // EIDOLON-V FIX: Start camera at player position
     shakeIntensity: 0,
     kingId: null,
     level,

@@ -46,7 +46,28 @@ class SpatialGrid {
     }
   }
 
+  // EIDOLON-V OPTIMIZATION: Clear only dynamic layers (0 & 1), leave static layer (2) for food
+  clearDynamic() {
+    this.frameCount++;
+    // Only clear high precision and medium range layers (0 & 1)
+    // Layer 2 (long range) is used for static food and remains persistent
+    for (let i = 0; i <= 1; i++) {
+      const layer = this.layers[i];
+      for (const bucket of layer.grid.values()) {
+        bucket.length = 0;
+      }
+
+      // Garbage Collection for empty buckets (staggered)
+      if (this.frameCount % 120 === 0) {
+        for (const [key, bucket] of layer.grid.entries()) {
+          if (bucket.length === 0) layer.grid.delete(key);
+        }
+      }
+    }
+  }
+
   insert(entity: Entity) {
+    // Dynamic entities go to all layers
     for (const layer of this.layers) {
       const cx = Math.floor(entity.position.x / layer.cellSize);
       const cy = Math.floor(entity.position.y / layer.cellSize);
@@ -58,6 +79,37 @@ class SpatialGrid {
         layer.grid.set(key, bucket);
       }
       bucket.push(entity);
+    }
+  }
+
+  // EIDOLON-V OPTIMIZATION: Insert static food only into long range layer (2)
+  insertStatic(entity: Entity) {
+    const layer = this.layers[2]; // Long range layer only
+    const cx = Math.floor(entity.position.x / layer.cellSize);
+    const cy = Math.floor(entity.position.y / layer.cellSize);
+    const key = this.getKey(cx, cy);
+
+    let bucket = layer.grid.get(key);
+    if (!bucket) {
+      bucket = [];
+      layer.grid.set(key, bucket);
+    }
+    bucket.push(entity);
+  }
+
+  // Remove static food from layer 2
+  removeStatic(entity: Entity) {
+    const layer = this.layers[2];
+    const cx = Math.floor(entity.position.x / layer.cellSize);
+    const cy = Math.floor(entity.position.y / layer.cellSize);
+    const key = this.getKey(cx, cy);
+
+    const bucket = layer.grid.get(key);
+    if (bucket) {
+      const index = bucket.indexOf(entity);
+      if (index !== -1) {
+        bucket.splice(index, 1);
+      }
     }
   }
 

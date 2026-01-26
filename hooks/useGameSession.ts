@@ -83,12 +83,14 @@ export const useGameSession = () => {
             if (events.length > 0) {
                 if (!state.player.inputEvents) state.player.inputEvents = [];
                 state.player.inputEvents.push(...events);
+                console.log('DEBUG: Input events processed:', events.length);
             }
 
             const move = inputManager.state.move;
             if (move.x !== 0 || move.y !== 0) {
                 state.player.targetPosition.x = state.player.position.x + move.x * 200;
                 state.player.targetPosition.y = state.player.position.y + move.y * 200;
+                console.log('DEBUG: Movement input detected:', move, 'New target:', state.player.targetPosition);
             }
 
             updateGameState(state, dt);

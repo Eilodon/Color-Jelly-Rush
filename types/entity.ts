@@ -1,5 +1,5 @@
 import { Vector2 } from './shared';
-export type { Vector2 };
+export type { Vector2 }; // Re-export for player.ts import compatibility
 
 export interface Entity {
     id: string;

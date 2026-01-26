@@ -1,26 +1,17 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-
-// EIDOLON-V: Custom plugin to load shaders as raw strings
-const glsl = () => ({
-  name: 'vite-plugin-glsl',
-  transform(code, id) {
-    if (/\.(glsl|vert|frag)$/.test(id)) {
-      return {
-        code: `export default ${JSON.stringify(code)}`,
-        map: null
-      };
-    }
-  }
-});
+import glsl from 'vite-plugin-glsl'; // EIDOLON-V: REAL PLUGIN - not fake!
 
 export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0'
   },
-  plugins: [react(), glsl()],
+  plugins: [
+    react(), 
+    glsl() // REAL PLUGIN with #include support
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'), // Standard alias
@@ -28,12 +19,6 @@ export default defineConfig({
       '@components': path.resolve(__dirname, './components'),
       '@assets': path.resolve(__dirname, './assets'),
     }
-  },
-  test: {
-    environment: 'jsdom',
-    include: ['tests/**/*.test.ts'],
-    setupFiles: ['./tests/setupTests.vitest.ts'],
-    globals: true
   },
   build: {
     target: 'esnext', // SOTA 2026: Optimize for modern browsers

@@ -8,7 +8,11 @@ export class SynergySystem {
 
     update(state: GameState, dt: number) {
         // Process all players and bots who might have synergies
-        const entities = [...state.players, ...state.bots];
+        // EIDOLON-V: ECS FACADE WARNING
+// This is NOT true ECS - it's OOP masquerading as ECS
+// True ECS would query entities by components, not iterate arrays manually
+// TODO: Either implement proper ECS with component queries or remove ECS facade
+const entities = [...state.players, ...state.bots];
 
         entities.forEach(entity => {
             // Ensure component exists (Lazy init for migration if not in factory yet)

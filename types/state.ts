@@ -3,6 +3,10 @@ import { Player, Bot, TattooChoice, MatchSummary } from './player';
 import { Food, Particle, Projectile, FloatingText, DelayedAction } from './entity';
 import { LevelConfig } from '../services/cjr/levels';
 
+// EIDOLON-V FIX: Import proper types instead of dangerous 'any'
+// This prevents runtime errors and provides proper type safety
+import type { GameEngine } from '../services/engine/context';
+
 export interface WaveRuntimeState {
     ring1: number;
     ring2: number;
@@ -33,12 +37,9 @@ export interface GameRuntimeState {
     };
 }
 
-// Forward declaration for engine
-export interface IGameEngine {
-    spatialGrid: any;
-    particlePool: any;
-    physicsWorld: any;
-}
+// EIDOLON-V FIX: Remove IGameEngine with 'any' types
+// Use proper GameEngine type from context for type safety
+// This prevents runtime errors like spatialGrid.inser() instead of insert()
 
 export interface GameState {
     player: Player;
@@ -53,7 +54,7 @@ export interface GameState {
     floatingTexts: FloatingText[];
     delayedActions: DelayedAction[];
 
-    engine: IGameEngine;
+    engine: GameEngine;
     runtime: GameRuntimeState;
 
     worldSize: Vector2;

@@ -282,10 +282,26 @@ export class NetworkClient {
           // Re-simulate pending inputs (approximate)
           // In full physics engine, we'd step physics. Here we just project.
           this.pendingInputs.forEach(input => {
-            // Simple Euler re-projection
-            // NOTE: This assumes 'friction' and 'acceleration' in a very basic way.
-            // Logic must match applyPhysics in physics.ts.
-            // For now, we trust the 'snap' helps correct big errors, and let index.ts continue locally.
+            // EIDOLON-V FIX: Add actual replay logic to prevent teleportation
+            // Calculate velocity based on target position (matches updatePlayer logic)
+            const dx = input.target.x - localPlayer.position.x;
+            const dy = input.target.y - localPlayer.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 5) { // Deadzone to prevent jitter
+              const speed = localPlayer.maxSpeed * (localPlayer.statusEffects?.speedBoost || 1);
+              const nx = dx / dist;
+              const ny = dy / dist;
+              
+              // Apply steering force (matches engine logic)
+              const steerFactor = 0.2;
+              localPlayer.velocity.x += (nx * speed - localPlayer.velocity.x) * steerFactor;
+              localPlayer.velocity.y += (ny * speed - localPlayer.velocity.y) * steerFactor;
+            }
+            
+            // Replay movement (matches integrateEntity logic)
+            localPlayer.position.x += localPlayer.velocity.x * input.dt * 10;
+            localPlayer.position.y += localPlayer.velocity.y * input.dt * 10;
           });
         }
 

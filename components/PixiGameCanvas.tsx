@@ -5,6 +5,7 @@ import { TattooId } from '../services/cjr/cjrTypes';
 import { CrystalVFX } from '../services/vfx/CrystalVFX';
 import { COLOR_PALETTE, RING_RADII } from '../services/cjr/cjrConstants';
 import { JELLY_VERTEX, JELLY_FRAGMENT } from '../services/cjr/shaders';
+import { inputManager } from '../services/input/InputManager';
 
 interface PixiGameCanvasProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
@@ -36,6 +37,15 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
       autoDensity: true,
       preference: 'webgl',
     }).then(() => {
+      // EIDOLON-V CRITICAL FIX: WebGL Fail-Safe Check
+      // Prevent black screen on old hardware by forcing fallback to GameCanvas
+      // Pixi renderer types: 0=unknown, 1=canvas, 2=webgl, 3=webgpu
+      if (app.renderer.type !== 2 && app.renderer.type !== 3) {
+        console.warn(`WebGL not supported. Renderer type: ${app.renderer.type}. Forcing fallback to GameCanvas.`);
+        app.destroy();
+        throw new Error("WebGL not supported by hardware - triggering fallback");
+      }
+
       if (!containerRef.current) { app.destroy(); return; }
       containerRef.current.appendChild(app.canvas);
       appRef.current = app;
@@ -154,6 +164,9 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
   };
 
   const drawRings = (g: Graphics, time: number) => {
+    // TODO: EIDOLON-V - drawRings logic duplicated in GameCanvas.tsx (Canvas 2D fallback)
+    // When updating ring rendering, effects, or RING_RADII changes, 
+    // remember to update both PixiGameCanvas.tsx and GameCanvas.tsx to maintain consistency
     g.clear();
     g.circle(0, 0, RING_RADII.R1).stroke({ width: 2, color: COLOR_PALETTE.rings.r1, alpha: 0.3 });
     g.circle(0, 0, RING_RADII.R2).stroke({ width: 4, color: COLOR_PALETTE.rings.r2, alpha: 0.5 });
@@ -171,29 +184,31 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, inputEnab
       const center = { x: app.screen.width / 2, y: app.screen.height / 2 };
       const dx = e.global.x - center.x;
       const dy = e.global.y - center.y;
+      
+      // EIDOLON-V FIX: Convert screen coordinates to world coordinates
+      // The camera container is offset by player position, so we need to reverse that
+      const worldX = state.player.position.x + dx;
+      const worldY = state.player.position.y + dy;
+      
+      // Use inputManager for consistent input handling
+      inputManager.setJoystick(dx / center.x, dy / center.y); // Normalize to -1..1 range
+      
+      // Also update targetPosition for compatibility
       state.player.targetPosition = {
-        x: state.camera.x + dx,
-        y: state.camera.y + dy // Note: state.camera usually stores raw position, we might need to adjust logic if camera system changed
-        // But App.tsx sets targetPosition directly.
-        // Actually here we need to reverse the camera transform.
-        // Screen -> World: WorldPos = CameraPos + (ScreenPos - ScreenCenter)
-        // Since camera logic above sets Container = Center - PlayerPos
-        // Global mouse is relative to Screen TopLeft.
-        // ScreenCenter is (w/2, h/2).
-        // Delta from Center = Mouse - Center.
-        // In World space (CameraContainer), 0,0 is at Center + CamOffset.
-        // If we want world pos:
-        // P_world = P_player + Delta? Roughly.
+        x: worldX,
+        y: worldY
       };
-      // Better Input Logic: use inputManager via App, but here is fine for direct connection
-      // For now we keep this simple.
     });
 
     app.stage.on('pointerdown', () => {
-      if (stateRef.current && inputEnabled) stateRef.current.inputs.space = true;
+      if (stateRef.current && inputEnabled) {
+        inputManager.setButton('skill', true);
+      }
     });
     app.stage.on('pointerup', () => {
-      if (stateRef.current && inputEnabled) stateRef.current.inputs.space = false;
+      if (stateRef.current && inputEnabled) {
+        inputManager.setButton('skill', false);
+      }
     });
   };
 
