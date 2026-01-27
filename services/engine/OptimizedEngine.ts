@@ -22,7 +22,8 @@ import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
 import { resetContributionLog } from '../cjr/contribution';
 
-import { pooledEntityFactory } from '../pooling/ObjectPool'; // EIDOLON-V FIX: Import pooling
+import { pooledEntityFactory } from '../pooling/ObjectPool';
+import { filterInPlace } from '../utils/arrayUtils';
 
 // EIDOLON-V FIX: Batch processing system to reduce function call overhead
 interface EntityBatch {
@@ -407,55 +408,31 @@ class OptimizedGameEngine {
 
     // Remove dead food
     if (state.food.length > 0) {
-      const deadFood: Food[] = [];
-      const aliveFood: Food[] = [];
-
-      // Single pass filter to avoid double iteration allocation overhead (though filter does alloc)
-      // Ideally we swap-remove, but strict order isn't required for food.
-      for (let i = 0; i < state.food.length; i++) {
-        const f = state.food[i];
+      filterInPlace(state.food, f => {
         if (f.isDead) {
-          deadFood.push(f);
-        } else {
-          aliveFood.push(f);
+          grid.removeStatic(f);
+          pooledEntityFactory.createPooledFood().release(f);
+          return false;
         }
-      }
-
-      // Release to pool and grid
-      for (let i = 0; i < deadFood.length; i++) {
-        const food = deadFood[i];
-        grid.removeStatic(food);
-        pooledEntityFactory.createPooledFood().release(food);
-      }
-
-      state.food = aliveFood;
+        return true;
+      });
     }
 
     // Remove dead projectiles
     if (state.projectiles.length > 0) {
-      const deadProj: any[] = []; // Type safety escape locally
-      const aliveProj: Projectile[] = [];
-
-      for (let i = 0; i < state.projectiles.length; i++) {
-        const p = state.projectiles[i];
+      filterInPlace(state.projectiles, p => {
         if (p.isDead) {
-          deadProj.push(p);
-        } else {
-          aliveProj.push(p);
+          pooledEntityFactory.createPooledProjectile().release(p);
+          return false;
         }
-      }
-
-      for (let i = 0; i < deadProj.length; i++) {
-        pooledEntityFactory.createPooledProjectile().release(deadProj[i]);
-      }
-
-      state.projectiles = aliveProj;
+        return true;
+      });
     }
 
     // Remove dead entities
-    state.bots = state.bots.filter(b => !b.isDead);
-    state.particles = state.particles.filter(p => p.life > 0);
-    state.delayedActions = state.delayedActions.filter(a => a.timer > 0);
+    filterInPlace(state.bots, b => !b.isDead);
+    filterInPlace(state.particles, p => p.life > 0);
+    filterInPlace(state.delayedActions, a => a.timer > 0);
   }
 
   private updateCamera(state: GameState): void {
