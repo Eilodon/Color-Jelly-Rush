@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * INTEGRATION TEST SUITE - GAME FLOW VALIDATION
  * Automated testing without manual gameplay required

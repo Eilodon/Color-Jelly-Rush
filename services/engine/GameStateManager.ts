@@ -9,15 +9,66 @@ import { optimizedEngine } from './OptimizedEngine';
 import { pooledEntityFactory } from '../pooling/ObjectPool';
 import { mathPerformanceMonitor } from '../math/FastMath';
 
+// EIDOLON-V FIX: Dependency Injection
+import { InputManager, inputManager as defaultInputManager } from '../input/InputManager';
+import { NetworkClient, networkClient as defaultNetworkClient, NetworkStatus } from '../networking/NetworkClient';
+import { AudioEngine, audioEngine as defaultAudioEngine } from '../audio/AudioEngine';
+import { ShapeId } from '../cjr/cjrTypes';
+
+// EIDOLON-V FIX: Event System Types
+export type GameEvent =
+  | { type: 'GAME_OVER'; result: 'win' | 'lose' }
+  | { type: 'TATTOO_REQUEST' }
+  | { type: 'LEVEL_UNLOCKED'; level: number }
+  | { type: 'NETWORK_STATUS'; status: NetworkStatus };
+
+export interface GameSessionConfig {
+  name: string;
+  shape: ShapeId;
+  level: number;
+  useMultiplayer: boolean;
+  usePixi: boolean; // EIDOLON-V FIX: Lifecycle Config
+}
+
 export class GameStateManager {
   private static instance: GameStateManager;
   private currentState: GameState | null = null;
   private subscribers: Set<(state: GameState) => void> = new Set();
-  private gameLoop: FixedGameLoop | null = null; // EIDOLON-V FIX: Centralized GameLoop
-  private updateCallback: ((dt: number) => void) | null = null;
-  private renderCallback: ((alpha: number) => void) | null = null;
 
-  private constructor() { }
+  // EIDOLON-V FIX: New Event System
+  private eventListeners: Set<(event: GameEvent) => void> = new Set();
+
+  private gameLoop: FixedGameLoop | null = null; // EIDOLON-V FIX: Centralized GameLoop
+  private renderCallback: ((alpha: number) => void) | null = null;
+  private currentConfig: GameSessionConfig | null = null;
+
+  // EIDOLON-V FIX: Injected Dependencies
+  private inputManager: InputManager;
+  private networkClient: NetworkClient;
+  private audioEngine: AudioEngine;
+
+  public subscribeEvent(callback: (event: GameEvent) => void): () => void {
+    this.eventListeners.add(callback);
+    return () => this.eventListeners.delete(callback);
+  }
+
+  private emitEvent(event: GameEvent): void {
+    this.eventListeners.forEach(cb => cb(event));
+  }
+
+  private constructor() {
+    // Default to singletons
+    this.inputManager = defaultInputManager;
+    this.networkClient = defaultNetworkClient;
+    this.audioEngine = defaultAudioEngine;
+  }
+
+  // EIDOLON-V FIX: DI Setter for testing
+  public injectDependencies(input: InputManager, network: NetworkClient, audio: AudioEngine): void {
+    this.inputManager = input;
+    this.networkClient = network;
+    this.audioEngine = audio;
+  }
 
   public static getInstance(): GameStateManager {
     if (!GameStateManager.instance) {
@@ -40,28 +91,84 @@ export class GameStateManager {
     mathPerformanceMonitor.reset();
   }
 
-  // EIDOLON-V FIX: Single source of truth for state updates
-  public updateGameState(dt: number): GameState {
-    if (!this.currentState) {
-      // Logic expects a state. If none, create default or throw.
-      // For safety in loop, we throw to signal initialization failure.
-      throw new Error("Game state not initialized");
+  // EIDOLON-V FIX: The core game loop logic (The Heart Transplant)
+  private gameLoopLogic(dt: number): void {
+    if (!this.currentState) return; // Should not happen if loop is running
+    if (this.currentState.isPaused) return;
+
+    const state = this.currentState;
+    const isMultiplayer = this.currentConfig?.useMultiplayer && this.networkClient.getRoomId();
+
+    if (isMultiplayer) {
+      // Multiplayer Logic
+      updateClientVisuals(state, dt);
+
+      // Send Inputs
+      const events = this.inputManager.popEvents();
+      const moveTarget = this.inputManager.getMoveTarget(state.player.position);
+
+      const actions = this.inputManager.state.actions;
+      const networkInputs = {
+        space: actions.skill,
+        w: actions.eject
+      };
+
+      this.networkClient.sendInput(moveTarget, networkInputs, dt, events);
+    } else {
+      // Singleplayer Logic
+      const events = this.inputManager.popEvents();
+      if (events.length > 0) {
+        if (!state.player.inputEvents) state.player.inputEvents = [];
+        state.player.inputEvents.push(...events);
+      }
+
+      const move = this.inputManager.state.move;
+      if (move.x !== 0 || move.y !== 0) {
+        state.player.targetPosition.x = state.player.position.x + move.x * 200;
+        state.player.targetPosition.y = state.player.position.y + move.y * 200;
+      }
+
+      // Core physics/logic update
+      optimizedEngine.updateGameState(state, dt);
     }
 
-    if (this.currentState.isPaused) {
-      return this.currentState;
+    // Audio Sync
+    this.audioEngine.setListenerPosition(state.player.position.x, state.player.position.y);
+    this.audioEngine.setBGMIntensity(Math.floor(state.player.matchPercent * 4));
+
+    // Check Win/Loss
+    if (state.result) {
+      if (state.result === 'win') {
+        // EIDOLON-V FIX: Specialized event for progression
+        this.emitEvent({ type: 'LEVEL_UNLOCKED', level: state.level + 1 });
+      }
+      this.stopGameLoop();
+      this.emitEvent({ type: 'GAME_OVER', result: state.result });
     }
 
-    // Core game logic update
-    // EIDOLON-V FIX: Logic is now handled by OptimizedEngine
-    optimizedEngine.updateGameState(this.currentState, dt);
+    // Check Tattoos
+    // Note: We need to know if UI is already showing tattoo pick.
+    // The Manager shouldn't know UI state.
+    // However, the event is 'TATTOO_REQUEST'. UI can decide to ignore if already showing.
+    if (state.tattooChoices) {
+      // Simple debounce/check could be done here if we tracked last event time,
+      // but for now just emit and let UI handle idempotency or we clear it in state?
+      // optimizedEngine typically clears tattooChoices after selection?
+      // Actually, tattooChoices persists until picked.
+      // We should emit only if we haven't recently? or just emit.
+      // The UI checks: !ui.overlays.some(o => o.type === 'tattooPick')
+      this.emitEvent({ type: 'TATTOO_REQUEST' });
+    }
 
-    // Notify subscribers
+    // Notify state subscribers (e.g. for debug UI or minimally reactive UI)
     this.notifySubscribers();
-
-    return this.currentState;
   }
 
+  // EIDOLON-V FIX: Public update method that users might call manually (debugging) or legacy
+  public updateGameState(dt: number): GameState {
+    this.gameLoopLogic(dt);
+    return this.currentState!;
+  }
 
 
   // EIDOLON-V FIX: Single source of truth for client visual updates
@@ -69,7 +176,6 @@ export class GameStateManager {
     if (!this.currentState) return;
 
     updateClientVisuals(this.currentState, dt);
-    this.notifySubscribers();
   }
 
   // EIDOLON-V FIX: Centralized state access
@@ -155,7 +261,6 @@ export class GameStateManager {
   }
 
 
-
   // EIDOLON-V FIX: Get performance stats including memory
   public getPerformanceStats(): { memoryUsage: number } {
     let memoryUsage = 0;
@@ -170,31 +275,62 @@ export class GameStateManager {
     this.stopGameLoop(); // EIDOLON-V FIX: Stop loop before cleanup
     this.currentState = null;
     this.subscribers.clear();
-    this.updateCallback = null;
     this.renderCallback = null;
   }
 
-  // EIDOLON-V FIX: GameLoop management methods
-  public setGameLoopCallbacks(
-    updateCallback: (dt: number) => void,
-    renderCallback: (alpha: number) => void
-  ): void {
-    this.updateCallback = updateCallback;
-    this.renderCallback = renderCallback;
+  public startSession(config: GameSessionConfig): void {
+    // EIDOLON-V FIX: 1. Clean up old session
+    this.stopGameLoop();
+    this.inputManager.reset(); // SAFETY CRITICAL: Reset input to prevent "ghost" movement
+
+    // EIDOLON-V FIX: 2. Setup Configuration
+    this.currentConfig = config;
+
+    // EIDOLON-V FIX: 3. Create State
+    const state = this.createInitialState(config.level);
+
+    // EIDOLON-V FIX: 4. Configure Player
+    if (state.player) {
+      state.player.name = config.name;
+      state.player.shape = config.shape;
+      state.player.velocity = { x: 0, y: 0 };
+      state.player.inputs = { w: false, space: false };
+    } else {
+      console.error('CRITICAL: Player not found in initial state');
+    }
+
+    // EIDOLON-V FIX: 5. Connect Networking (if valid)
+    if (config.useMultiplayer) {
+      this.networkClient.connectWithRetry(config.name, config.shape);
+      this.networkClient.setLocalState(state);
+    }
+
+    // EIDOLON-V FIX: 6. Start Loop
+    this.startGameLoop();
+  }
+
+  // EIDOLON-V FIX: Graceful Session Teardown
+  public endSession(): void {
+    this.stopGameLoop();
+    this.networkClient.disconnect();
+    this.currentState = null;
+    // We don't clear subscribers here as UI might persist
   }
 
   public startGameLoop(fps: number = 60): void {
-    if (!this.updateCallback || !this.renderCallback) {
-      console.warn('GameStateManager: Update or render callback not set');
-      return;
+    if (!this.renderCallback) {
+      console.warn('GameStateManager: Render callback not set, visual updates may be broken.');
     }
 
-    // Stop existing loop if running
     this.stopGameLoop();
 
-    // Create and start new loop
-    this.gameLoop = new FixedGameLoop(fps, this.updateCallback, this.renderCallback);
+    // Bind tick to this
+    this.gameLoop = new FixedGameLoop(fps, (dt) => this.gameLoopLogic(dt), (alpha) => this.renderCallback?.(alpha));
     this.gameLoop.start();
+  }
+
+  public setRenderCallback(callback: (alpha: number) => void): void {
+    this.renderCallback = callback;
   }
 
   public stopGameLoop(): void {

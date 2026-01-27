@@ -14,6 +14,7 @@ export interface Entity {
     // Spatial Optimization
     isStatic?: boolean;
     lastCellHash?: number;
+    physicsIndex?: number;  // EIDOLON-V: Direct index, skip Map lookup
 }
 
 import { PickupKind, PigmentVec3 } from '../services/cjr/cjrTypes';

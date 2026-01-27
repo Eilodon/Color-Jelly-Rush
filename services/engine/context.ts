@@ -123,7 +123,7 @@ export class GameEngine {
   constructor() {
     this.spatialGrid = new SpatialGrid();
     this.particlePool = new ParticlePool();
-    this.physicsWorld = new PhysicsWorld(5000); // Capacity 5000
+    this.physicsWorld = new PhysicsWorld(500); // EIDOLON-V: Reduced, grows on demand
   }
 }
 

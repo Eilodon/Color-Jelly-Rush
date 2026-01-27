@@ -51,12 +51,11 @@ export class SpatialHashGrid {
     this.preAllocateGrid();
   }
 
-  // EIDOLON-V FIX: Pre-allocate grid cells for performance
+  // EIDOLON-V FIX: Lazy allocation - only create cells when needed
   private preAllocateGrid(): void {
-    const totalCells = this.cellCount * this.cellCount;
-    for (let i = 0; i < totalCells; i++) {
-      this.grid.set(i, []);
-    }
+    // REMOVED: No longer pre-allocating 1600 empty arrays
+    // Cells are created on-demand in getCell()
+    this.grid.clear();
   }
 
   // EIDOLON-V FIX: Hash position to grid cell
@@ -107,6 +106,16 @@ export class SpatialHashGrid {
     return cells;
   }
 
+  // EIDOLON-V: Lazy cell creation
+  private getCell(cellKey: number): Entity[] {
+    let cell = this.grid.get(cellKey);
+    if (!cell) {
+      cell = [];
+      this.grid.set(cellKey, cell);
+    }
+    return cell;
+  }
+
   // EIDOLON-V FIX: Add entity to spatial grid
   addEntity(entity: Entity): void {
     // Note: We don't removeOld here because we assume clearDynamic handles the frame reset for dynamic entities.
@@ -118,11 +127,7 @@ export class SpatialHashGrid {
 
     // EIDOLON-V FIX: Add entity to each cell
     for (const cellHash of cells) {
-      let cell = this.grid.get(cellHash);
-      if (!cell) {
-        cell = [];
-        this.grid.set(cellHash, cell);
-      }
+      const cell = this.getCell(cellHash);
       cell.push(entity);
     }
 

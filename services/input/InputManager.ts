@@ -1,3 +1,5 @@
+export type InputManager = typeof inputManager;
+
 export const inputManager = {
     // State hiện tại (được Engine đọc mỗi tick)
     state: {

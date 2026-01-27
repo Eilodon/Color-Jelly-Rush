@@ -29,7 +29,7 @@ export class ObjectPool<T extends PoolableObject> {
       obj = this.factory();
       this.created++;
     }
-    
+
     obj.reset();
     this.active.add(obj);
     this.acquired++;
@@ -39,15 +39,15 @@ export class ObjectPool<T extends PoolableObject> {
   // EIDOLON-V FIX: Return object to pool (zero allocation)
   release(obj: T): void {
     if (!this.active.has(obj)) return;
-    
+
     this.active.delete(obj);
-    
+
     if (this.pool.length < this.maxSize) {
       this.pool.push(obj);
     } else {
       obj.dispose();
     }
-    
+
     this.released++;
   }
 
@@ -117,7 +117,7 @@ export class EntityPoolManager {
   private static instance: EntityPoolManager;
   private pools: Map<string, ObjectPool<any>> = new Map();
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): EntityPoolManager {
     if (!EntityPoolManager.instance) {
@@ -127,18 +127,35 @@ export class EntityPoolManager {
   }
 
   // EIDOLON-V FIX: Create pool for entity type
+  // EIDOLON-V FIX: Return existing pool if already created (idempotent)
   createPool<T extends PoolableObject>(
-    name: string, 
-    factory: () => T, 
+    name: string,
+    factory: () => T,
     maxSize: number = 1000,
     preAllocate: number = 0
   ): ObjectPool<T> {
+    // CHECK: If pool already exists, return it (prevents overwrite)
+    const existingPool = this.pools.get(name);
+    if (existingPool) {
+      return existingPool as ObjectPool<T>;
+    }
+
     const pool = new ObjectPool(factory, maxSize);
     if (preAllocate > 0) {
       pool.preAllocate(preAllocate);
     }
     this.pools.set(name, pool);
     return pool;
+  }
+
+  // EIDOLON-V: Explicit method for "get or create" semantics
+  getOrCreatePool<T extends PoolableObject>(
+    name: string,
+    factory: () => T,
+    maxSize: number = 1000,
+    preAllocate: number = 0
+  ): ObjectPool<T> {
+    return this.createPool(name, factory, maxSize, preAllocate);
   }
 
   // EIDOLON-V FIX: Get pool by name
@@ -201,7 +218,7 @@ export class PooledEntityFactory {
       dispose() {
         this.reset();
       }
-    }), 1000, 500);
+    }), 500, 100);
   }
 
   // EIDOLON-V FIX: Create pooled Projectile
@@ -238,7 +255,7 @@ export class PooledEntityFactory {
       dispose() {
         this.reset();
       }
-    }), 500, 100);
+    }), 200, 20);
   }
 
   // EIDOLON-V FIX: Create pooled Particle
@@ -273,7 +290,7 @@ export class PooledEntityFactory {
       dispose() {
         this.reset();
       }
-    }), 2000, 1000);
+    }), 500, 100);
   }
 
   // EIDOLON-V FIX: Initialize all pools
@@ -281,7 +298,7 @@ export class PooledEntityFactory {
     this.createPooledFood();
     this.createPooledProjectile();
     this.createPooledParticle();
-    Vector2Pool.preAllocate(1000);
+    Vector2Pool.preAllocate(200);
   }
 }
 

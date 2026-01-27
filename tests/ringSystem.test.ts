@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { THRESHOLDS } from '../services/cjr/cjrConstants';
+import { THRESHOLDS } from '../constants';
 import { createInitialState } from '../services/engine';
 import { getRushThreshold, isRushWindowActive, resetBossState } from '../services/cjr/bossCjr';
 

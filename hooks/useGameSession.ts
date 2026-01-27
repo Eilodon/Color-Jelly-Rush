@@ -1,10 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState } from '../types';
-import { createInitialState, updateClientVisuals, updateGameState } from '../services/engine';
-import { gameStateManager } from '../services/engine/GameStateManager'; // EIDOLON-V FIX: Import GameStateManager
-import { networkClient, NetworkStatus } from '../services/networking/NetworkClient';
-import { audioEngine } from '../services/audio/AudioEngine'; // EIDOLON-V FIX: Use unified AudioEngine
-import { inputManager } from '../services/input/InputManager';
+import { gameStateManager, GameEvent } from '../services/engine/GameStateManager';
+import { NetworkStatus } from '../services/networking/NetworkClient';
 import { loadSettings, loadProgression, defaultSettings, defaultProgression, saveSettings, saveProgression } from '../services/ui/storage';
 import { initialUiState, pushOverlay, popOverlay, clearOverlays, UiState, Screen } from '../services/ui/screenMachine';
 import { ShapeId } from '../services/cjr/cjrTypes';
@@ -53,121 +50,71 @@ export const useGameSession = () => {
     useEffect(() => { saveSettings(settings); }, [settings]);
     useEffect(() => { saveProgression(progression); }, [progression]);
 
-    // InputManager and AudioEngine are initialized in App.tsx (System Boot)
-    // This hook only utilizes them.
-
     // Function to reset state when entering a new game session:
     useEffect(() => {
-        // Reset input state when mounting game session
-        inputManager.reset();
+
+        // EIDOLON-V FIX: Subscribe to GameStateManager events
+        const unsubEvents = gameStateManager.subscribeEvent((event: GameEvent) => {
+            switch (event.type) {
+                case 'LEVEL_UNLOCKED':
+                    setProgression(p => ({
+                        ...p,
+                        unlockedLevel: Math.max(p.unlockedLevel, event.level)
+                    }));
+                    break;
+                case 'GAME_OVER':
+                    // Note: progression handled in LEVEL_UNLOCKED now
+                    setUi(s => ({ ...clearOverlays(s), screen: 'gameOver' }));
+                    break;
+                case 'TATTOO_REQUEST':
+                    setUi(s => {
+                        if (s.overlays.some(o => o.type === 'tattooPick')) return s;
+                        return pushOverlay(s, { type: 'tattooPick' });
+                    });
+                    break;
+            }
+        });
+
+        const unsubState = gameStateManager.subscribe((state) => {
+            gameStateRef.current = state;
+        });
+
+        // Setup Render Callback
+        gameStateManager.setRenderCallback((alpha) => {
+            alphaRef.current = alpha;
+        });
+
+        return () => {
+            unsubEvents();
+            unsubState();
+            gameStateManager.setRenderCallback(() => { }); // cleanup
+        };
     }, []);
 
     // 3. GAME LOOP HANDLERS
-    const onUpdate = useCallback((dt: number) => {
-        // EIDOLON-V FIX: Remove debug console.log
-        // console.log('DEBUG: Loop Tick', dt, gameStateRef.current?.isPaused);
-        const state = gameStateRef.current;
-        if (!state || state.isPaused) return;
-
-        // Logic Update
-        if (settings.useMultiplayer && networkClient.getRoomId()) {
-            // Multiplayer
-            updateClientVisuals(state, dt);
-
-            // Send Inputs
-            const events = inputManager.popEvents();
-            const moveTarget = inputManager.getMoveTarget(state.player.position);
-
-            // MAP INPUTS: Local (skill/eject) -> Network (space/w)
-            const actions = inputManager.state.actions;
-            const networkInputs = {
-                space: actions.skill,
-                w: actions.eject
-            };
-
-            networkClient.sendInput(moveTarget, networkInputs, dt, events);
-        } else {
-            // Singleplayer
-            const events = inputManager.popEvents();
-            if (events.length > 0) {
-                if (!state.player.inputEvents) state.player.inputEvents = [];
-                state.player.inputEvents.push(...events);
-                // EIDOLON-V FIX: Remove debug console.log
-                // console.log('DEBUG: Input events processed:', events.length);
-            }
-
-            const move = inputManager.state.move;
-            if (move.x !== 0 || move.y !== 0) {
-                state.player.targetPosition.x = state.player.position.x + move.x * 200;
-                state.player.targetPosition.y = state.player.position.y + move.y * 200;
-                // EIDOLON-V FIX: Remove debug console.log
-                // console.log('DEBUG: Movement input detected:', move, 'New target:', state.player.targetPosition);
-            }
-
-            updateGameState(state, dt);
-        }
-
-        // Audio & VFX Sync - EIDOLON-V FIX: Use unified AudioEngine
-        audioEngine.setListenerPosition(state.player.position.x, state.player.position.y);
-        audioEngine.setBGMIntensity(Math.floor(state.player.matchPercent * 4));
-
-        // Check Win/Loss
-        if (state.result) {
-            if (state.result === 'win') {
-                setProgression(p => ({ ...p, unlockedLevel: Math.max(p.unlockedLevel, state.level + 1) }));
-            }
-            gameStateManager.stopGameLoop(); // EIDOLON-V FIX: Use GameStateManager
-            setUi(s => ({ ...clearOverlays(s), screen: 'gameOver' }));
-        }
-
-        // Check Tattoos
-        if (state.tattooChoices && !ui.overlays.some(o => o.type === 'tattooPick')) {
-            setUi(s => pushOverlay(s, { type: 'tattooPick' }));
-        }
-
-    }, [settings.useMultiplayer, ui.overlays]);
-
-    const onRender = useCallback((alpha: number) => {
-        alphaRef.current = alpha;
-    }, []);
+    // EIDOLON-V FIX: onUpdate and onRender are now handled by GameStateManager internally
+    // and their logic is moved into GameStateManager's update and render methods.
 
     // 4. ACTIONS
-    // 4. ACTIONS
-    // 4. ACTIONS
-
     // Core Actions defined as stable callbacks to allow internal reuse
     const startGame = useCallback((name: string, shape: ShapeId, level: number, multiplayer = false) => {
-        gameStateManager.stopGameLoop();
+        // EIDOLON-V FIX: Delegate to GameStateManager
+        gameStateManager.startSession({
+            name,
+            shape,
+            level,
+            useMultiplayer: multiplayer,
+            usePixi: settings.usePixi // EIDOLON-V FIX: Pass usePixi
+        });
 
-        // EIDOLON-V FIX: Pass config params directly just in case or create setup in GSM
-        const state = gameStateManager.createInitialState(level);
-
-        // Setup Player Identity
-        if (state.player) {
-            state.player.name = name;
-            state.player.shape = shape;
-            // EIDOLON-V: Reset physics state just in case
-            state.player.velocity = { x: 0, y: 0 };
-            state.player.inputs = { w: false, space: false };
-        }
-
-        gameStateRef.current = state;
-        gameStateManager.setGameLoopCallbacks(onUpdate, onRender);
-
-        if (multiplayer) {
-            networkClient.connectWithRetry(name, shape);
-            networkClient.setLocalState(state);
-        }
+        gameStateRef.current = gameStateManager.getCurrentState();
 
         setUi(s => ({ ...clearOverlays(s), screen: 'playing' }));
-        gameStateManager.startGameLoop(60);
-
-        inputManager.state.actions = { skill: false, eject: false };
-    }, [onUpdate, onRender, settings.useMultiplayer]); // settings.useMultiplayer needed if referenced? No, passed as arg? No, logic uses it? checking...
+    }, [settings.usePixi]); // Added usePixi dependency
 
     const quitGame = useCallback(() => {
-        gameStateManager.stopGameLoop();
-        networkClient.disconnect();
+        // EIDOLON-V FIX: Use centralized end session
+        gameStateManager.endSession();
         gameStateRef.current = null;
         setUi(s => ({ ...clearOverlays(s), screen: 'menu' }));
     }, []);

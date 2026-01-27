@@ -222,7 +222,7 @@ export class NetworkClient {
         this.localState!.players.push(localPlayer);
 
         // EIDOLON-V FIX: Sync to PhysicsWorld
-        this.localState!.engine.physicsWorld.addBody(
+        localPlayer.physicsIndex = this.localState!.engine.physicsWorld.addBody(
           sessionId,
           localPlayer.position.x,
           localPlayer.position.y,
@@ -350,7 +350,7 @@ export class NetworkClient {
         this.localState!.bots.push(localBot);
 
         // EIDOLON-V FIX: Sync to PhysicsWorld
-        this.localState!.engine.physicsWorld.addBody(
+        localBot.physicsIndex = this.localState!.engine.physicsWorld.addBody(
           id,
           localBot.position.x,
           localBot.position.y,
