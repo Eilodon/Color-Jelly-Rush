@@ -4,6 +4,7 @@
 import { GameState, Player, Bot, Food, Entity } from '../../types';
 import { createInitialState } from './index';
 import { updateClientVisuals } from './index';
+import { getCurrentSpatialGrid } from './context';
 import { FixedGameLoop } from './GameLoop'; // EIDOLON-V FIX: Import GameLoop
 import { optimizedEngine } from './OptimizedEngine';
 import { pooledEntityFactory } from '../pooling/ObjectPool';
@@ -289,6 +290,17 @@ export class GameStateManager {
   // EIDOLON-V FIX: Centralized cleanup
   public dispose(): void {
     this.stopGameLoop(); // EIDOLON-V FIX: Stop loop before cleanup
+
+    // EIDOLON-V: Clear spatial grid to prevent memory leak
+    try {
+      const grid = getCurrentSpatialGrid();
+      if (grid) {
+        grid.clear();
+      }
+    } catch (e) {
+      // Ignore error if grid not initialized
+    }
+
     this.currentState = null;
     this.subscribers.clear();
     this.renderCallback = null;

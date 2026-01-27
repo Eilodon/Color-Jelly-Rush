@@ -25,6 +25,7 @@ export interface SpatialQueryResult {
 export class SpatialHashGrid {
   private grid: Map<number, Entity[]> = new Map();
   private entityToCells: Map<string, number[]> = new Map();
+  private staticEntityIds: Set<string> = new Set();
   private config: SpatialHashConfig;
   private cellCount: number;
   private worldBounds: { min: number; max: number };
@@ -133,6 +134,11 @@ export class SpatialHashGrid {
 
     // EIDOLON-V FIX: Store entity-to-cells mapping
     this.entityToCells.set(entity.id, cells);
+
+    // Track static entities
+    if (entity.isStatic) {
+      this.staticEntityIds.add(entity.id);
+    }
   }
 
   // EIDOLON-V FIX: Remove entity from spatial grid
@@ -140,19 +146,26 @@ export class SpatialHashGrid {
     const cells = this.entityToCells.get(entity.id);
     if (!cells) return;
 
-    // EIDOLON-V FIX: Remove entity from each cell
+    // EIDOLON-V FIX: Remove entity from each cell using Swap-Remove (O(1))
     for (const cellHash of cells) {
       const cell = this.grid.get(cellHash);
       if (cell) {
         const index = cell.indexOf(entity);
         if (index > -1) {
-          cell.splice(index, 1);
+          // Swap-remove
+          const last = cell.pop();
+          if (index < cell.length && last) {
+            cell[index] = last;
+          }
         }
       }
     }
 
     // EIDOLON-V FIX: Clear entity-to-cells mapping
     this.entityToCells.delete(entity.id);
+    if (entity.isStatic) {
+      this.staticEntityIds.delete(entity.id);
+    }
     entity.lastCellHash = undefined;
   }
 
@@ -185,59 +198,15 @@ export class SpatialHashGrid {
       bucket.length = writeIdx; // Truncate
     }
 
-    // Cleanup entityToCells map for dynamic entities?
-    // This is expensive to iterate entire map.
-    // Optimization: entityToCells might not be strictly needed for dynamic entities if we just wipe them every frame
-    // and re-add. BUT addEntity writes to it.
-
-    // CORRECT APPROACH:
-    // Don't track `entityToCells` for DYNAMIC entities if we wipe them anyway?
-    // Or just wipe the map?
-    // If we wipe the map, we lose Static entity mappings.
-
-    // Compromise:
-    // `entityToCells` is mostly useful for specific removal (removeStatic).
-    // If dynamic entities are rebuilt every frame, we technically overwrite their entry in `entityToCells`.
-    // The issue is `entityToCells` growing with stale references if not cleared.
-
-    // Let's iterate the Map keys and delete non-static?
-    // O(N) where N is total entities. Fast enough for JS map < 10k entities.
-    for (const [id, cells] of this.entityToCells.entries()) {
-      // We don't have direct access to Entity object here to check isStatic easily without lookup.
-      // This implies `entityToCells` should perhaps track static/dynamic or we shouldn't use it for frame-rebuilt entities.
-
-      // ACTUALLY: `OptimizedEngine` clears the grid dynamic and then `insert`s them again.
-      // `insert` calls `addEntity`.
-      // `addEntity` sets `this.entityToCells.set(entity.id, cells)`.
-
-      // If we don't clear `entityToCells`, the old cells list for a dynamic entity remains if it doesn't move? 
-      // No, `set` overwrites.
-      // But if an entity Dies, it's not removed from `entityToCells` unless explicitly removed.
-      // OptimizedEngine calls `cleanupTransientEntities` which calls `grid.removeStatic` for dead food, but NOT for dead particles/bullets/bots explicitly if they are just dropped from the list.
-      // Wait, OptimizedEngine just stops updating them.
-
-      // To be safe and avoid memory leak in `entityToCells`:
-      // We should clear keys for dynamic entities. But iterating map to find them is hard.
-      // Maybe we can trust `OptimizedEngine` logic?
-      // No, `OptimizedEngine` assumes `SpatialGrid` is simple bucket list. It doesn't know about `entityToCells`.
-
-      // DECISION: Modify `addEntity` to NOT track entityToCells for Dynamic entities?
-      // Or track them but clear Dynamic keys here.
-      // If we can't easily distinguish, maybe Separate Maps?
-      // `staticEntityToCells` and `dynamicEntityToCells`.
-
-      // Refactoring to keep it simple:
-      // Since `SpatialHashGrid` was designed for "Update" mostly, not "Wipe/Rebuild", mixing paradigms is pain.
-      // But I must support "Wipe/Rebuild" for `OptimizedEngine`.
-      // Let's clear `entityToCells` for everyone EXCEPT known static IDs? No we don't know IDs.
-
-      // Let's change `addEntity` to ONLY track `entityToCells` if `isStatic` is true.
-      // Dynamic entities getting wiped don't need `removeEntity` call individually.
-      // They are wiped by `clearDynamic` clearing the buckets.
+    // EIDOLON-V FIX: Cleanup entityToCells map for dynamic entities
+    // Iterate over all tracked entities and remove those that are not static.
+    // This prevents memory leaks for dynamic entities that are not explicitly removed
+    // (e.g., projectiles that die and are simply dropped from the game loop).
+    for (const id of Array.from(this.entityToCells.keys())) { // Iterate over a copy of keys to allow deletion
+      if (!this.staticEntityIds.has(id)) {
+        this.entityToCells.delete(id);
+      }
     }
-
-    // Manual cleanup of entityToCells for dynamic could be skipped 
-    // IF we change addEntity to only map Static entities.
   }
   // EIDOLON-V FIX: Update entity position
   updateEntity(entity: Entity): void {
@@ -398,9 +367,11 @@ export class SpatialHashGrid {
     for (const cell of this.grid.values()) {
       cell.length = 0;
     }
+    this.grid.clear(); // Clear the map itself to remove empty cell entries
 
     // EIDOLON-V FIX: Clear mappings
     this.entityToCells.clear();
+    this.staticEntityIds.clear(); // ADDED: Clear static entity ID tracking
   }
 
   // EIDOLON-V FIX: Get spatial grid statistics
@@ -573,3 +544,4 @@ export class MultiLevelSpatialHash {
 
 // EIDOLON-V FORGE: Export optimized spatial systems
 export { SpatialHashGrid as SpatialGrid };
+
