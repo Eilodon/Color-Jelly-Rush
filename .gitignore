@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Server compiled output
+server/src/**/*.js
+server/src/**/*.js.map
+server/dist/
