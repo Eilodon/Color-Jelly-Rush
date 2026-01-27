@@ -9,15 +9,16 @@ export type TattooSynergyEffect = {
 };
 
 export class SynergyComponent extends Component {
-    public activeEffects: TattooSynergyEffect[] = [];
-    public cooldowns: Map<string, number> = new Map();
-    public stats: Map<string, number> = new Map();
-    public discovered: Set<string> = new Set();
+    activeEffects: TattooSynergyEffect[];
+    cooldowns: Map<string, number>;
+    stats: Map<string, number>;
+    discovered: Set<string>;
 
-    // Pre-load common discoveries?
     constructor(entityId: string) {
         super(entityId);
-        this.discovered.add('purification_mastery');
-        this.discovered.add('explosive_speed');
+        this.activeEffects = [];
+        this.cooldowns = new Map();
+        this.stats = new Map();
+        this.discovered = new Set();
     }
 }

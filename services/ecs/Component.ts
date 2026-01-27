@@ -1,3 +1,6 @@
 export abstract class Component {
-    constructor(public entityId: string) { }
+    entityId: string;
+    constructor(entityId: string) {
+        this.entityId = entityId;
+    }
 }
