@@ -7,7 +7,7 @@ import {
 } from '../../../constants';
 import { GameState, Player, Bot, Entity, Projectile, Food } from '../../../types';
 // EIDOLON-V: Import hàm effect đã refactor (push event)
-import { createDeathExplosion, createFloatingText } from '../effects';
+import { createDeathExplosion, createFloatingText, createExplosion } from '../effects';
 import { createFood } from '../factories';
 import { applyGrowth } from './physics';
 import { TattooId } from '../../cjr/cjrTypes';
@@ -27,24 +27,7 @@ export const applyProjectileEffect = (
   createExplosion(target.position, target.color, 10, state);
 };
 
-export const createExplosion = (position: any, color: string, count: number, state: GameState) => {
-  // EIDOLON-V FIX: Zero-allocation VFX events & Fast Parsing
-  let packedColor = 0xffffff;
 
-  if (color.startsWith('#')) {
-    packedColor = parseInt(color.slice(1), 16);
-  } else if (color.startsWith('rgb')) {
-    // Fast manual parse (approximate is fine for VFX)
-    // rgb(255, 0, 0)
-    const parts = color.substring(4, color.length - 1).split(',');
-    if (parts.length === 3) {
-      packedColor = ((parseInt(parts[0]) << 16) | (parseInt(parts[1]) << 8) | parseInt(parts[2]));
-    }
-  }
-
-  // Add to ring buffer
-  vfxBuffer.push(position.x, position.y, packedColor, VFX_TYPES.EXPLODE, count);
-};
 
 export const consumePickup = (e: Player | Bot, food: Food, state: GameState) => {
   if (food.isDead) return;

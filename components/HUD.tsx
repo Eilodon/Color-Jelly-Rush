@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, memo, useState } from 'react';
 import { GameState } from '../types';
 import { getColorHint } from '../services/cjr/colorMath';
-import { THRESHOLDS } from '../services/cjr/cjrConstants';
+import { THRESHOLDS } from '../constants'; // EIDOLON-V FIX: Correct import
 
 interface HUDProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
@@ -18,8 +18,8 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
   const percentCircleRef = useRef<SVGCircleElement>(null);
   const waveRef = useRef<HTMLDivElement>(null);
 
-  // Cache để tránh DOM trashing
-  const cache = useRef({ score: -1, percent: -1 });
+  // Cache to avoid DOM thrashing
+  const cache = useRef({ score: -1, percent: -1, waveTime: -1 });
 
   useEffect(() => {
     let rafId: number;
@@ -56,9 +56,19 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
 
       // 3. Wave Timer
       if (waveRef.current) {
-        const now = state.gameTime * 1000;
-        const timer = (10000 - (now % 10000)) / 1000;
-        waveRef.current.textContent = `WAVE IN ${timer.toFixed(1)}s`;
+        const now = state.gameTime;
+        const timer = 10 - (now % 10);
+        // Only update if integer second changed (or 0.1s granularity if needed, lets do 0.5s check or integer)
+        // User requested integer check or similar optimization.
+        // Let's optimize to 1 decimal place but check if string would be diff.
+        // Actually best perf is integer updates or throttle. 
+        // Request said: "Check if integer value changed"
+
+        const displayVal = Math.floor(timer * 10); // Check 0.1s diff
+        if (displayVal !== cache.current.waveTime) {
+          cache.current.waveTime = displayVal;
+          waveRef.current.textContent = `WAVE IN ${(displayVal / 10).toFixed(1)}s`;
+        }
       }
 
       // 4. Slow Updates (React State)

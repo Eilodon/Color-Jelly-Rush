@@ -1,6 +1,6 @@
 
 import { GameState, Player, Emotion, Bot } from '../../types';
-import { THRESHOLDS } from './cjrConstants';
+import { THRESHOLDS } from '../../constants';
 
 export const updateEmotion = (p: Player | Bot, dt: number) => {
     if (p.isDead) {

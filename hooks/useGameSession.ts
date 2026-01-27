@@ -53,14 +53,13 @@ export const useGameSession = () => {
     useEffect(() => { saveSettings(settings); }, [settings]);
     useEffect(() => { saveProgression(progression); }, [progression]);
 
-    // EIDOLON-V FIX: Initialize AudioEngine and Input Manager
-    useEffect(() => {
-        inputManager.init();
-        audioEngine.initialize();
+    // InputManager and AudioEngine are initialized in App.tsx (System Boot)
+    // This hook only utilizes them.
 
-        return () => {
-            audioEngine.dispose();
-        };
+    // Function to reset state when entering a new game session:
+    useEffect(() => {
+        // Reset input state when mounting game session
+        inputManager.reset();
     }, []);
 
     // 3. GAME LOOP HANDLERS
@@ -140,11 +139,19 @@ export const useGameSession = () => {
     const startGame = useCallback((name: string, shape: ShapeId, level: number, multiplayer = false) => {
         gameStateManager.stopGameLoop();
 
+        // EIDOLON-V FIX: Pass config params directly just in case or create setup in GSM
         const state = gameStateManager.createInitialState(level);
-        state.player.name = name;
-        state.player.shape = shape;
-        gameStateRef.current = state;
 
+        // Setup Player Identity
+        if (state.player) {
+            state.player.name = name;
+            state.player.shape = shape;
+            // EIDOLON-V: Reset physics state just in case
+            state.player.velocity = { x: 0, y: 0 };
+            state.player.inputs = { w: false, space: false };
+        }
+
+        gameStateRef.current = state;
         gameStateManager.setGameLoopCallbacks(onUpdate, onRender);
 
         if (multiplayer) {

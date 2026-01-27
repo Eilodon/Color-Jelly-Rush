@@ -1,6 +1,6 @@
 import { Bot, Player, GameState, Food } from '../../types';
 import { distance } from '../engine/math';
-import { RING_RADII } from './cjrConstants';
+import { RING_RADII } from '../../constants';
 import { getCurrentSpatialGrid } from '../engine/context';
 
 /**

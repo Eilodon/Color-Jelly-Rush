@@ -1,6 +1,6 @@
 
 import { GameState, Food, PickupKind, PigmentVec3 } from '../../types';
-import { WAVE_CONFIG, RING_RADII } from './cjrConstants';
+import { WAVE_CONFIG, RING_RADII } from '../../constants';
 import { randomRange } from '../engine/math';
 
 export const updateWaveSpawner = (state: GameState, dt: number) => {
@@ -10,8 +10,8 @@ export const updateWaveSpawner = (state: GameState, dt: number) => {
     // Ring 1 Wave
     state.runtime.wave.ring1 -= dt * 1000;
     if (state.runtime.wave.ring1 <= 0) {
-      spawnWave(state, 1);
-      state.runtime.wave.ring1 = WAVE_CONFIG.INTERVAL[1];
+        spawnWave(state, 1);
+        state.runtime.wave.ring1 = WAVE_CONFIG.INTERVAL[1];
     }
 
     // Ring 2 Wave

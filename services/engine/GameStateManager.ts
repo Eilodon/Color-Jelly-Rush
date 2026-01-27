@@ -5,6 +5,9 @@ import { GameState, Player, Bot, Food, Entity } from '../../types';
 import { createInitialState } from './index';
 import { updateClientVisuals } from './index';
 import { FixedGameLoop } from './GameLoop'; // EIDOLON-V FIX: Import GameLoop
+import { optimizedEngine } from './OptimizedEngine';
+import { pooledEntityFactory } from '../pooling/ObjectPool';
+import { mathPerformanceMonitor } from '../math/FastMath';
 
 export class GameStateManager {
   private static instance: GameStateManager;
@@ -30,6 +33,13 @@ export class GameStateManager {
     return this.currentState;
   }
 
+  // EIDOLON-V FIX: Initialize system dependencies
+  public initialize(): void {
+    console.log('🜂 EIDOLON-V: GameStateManager initializing systems...');
+    // pooledEntityFactory auto-initializes via singleton access
+    mathPerformanceMonitor.reset();
+  }
+
   // EIDOLON-V FIX: Single source of truth for state updates
   public updateGameState(dt: number): GameState {
     if (!this.currentState) {
@@ -43,7 +53,8 @@ export class GameStateManager {
     }
 
     // Core game logic update
-    this.updateCoreGameLogic(dt);
+    // EIDOLON-V FIX: Logic is now handled by OptimizedEngine
+    optimizedEngine.updateGameState(this.currentState, dt);
 
     // Notify subscribers
     this.notifySubscribers();
@@ -143,59 +154,15 @@ export class GameStateManager {
     }
   }
 
-  private updateCoreGameLogic(dt: number): void {
-    // EIDOLON-V FIX: Logic is now handled by OptimizedEngine
-    // This method remains empty to prevent double-updates
-    // if logic somehow routes back here.
-    if (!this.currentState) return;
-  }
 
-  private updatePlayer(entity: Player | Bot, dt: number): void {
-    // Update position based on target
-    if (entity.targetPosition) {
-      const dx = entity.targetPosition.x - entity.position.x;
-      const dy = entity.targetPosition.y - entity.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist > 5) { // Deadzone
-        const speed = entity.maxSpeed * (entity.statusEffects?.speedBoost || 1);
-        entity.velocity.x = (dx / dist) * speed;
-        entity.velocity.y = (dy / dist) * speed;
-      } else {
-        entity.velocity.x *= 0.9;
-        entity.velocity.y *= 0.9;
-      }
+  // EIDOLON-V FIX: Get performance stats including memory
+  public getPerformanceStats(): { memoryUsage: number } {
+    let memoryUsage = 0;
+    if ((performance as any).memory) {
+      memoryUsage = (performance as any).memory.usedJSHeapSize;
     }
-
-    // Update position
-    entity.position.x += entity.velocity.x * dt;
-    entity.position.y += entity.velocity.y * dt;
-  }
-
-  private checkWinLossConditions(): void {
-    if (!this.currentState) return;
-
-    // Check time limit
-    if (this.currentState.gameTime > this.currentState.levelConfig.timeLimit && !this.currentState.result) {
-      this.currentState.result = 'lose';
-      this.currentState.isPaused = true;
-    }
-
-    // Check player death
-    if (this.currentState.player?.isDead && !this.currentState.result) {
-      this.currentState.result = 'lose';
-      this.currentState.isPaused = true;
-    }
-
-    // Check win condition
-    if (this.currentState.levelConfig.winCondition && !this.currentState.result) {
-      // Implement win condition logic here
-      // For now, just check if player reached certain score
-      if (this.currentState.levelConfig.winCondition === 'default' && this.currentState.player.score >= 1000) {
-        this.currentState.result = 'win';
-        this.currentState.isPaused = true;
-      }
-    }
+    return { memoryUsage };
   }
 
   // EIDOLON-V FIX: Centralized cleanup

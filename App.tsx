@@ -5,11 +5,13 @@ import { inputManager } from './services/input/InputManager';
 import { ScreenManager } from './components/ScreenManager';
 import { AssetLoader } from './services/AssetLoader';
 
+import { audioEngine } from './services/audio/AudioEngine';
+
 const App: React.FC = () => {
   const session = useGameSession();
   const [bootError, setBootError] = useState<string | null>(null);
 
-  // Initialize Systems (Asset Loader + Input)
+  // Initialize Systems (Asset Loader + Input + Audio)
   useEffect(() => {
     const boot = async () => {
       try {
@@ -17,9 +19,10 @@ const App: React.FC = () => {
         inputManager.init();
 
         // EIDOLON-V FIX: REAL LOADING (Parallel)
-        // Load assets and wait for basic network handshake if needed
+        // Load assets, audio, and wait for basic network handshake if needed
         await Promise.all([
           AssetLoader.init(),
+          audioEngine.initialize(),
           // Optional: NetClient.connect()
         ]);
 

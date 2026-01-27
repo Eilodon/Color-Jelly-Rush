@@ -6,9 +6,14 @@ const MobileControls: React.FC = memo(() => {
   const baseRef = useRef<HTMLDivElement>(null);
   const touchIdRef = useRef<number | null>(null);
 
+  // Cache layout to avoid thrashing
+  const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+
   const updateStick = (clientX: number, clientY: number) => {
-    if (!baseRef.current || !stickRef.current) return;
-    const rect = baseRef.current.getBoundingClientRect();
+    if (!stickRef.current || !rectRef.current) return;
+
+    // Read from cache
+    const rect = rectRef.current;
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
@@ -26,6 +31,28 @@ const MobileControls: React.FC = memo(() => {
     inputManager.setJoystick(dx / maxDist, dy / maxDist);
   };
 
+  const handleStart = (e: React.TouchEvent) => {
+    // CACHE LAYOUT ONCE
+    if (baseRef.current) {
+      const r = baseRef.current.getBoundingClientRect();
+      rectRef.current = {
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height
+      };
+    }
+
+    const t = e.changedTouches[0];
+    touchIdRef.current = t.identifier;
+    updateStick(t.clientX, t.clientY);
+  };
+
+  const handleMove = (e: React.TouchEvent) => {
+    if (touchIdRef.current === null) return;
+    const t = Array.from(e.changedTouches).find(T => T.identifier === touchIdRef.current);
+    if (t) updateStick(t.clientX, t.clientY);
+  };
   const handleEnd = (e: React.TouchEvent) => {
     const touch = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
     if (touch) {
@@ -40,16 +67,8 @@ const MobileControls: React.FC = memo(() => {
       <div
         ref={baseRef}
         className="absolute bottom-8 left-8 w-40 h-40 bg-white/10 rounded-full pointer-events-auto backdrop-blur-sm border-2 border-white/20"
-        onTouchStart={(e) => {
-          const t = e.changedTouches[0];
-          touchIdRef.current = t.identifier;
-          updateStick(t.clientX, t.clientY);
-        }}
-        onTouchMove={(e) => {
-          if (touchIdRef.current === null) return;
-          const t = Array.from(e.changedTouches).find(T => T.identifier === touchIdRef.current);
-          if (t) updateStick(t.clientX, t.clientY);
-        }}
+        onTouchStart={handleStart}
+        onTouchMove={handleMove}
         onTouchEnd={handleEnd}
         onTouchCancel={handleEnd}
       >
@@ -72,7 +91,7 @@ const MobileControls: React.FC = memo(() => {
           SKILL
         </button>
       </div>
-    </div>
+    </div >
   );
 });
 

@@ -28,3 +28,21 @@ export interface Vector2 {
     x: number;
     y: number;
 }
+
+export interface GameEngineConfig {
+    targetFPS: number;
+    fixedDeltaTime: number;
+    maxFrameTime: number;
+    enableInputBuffering: boolean;
+    enableObjectPooling: boolean;
+    enableSpatialOptimization: boolean;
+}
+
+export interface EngineStats {
+    fps: number;
+    frameTime: number;
+    entityCount: number;
+    pooledObjects: number;
+    memoryUsage: number;
+    inputEvents: number;
+}

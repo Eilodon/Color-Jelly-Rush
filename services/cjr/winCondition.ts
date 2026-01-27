@@ -1,6 +1,6 @@
 
 import { GameState, Player } from '../../types';
-import { THRESHOLDS, RING_RADII } from './cjrConstants';
+import { THRESHOLDS, RING_RADII } from '../../constants';
 
 export const updateWinCondition = (state: GameState, dt: number, levelConfig: any) => {
     // EIDOLON-V: Support explicitly defined Win Condition from Level Config

@@ -1,6 +1,5 @@
 
-import { CENTER_RADIUS, MAP_RADIUS, WORLD_HEIGHT, WORLD_WIDTH } from '../../constants';
-import { RING_RADII } from '../cjr/cjrConstants';
+import { CENTER_RADIUS, MAP_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, RING_RADII } from '../../constants';
 import { Vector2 } from '../../types';
 
 export const distSq = (v1: Vector2, v2: Vector2) => Math.pow(v2.x - v1.x, 2) + Math.pow(v2.y - v1.y, 2);

@@ -21,6 +21,15 @@ export const inputManager = {
         window.addEventListener('keyup', (e) => this.onKey(e.code, false));
     },
 
+    reset() {
+        this.keys.clear();
+        this.joystickVector = { x: 0, y: 0 };
+        this.state.move = { x: 0, y: 0 };
+        this.state.actions.skill = false;
+        this.state.actions.eject = false;
+        this.state.events = [];
+    },
+
     onKey(code: string, isDown: boolean) {
         if (isDown) this.keys.add(code); else this.keys.delete(code);
         this.updateMoveVector();

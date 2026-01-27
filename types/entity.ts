@@ -10,6 +10,10 @@ export interface Entity {
     isDead: boolean;
     trail: Vector2[];
     components?: Map<string, any>;
+
+    // Spatial Optimization
+    isStatic?: boolean;
+    lastCellHash?: number;
 }
 
 import { PickupKind, PigmentVec3 } from '../services/cjr/cjrTypes';

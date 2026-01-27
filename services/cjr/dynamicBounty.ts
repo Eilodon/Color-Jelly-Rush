@@ -1,6 +1,6 @@
 
 import { GameState, PickupKind, Food } from '../../types';
-import { RING_RADII } from './cjrConstants';
+import { RING_RADII } from '../../constants';
 import { randomRange } from '../engine/math';
 
 export const updateDynamicBounty = (state: GameState, dt: number) => {

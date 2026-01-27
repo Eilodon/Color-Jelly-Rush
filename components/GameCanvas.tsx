@@ -1,8 +1,10 @@
 import React, { useRef, useEffect } from 'react';
 import { GameState, Entity, Player } from '../types';
 import { MAP_RADIUS, CENTER_RADIUS, WORLD_WIDTH, WORLD_HEIGHT } from '../constants';
-import { COLOR_PALETTE, RING_RADII } from '../services/cjr/cjrConstants';
-import { Canvas2DRingRenderer } from '../services/rendering/RingRenderer'; // EIDOLON-V FIX: Use unified RingRenderer
+import { COLOR_PALETTE, RING_RADII } from '../constants';
+import { Canvas2DRingRenderer } from '../services/rendering/RingRenderer';
+// Note: We are gradually migrating to RenderTypes but keeping compatibility for now
+// import { EntityType, PickupType } from '../services/rendering/RenderTypes';
 
 interface GameCanvasProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
@@ -14,180 +16,87 @@ interface GameCanvasProps {
   enablePointerInput?: boolean;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({
-  gameStateRef,
-  width,
-  height,
-  onMouseMove,
-  onMouseDown,
-  onMouseUp,
-  enablePointerInput = true
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const ringRendererRef = useRef<Canvas2DRingRenderer | null>(null);
+// ------------------------------------------------------------------
+// RENDER STRATEGIES (Zero-GC Draw Calls)
+// ------------------------------------------------------------------
 
-  // Input Handling
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !enablePointerInput) return;
+const drawPolygon = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, sides: number) => {
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + Math.sin(angle) * radius;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+};
 
-    const handleMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left - width / 2;
-      const y = e.clientY - rect.top - height / 2;
-      if (onMouseMove) onMouseMove(x, y);
-    };
-
-    const handleDown = () => onMouseDown && onMouseDown();
-    const handleUp = () => onMouseUp && onMouseUp();
-
-    canvas.addEventListener('mousemove', handleMove);
-    canvas.addEventListener('mousedown', handleDown);
-    canvas.addEventListener('mouseup', handleUp);
-
-    return () => {
-      canvas.removeEventListener('mousemove', handleMove);
-      canvas.removeEventListener('mousedown', handleDown);
-      canvas.removeEventListener('mouseup', handleUp);
-    };
-  }, [width, height, onMouseMove, onMouseDown, onMouseUp, enablePointerInput]);
-
-  // Render Loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animationId: number;
-
-    const render = () => {
-      const gameState = gameStateRef.current;
-      // Clear
-      ctx.fillStyle = COLOR_PALETTE.background;
-      ctx.fillRect(0, 0, width, height);
-
-      if (!gameState?.player) {
-        animationId = requestAnimationFrame(render);
-        return;
-      }
-
-      // Camera
-      ctx.save();
-      ctx.translate(width / 2, height / 2);
-      // Follow player (interpolated camera)
-      ctx.translate(-gameState.camera.x, -gameState.camera.y);
-
-      // EIDOLON-V FIX: Use cached RingRenderer instance
-      if (!ringRendererRef.current) {
-        ringRendererRef.current = new Canvas2DRingRenderer();
-      }
-      ringRendererRef.current.drawRings(ctx, gameState.gameTime);
-
-      // Draw Map Boundaries
-      // Outer
-      ctx.strokeStyle = COLOR_PALETTE.rings.r1;
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // EIDOLON-V OPTIMIZATION: Pre-sorted entity arrays
-      // Eliminates O(n log n) sort every frame
-      const entities = [
-        gameState.player,
-        ...gameState.bots,
-        ...gameState.food,
-        ...gameState.projectiles,
-      ];
-
-      // Filter dead entities only - no sorting needed
-      entities.forEach(e => {
-        if (e.isDead) return;
-        drawEntity(ctx, e);
-      });
-
-      // Particles
-      gameState.particles.forEach(p => {
-        drawParticle(ctx, p);
-      });
-
-      // Floating texts
-      gameState.floatingTexts.forEach(t => {
-        const alpha = Math.max(0, Math.min(1, t.life));
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = t.color;
-        ctx.font = `${t.size}px Sora`;
-        ctx.textAlign = 'center';
-        ctx.fillText(t.text, t.position.x, t.position.y);
-        ctx.globalAlpha = 1;
-      });
-
-      ctx.restore();
-      animationId = requestAnimationFrame(render);
-    };
-
-    render();
-    return () => cancelAnimationFrame(animationId);
-  }, [gameStateRef, width, height]);
-
-  const drawEntity = (ctx: CanvasRenderingContext2D, e: Entity) => {
-    ctx.save();
-    ctx.translate(e.position.x, e.position.y);
+const DrawStrategies = {
+  Player: (ctx: CanvasRenderingContext2D, p: any) => {
+    ctx.translate(p.position.x, p.position.y);
 
     // Draw Body
-    ctx.fillStyle = e.color || '#fff';
+    ctx.fillStyle = p.color || '#fff';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+    ctx.fill();
 
-    if ('shape' in e) {
-      // Player/Bot shape logic here
-      // For MVP just use Circle for everyone
-      ctx.beginPath();
-      ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-
-      // Name
-      if ('name' in e) {
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px Sora';
-        ctx.textAlign = 'center';
-        ctx.fillText((e as Player).name, 0, -e.radius - 5);
-      }
-    } else {
-      // Food / Projectile
-      if ((e as any).kind === 'shield') {
-        ctx.fillStyle = '#fbbf24';
-        ctx.beginPath();
-        ctx.moveTo(0, -e.radius);
-        ctx.lineTo(e.radius, e.radius);
-        ctx.lineTo(-e.radius, e.radius);
-        ctx.closePath();
-        ctx.fill();
-      } else if ((e as any).kind === 'catalyst') {
-        ctx.fillStyle = '#d946ef';
-        drawPolygon(ctx, 0, 0, e.radius, 6);
-      } else if ((e as any).kind === 'solvent') {
-        ctx.fillStyle = '#a5b4fc';
-        ctx.fillRect(-e.radius * 0.7, -e.radius * 0.7, e.radius * 1.4, e.radius * 1.4);
-      } else if ((e as any).kind === 'neutral') {
-        ctx.fillStyle = '#9ca3af';
-        ctx.beginPath();
-        ctx.arc(0, 0, e.radius * 0.9, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.beginPath();
-        ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    // Name
+    if (p.name) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px Sora';
+      ctx.textAlign = 'center';
+      ctx.fillText(p.name, 0, -p.radius - 5);
     }
+  },
 
-    ctx.restore();
-  };
+  Food: (ctx: CanvasRenderingContext2D, f: any) => {
+    ctx.translate(f.position.x, f.position.y);
 
-  return <canvas ref={canvasRef} width={width} height={height} className="block" />;
+    // Check kind (legacy string or new enum)
+    const kind = f.kind;
+
+    if (kind === 'shield') {
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(0, -f.radius);
+      ctx.lineTo(f.radius, f.radius);
+      ctx.lineTo(-f.radius, f.radius);
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === 'catalyst') {
+      ctx.fillStyle = '#d946ef';
+      drawPolygon(ctx, 0, 0, f.radius, 6);
+    } else if (kind === 'solvent') {
+      ctx.fillStyle = '#a5b4fc';
+      ctx.fillRect(-f.radius * 0.7, -f.radius * 0.7, f.radius * 1.4, f.radius * 1.4);
+    } else if (kind === 'neutral') {
+      ctx.fillStyle = '#9ca3af';
+      ctx.beginPath();
+      ctx.arc(0, 0, f.radius * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Pigment or default
+      ctx.fillStyle = f.color || '#fff';
+      ctx.beginPath();
+      ctx.arc(0, 0, f.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+
+  Projectile: (ctx: CanvasRenderingContext2D, p: any) => {
+    ctx.translate(p.position.x, p.position.y);
+    ctx.fillStyle = p.color || '#ff0000';
+    ctx.beginPath();
+    ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
 };
 
 const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
@@ -231,68 +140,191 @@ const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
       p.position.y + Math.sin(angle) * len
     );
     ctx.stroke();
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  const ringRadius =
-    p.rippleRadius ||
-    p.pulseRadius ||
-    p.shockwaveRadius ||
-    (p.isCleansingWave ? p.radius : 0);
-
-  if (p.style === 'ring' || p.isRipple || p.isPulse || p.isShockwave || p.isCleansingWave) {
+  } else if (p.style === 'ring' || p.isRipple || p.isPulse || p.isShockwave || p.isCleansingWave) {
+    const ringRadius = p.rippleRadius || p.pulseRadius || p.shockwaveRadius || (p.isCleansingWave ? p.radius : 0);
     ctx.strokeStyle = color;
     ctx.lineWidth = p.lineWidth || 2;
     ctx.beginPath();
     ctx.arc(p.position.x, p.position.y, ringRadius || p.radius, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  const sides = p.geometricSides || (p.isHexagonShield ? 6 : 0);
-  if (p.isGeometric || p.isHexagonShield || sides > 0) {
-    const radius = p.geometricRadius || p.radius;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (let i = 0; i < sides; i++) {
-      const angle = (i / sides) * Math.PI * 2 - Math.PI / 2 + (p.angle || 0);
-      const px = p.position.x + Math.cos(angle) * radius;
-      const py = p.position.y + Math.sin(angle) * radius;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    if (p.isHexagonShield) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+  } else {
+    // Default / Geometric
+    const sides = p.geometricSides || (p.isHexagonShield ? 6 : 0);
+    if (p.isGeometric || p.isHexagonShield || sides > 0) {
+      const radius = p.geometricRadius || p.radius;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const angle = (i / sides) * Math.PI * 2 - Math.PI / 2 + (p.angle || 0);
+        const px = p.position.x + Math.cos(angle) * radius;
+        const py = p.position.y + Math.sin(angle) * radius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      if (p.isHexagonShield) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.fill();
+      }
     } else {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
-    return;
   }
-
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
-  ctx.fill();
   ctx.globalAlpha = 1;
 };
 
-const drawPolygon = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, sides: number) => {
-  ctx.beginPath();
-  for (let i = 0; i < sides; i++) {
-    const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
-    const px = x + Math.cos(angle) * radius;
-    const py = y + Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fill();
+// ------------------------------------------------------------------
+// GAME CANVAS COMPONENT
+// ------------------------------------------------------------------
+
+const GameCanvas: React.FC<GameCanvasProps> = ({
+  gameStateRef,
+  width,
+  height,
+  onMouseMove,
+  onMouseDown,
+  onMouseUp,
+  enablePointerInput = true
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ringRendererRef = useRef<Canvas2DRingRenderer | null>(null);
+
+  // Input Handling: Use Ref to avoid re-binding listeners on prop change
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !enablePointerInput) return;
+
+    // Cache rect on mouse move? No, just get it. Mouse move is frequent but not 60FPS critical usually.
+    // For mobile we optimized. For desktop mouse, getBoundingClientRect is ok-ish, or could optimize similar to Mobile.
+    const handleMove = (e: MouseEvent) => {
+      // Allow slight layout thrashing on mouse move for simplicity, or optimize if needed
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left - width / 2;
+      const y = e.clientY - rect.top - height / 2;
+      if (onMouseMove) onMouseMove(x, y);
+    };
+
+    const handleDown = () => onMouseDown && onMouseDown();
+    const handleUp = () => onMouseUp && onMouseUp();
+
+    canvas.addEventListener('mousemove', handleMove);
+    canvas.addEventListener('mousedown', handleDown);
+    canvas.addEventListener('mouseup', handleUp);
+
+    return () => {
+      canvas.removeEventListener('mousemove', handleMove);
+      canvas.removeEventListener('mousedown', handleDown);
+      canvas.removeEventListener('mouseup', handleUp);
+    };
+  }, [width, height, onMouseMove, onMouseDown, onMouseUp, enablePointerInput]);
+
+  // RENDER LOOP (Zero-GC)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimization: alpha false if full opaque
+    if (!ctx) return;
+
+    let animationId: number;
+
+    const render = () => {
+      const state = gameStateRef.current;
+
+      // 1. Clear Screen
+      ctx.fillStyle = COLOR_PALETTE.background;
+      ctx.fillRect(0, 0, width, height);
+
+      if (!state?.player) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
+
+      // 2. Camera Transform
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.translate(-state.camera.x, -state.camera.y);
+
+      // 3. Draw Background / Rings
+      if (!ringRendererRef.current) ringRendererRef.current = new Canvas2DRingRenderer();
+      ringRendererRef.current.drawRings(ctx, state.gameTime);
+
+      // 4. Draw Map Border
+      ctx.strokeStyle = COLOR_PALETTE.rings.r1;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 5. Draw Entities (Zero-GC Iteration)
+
+      // Players
+      if (!state.player.isDead) {
+        ctx.save();
+        DrawStrategies.Player(ctx, state.player);
+        ctx.restore();
+      }
+
+      // Bots
+      for (let i = 0; i < state.bots.length; i++) {
+        const b = state.bots[i];
+        if (b.isDead) continue;
+        ctx.save();
+        DrawStrategies.Player(ctx, b); // Bots use Player strategy
+        ctx.restore();
+      }
+
+      // Food
+      for (let i = 0; i < state.food.length; i++) {
+        const f = state.food[i];
+        if (f.isDead) continue;
+        ctx.save();
+        DrawStrategies.Food(ctx, f);
+        ctx.restore();
+      }
+
+      // Projectiles
+      for (let i = 0; i < state.projectiles.length; i++) {
+        const p = state.projectiles[i];
+        if (p.isDead) continue;
+        ctx.save();
+        DrawStrategies.Projectile(ctx, p);
+        ctx.restore();
+      }
+
+      // Particles
+      for (let i = 0; i < state.particles.length; i++) {
+        const p = state.particles[i];
+        // Simple check if dead/life expired usually happens in update, but safe here
+        drawParticle(ctx, p);
+      }
+
+      // Floating Texts
+      for (let i = 0; i < state.floatingTexts.length; i++) {
+        const t = state.floatingTexts[i];
+        const alpha = Math.max(0, Math.min(1, t.life));
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = t.color;
+        ctx.font = `${t.size}px Sora`;
+        ctx.textAlign = 'center';
+        ctx.fillText(t.text, t.position.x, t.position.y);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+      animationId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => cancelAnimationFrame(animationId);
+  }, [gameStateRef, width, height]);
+
+  return <canvas ref={canvasRef} width={width} height={height} className="block" />;
 };
 
 export default GameCanvas;

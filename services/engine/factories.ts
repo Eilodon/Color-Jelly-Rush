@@ -153,6 +153,7 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
 };
 
 export const createBot = (id: string, spawnTime: number = 0): Bot => {
+  // TODO: Tương lai cần Bot Pooling. Hiện tại tối ưu tạm thời:
   const player = createPlayer(`Bot ${id.substr(0, 4)}`, 'circle', spawnTime);
 
   const bot: Bot = {
@@ -164,7 +165,8 @@ export const createBot = (id: string, spawnTime: number = 0): Bot => {
     personality: 'farmer',
   };
 
-
+  // EIDOLON-V FIX: Reset component map thay vì tạo mới nếu có thể
+  // (Ở đây tạo mới là bắt buộc vì player được tạo mới, nhưng hãy lưu ý điểm này cho phase sau)
 
   return bot;
 };
@@ -197,9 +199,9 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => {
   // EIDOLON-V FIX: Use pooled entity instead of heap allocation
   const foodPool = pooledEntityFactory.createPooledFood();
   const food = foodPool.acquire();
-  
+
   const pigment = randomPigment();
-  
+
   // Setup pooled food object
   food.id = Math.random().toString();
   food.position = pos || randomPosInRing(1);
@@ -212,7 +214,7 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => {
   food.kind = 'pigment';
   food.pigment = pigment;
   food.trail.length = 0; // Clear trail array
-  
+
   return food;
 };
 
@@ -234,7 +236,7 @@ export const createProjectile = (
   // EIDOLON-V FIX: Use pooled entity instead of heap allocation
   const projectilePool = pooledEntityFactory.createPooledProjectile();
   const projectile = projectilePool.acquire();
-  
+
   // Calculate velocity toward target
   const dx = target.x - position.x;
   const dy = target.y - position.y;
@@ -253,7 +255,7 @@ export const createProjectile = (
   projectile.damage = damage;
   projectile.type = type;
   projectile.duration = duration;
-  
+
   return projectile;
 };
 

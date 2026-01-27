@@ -11,6 +11,11 @@ import { distance, normalize } from '../math';
 import { calcMatchPercent } from '../../cjr/colorMath';
 import { applySkill } from './skills';
 import { updateBotPersonality, assignRandomPersonality } from '../../cjr/botPersonalities';
+import { Entity } from '../../../types';
+
+// EIDOLON-V: Singleton scratchpad to avoid array allocations per bot per frame
+// This is safe because updateAI is synchronous and single-threaded in JS
+const AI_QUERY_BUFFER: Entity[] = [];
 
 export const updateAI = (bot: Bot, state: GameState, dt: number) => {
   if (bot.isDead) return;
@@ -30,7 +35,10 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
   if (bot.aiReactionTimer <= 0) {
     bot.aiReactionTimer = 0.2 + Math.random() * 0.3; // Re-think every ~0.3s
 
-    const nearby = getCurrentSpatialGrid().getNearby(bot);
+    // EIDOLON-V FIX: Zero allocation query
+    const grid = getCurrentSpatialGrid();
+    grid.getNearbyInto(bot, AI_QUERY_BUFFER);
+    const count = AI_QUERY_BUFFER.length;
 
     let targetEntity: Player | Bot | null = null;
     let targetFood: Food | null = null;
@@ -40,7 +48,8 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
     let closestPreyDist = Infinity;
     let bestFoodScore = -Infinity;
 
-    nearby.forEach(e => {
+    for (let i = 0; i < count; i++) {
+      const e = AI_QUERY_BUFFER[i];
       if (e === bot) return;
       const dist = distance(bot.position, e.position);
 
@@ -81,7 +90,10 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
           targetFood = f;
         }
       }
-    });
+    }
+
+    // Clear buffer (optional but good for GC reference release)
+    AI_QUERY_BUFFER.length = 0;
 
     // Decision Tree
     if (threat && closestThreatDist < 300) {
@@ -117,7 +129,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       const dx = (bot as any).position.x - (threat as any).position.x;
       const dy = (bot as any).position.y - (threat as any).position.y;
       const distSq = dx * dx + dy * dy;
-      
+
       if (distSq > 0.001) {
         const invDist = 1.0 / Math.sqrt(distSq);
         tx = dx * invDist * speed;
@@ -128,7 +140,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       const dx = (targetEntity as any).position.x - (bot as any).position.x;
       const dy = (targetEntity as any).position.y - (bot as any).position.y;
       const distSq = dx * dx + dy * dy;
-      
+
       if (distSq > 0.001) {
         const invDist = 1.0 / Math.sqrt(distSq);
         tx = dx * invDist * speed;
@@ -139,7 +151,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       const dx = (targetFood as any).position.x - (bot as any).position.x;
       const dy = (targetFood as any).position.y - (bot as any).position.y;
       const distSq = dx * dx + dy * dy;
-      
+
       if (distSq > 0.001) {
         const invDist = 1.0 / Math.sqrt(distSq);
         tx = dx * invDist * speed;
@@ -150,7 +162,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       const botX = (bot as any).position.x;
       const botY = (bot as any).position.y;
       const distCenterSq = botX * botX + botY * botY;
-      
+
       if (distCenterSq > (MAP_RADIUS * 0.9) * (MAP_RADIUS * 0.9)) {
         // EIDOLON-V FIX: Direct math for center bias
         const dist = Math.sqrt(distCenterSq);

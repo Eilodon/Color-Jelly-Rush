@@ -3,7 +3,7 @@
 
 import { GameState, Player, Bot, Food, Entity, Projectile } from '../../types';
 import { gameStateManager } from './GameStateManager';
-import { bindEngine, getCurrentSpatialGrid } from './context';
+import { bindEngine, getCurrentSpatialGrid, getCurrentEngine } from './context';
 import { integrateEntity, checkCollisions, constrainToMap, updatePhysicsWorld } from './systems/physics';
 import { updateAI } from './systems/ai';
 import { applyProjectileEffect, resolveCombat, consumePickup } from './systems/combat';
@@ -70,39 +70,46 @@ class OptimizedGameEngine {
     return OptimizedGameEngine.instance;
   }
 
-  // EIDOLON-V FIX: Batch entity collection to reduce array operations
+  // EIDOLON-V FIX: Zero Allocation Entity Collection
   private collectEntities(state: GameState): EntityBatch {
-    const players = state.players?.length ? state.players : [state.player];
-    if (!state.players?.length) state.players = players;
-    if (players.length > 0 && state.player !== players[0]) state.player = players[0];
+    // Đảm bảo state.players luôn là mảng valid
+    if (!state.players || state.players.length === 0) {
+      if (state.player) state.players = [state.player];
+      else state.players = [];
+    }
 
-    // Reset batch
+    // Clear batch arrays (giữ nguyên tham chiếu mảng, chỉ reset length = 0)
     this.batch.clear();
 
-    const { players: batchPlayers, bots: batchBots, projectiles: batchProjectiles, food: batchFood, all: batchAll } = this.batch;
+    const { players, bots, projectiles, food, all } = this.batch;
 
-    // Direct assignment safe-guarding
-    // We strictly assume downstream systems do NOT modify the REFERENCE of these arrays, only content.
-
-    // Fill arrays - ZERO ALLOCATION
-    for (let i = 0; i < players.length; i++) {
-      batchPlayers.push(players[i]);
-      batchAll.push(players[i] as Entity);
+    // Fill arrays - ZERO ALLOCATION (Không dùng map/filter/concat)
+    // 1. Players
+    const sourcePlayers = state.players;
+    for (let i = 0; i < sourcePlayers.length; i++) {
+      players.push(sourcePlayers[i]);
+      all.push(sourcePlayers[i]);
     }
 
-    for (let i = 0; i < state.bots.length; i++) {
-      batchBots.push(state.bots[i]);
-      batchAll.push(state.bots[i] as Entity);
+    // 2. Bots
+    const sourceBots = state.bots;
+    for (let i = 0; i < sourceBots.length; i++) {
+      bots.push(sourceBots[i]);
+      all.push(sourceBots[i]);
     }
 
-    for (let i = 0; i < state.projectiles.length; i++) {
-      batchProjectiles.push(state.projectiles[i]);
-      batchAll.push(state.projectiles[i]);
+    // 3. Projectiles
+    const sourceProj = state.projectiles;
+    for (let i = 0; i < sourceProj.length; i++) {
+      projectiles.push(sourceProj[i]);
+      all.push(sourceProj[i]);
     }
 
-    for (let i = 0; i < state.food.length; i++) {
-      batchFood.push(state.food[i]);
-      batchAll.push(state.food[i] as Entity);
+    // 4. Food
+    const sourceFood = state.food;
+    for (let i = 0; i < sourceFood.length; i++) {
+      food.push(sourceFood[i]);
+      all.push(sourceFood[i]);
     }
 
     return this.batch;
@@ -114,40 +121,50 @@ class OptimizedGameEngine {
     // Intentionally empty
   }
 
-  // EIDOLON-V FIX: Batch physics integration
+  // EIDOLON-V FIX: Correct Physics Integration Pipeline
   private integratePhysics(batch: EntityBatch, dt: number): void {
-    // 1. Sync Logic/Velocity TO PhysicsWorld (via integrateEntity)
-    const length = batch.players.length + batch.bots.length;
-
-    // Only integrate Players and Bots for physics prep (velocity clamping, etc)
-    for (let i = 0; i < length; i++) {
-      integrateEntity(batch.all[i] as Player | Bot, dt);
-    }
-
-    // 2. Execute Physics Integration (SIMD-optimized array operations)
     const world = getCurrentEngine().physicsWorld;
+
+    // BƯỚC 1: PUSH (Sync từ Logic game -> Physics World)
+    // Chỉ sync những vật thể di chuyển (Players, Bots)
+    // Food là static hoặc ít di chuyển, Projectile xử lý riêng
+    world.syncBodiesFromBatch(batch.players);
+    world.syncBodiesFromBatch(batch.bots);
+
+    // BƯỚC 2: EXECUTE (Chạy mô phỏng vật lý SoA)
+    // Hàm này sẽ cập nhật vị trí dựa trên vận tốc và xử lý va chạm chồng lấn (overlap)
     updatePhysicsWorld(world, dt);
 
-    // 3. Sync Position FROM PhysicsWorld BACK to Entities (for Rendering)
-    const all = batch.all;
-    for (let i = 0; i < all.length; i++) {
-      const ent = all[i];
-      if (ent.id) world.syncBackToEntity(ent.id, ent);
-    }
+    // BƯỚC 3: PULL (Sync từ Physics World -> Logic game)
+    // Cập nhật lại vị trí hiển thị cho Player/Bot
+    world.syncBodiesToBatch(batch.players);
+    world.syncBodiesToBatch(batch.bots);
+
+    // Lưu ý: Projectiles tự quản lý chuyển động trong updateProjectiles
   }
 
   // EIDOLON-V FIX: Optimized spatial grid updates
   private updateSpatialGrid(batch: EntityBatch): void {
     const grid = this.spatialGrid;
-    grid.clear();
 
-    // Batch insert dynamic entities
-    const dynamicEntities = batch.all;
+    // EIDOLON-V: Chỉ clear dynamic entities (Player, Bot, Projectile)
+    // Food nằm ở layer tĩnh (layer 2), không clear mỗi frame trừ khi có thay đổi lớn
     grid.clearDynamic();
 
-    for (let i = 0; i < dynamicEntities.length; i++) {
-      grid.insert(dynamicEntities[i]);
+    // Re-insert dynamic entities
+    // Chỉ insert những thứ CẦN va chạm
+    const dynamicItems = batch.all;
+    for (let i = 0; i < dynamicItems.length; i++) {
+      const ent = dynamicItems[i];
+      // Bỏ qua Food vì Food đã ở static layer (nếu code init đúng)
+      // Nếu Food có di chuyển (magnet), ta cần xử lý riêng hoặc coi nó là dynamic
+      if (!('value' in ent)) {
+        grid.insert(ent);
+      }
     }
+
+    // Xử lý Food bị hút (Magnet) - chuyển thành dynamic tạm thời?
+    // Hiện tại giữ đơn giản: Food tĩnh nằm yên.
   }
 
   // EIDOLON-V FIX: Batch logic updates

@@ -3,9 +3,9 @@ import { Player, Bot, TattooChoice, MatchSummary } from './player';
 import { Food, Particle, Projectile, FloatingText, DelayedAction } from './entity';
 import { LevelConfig } from '../services/cjr/levels';
 
-// EIDOLON-V FIX: Import proper types instead of dangerous 'any'
-// This prevents runtime errors and provides proper type safety
-import type { GameEngine } from '../services/engine/context';
+// EIDOLON-V FIX: Cập nhật type engine
+// Đảm bảo không dùng 'any' nếu có thể, nhưng tránh circular import
+// Nếu import GameEngine gây lỗi vòng lặp, dùng 'any' tạm thời hoặc Interface rút gọn
 
 export interface WaveRuntimeState {
     ring1: number;
@@ -54,7 +54,10 @@ export interface GameState {
     floatingTexts: FloatingText[];
     delayedActions: DelayedAction[];
 
-    engine: GameEngine;
+    // EIDOLON-V FIX: Cập nhật type engine
+    // Đảm bảo không dùng 'any' nếu có thể, nhưng tránh circular import
+    // Nếu import GameEngine gây lỗi vòng lặp, dùng 'any' tạm thời hoặc Interface rút gọn
+    engine: any;
     runtime: GameRuntimeState;
 
     worldSize: Vector2;
@@ -71,9 +74,9 @@ export interface GameState {
     unlockedTattoos: string[];
     isPaused: boolean;
     result: 'win' | 'lose' | null;
-    // EIDOLON-V FIX: Replace string array with VFX ring buffer reference
-    // vfxEvents: string[]; // Removed - replaced by VFXRingBuffer
-    vfxEvents: string[]; // EIDOLON-V FIX: Restored for VFX system compatibility
+    // EIDOLON-V NOTE: vfxEvents giờ chỉ dùng cho Floating Texts (UI layer)
+    // Các hiệu ứng nổ/particle dùng VFXRingBuffer và không lưu trong state
+    vfxEvents: string[];
 
     inputs: {
         space: boolean;

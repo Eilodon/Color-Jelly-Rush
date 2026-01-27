@@ -105,4 +105,37 @@ export class PhysicsWorld {
             entity.velocity.y = this.velocities[idx * 2 + 1];
         }
     }
+    // --- EIDOLON-V: BATCH SYNCHRONIZATION ---
+
+    // 1. PUSH: Đẩy dữ liệu từ Entity (JS Object) vào SoA (Float32Array)
+    // Dùng trước khi tính toán vật lý (step)
+    syncBodiesFromBatch(entities: { id: string; position: { x: number, y: number }; velocity: { x: number, y: number } }[]) {
+        for (let i = 0; i < entities.length; i++) {
+            const ent = entities[i];
+            const idx = this.idToIndex.get(ent.id);
+            if (idx !== undefined) {
+                // Chỉ cập nhật Vận tốc (Velocity) và Vị trí (Position) hiện tại vào Physics World
+                // Để Physics World xử lý va chạm dựa trên vị trí mới nhất
+                this.positions[idx * 2] = ent.position.x;
+                this.positions[idx * 2 + 1] = ent.position.y;
+                this.velocities[idx * 2] = ent.velocity.x;
+                this.velocities[idx * 2 + 1] = ent.velocity.y;
+            }
+        }
+    }
+
+    // 2. PULL: Kéo kết quả từ SoA về lại Entity
+    // Dùng sau khi tính toán vật lý xong
+    syncBodiesToBatch(entities: { id: string; position: { x: number, y: number }; velocity: { x: number, y: number } }[]) {
+        for (let i = 0; i < entities.length; i++) {
+            const ent = entities[i];
+            const idx = this.idToIndex.get(ent.id);
+            if (idx !== undefined) {
+                ent.position.x = this.positions[idx * 2];
+                ent.position.y = this.positions[idx * 2 + 1];
+                ent.velocity.x = this.velocities[idx * 2];
+                ent.velocity.y = this.velocities[idx * 2 + 1];
+            }
+        }
+    }
 }

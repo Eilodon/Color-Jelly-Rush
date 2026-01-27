@@ -1,7 +1,7 @@
 
 import { distance } from '../engine/math';
 import { GameState, Player, Bot } from '../../types';
-import { RING_RADII, THRESHOLDS, COMMIT_BUFFS } from './cjrConstants';
+import { RING_RADII, THRESHOLDS, COMMIT_BUFFS } from '../../constants';
 import { fastMath } from '../math/FastMath'; // EIDOLON-V FIX: Import FastMath
 
 /**
@@ -13,7 +13,7 @@ export const getRingAtPosition = (x: number, y: number): 1 | 2 | 3 => {
     const distSq = x * x + y * y;
     const R3_sq = RING_RADII.R3 * RING_RADII.R3;
     const R2_sq = RING_RADII.R2 * RING_RADII.R2;
-    
+
     if (distSq <= R3_sq) return 3;
     if (distSq <= R2_sq) return 2;
     return 1;

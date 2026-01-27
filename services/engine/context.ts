@@ -9,157 +9,60 @@ import { randomRange } from './math';
 // Layer 0: Physics (Contact) - Cell Size ~100
 // Layer 1: Local Awareness (Combat) - Cell Size ~300
 // Layer 2: Network Culling / AI Vision - Cell Size ~1500
-class SpatialGrid {
-  private layers: { cellSize: number; grid: Map<number, Entity[]> }[];
-  private usageTimestamps: Map<number, number> = new Map();
-  private frameCount: number = 0;
+import { SpatialHashGrid, SpatialQueryResult } from '../spatial/SpatialHashGrid';
+
+// --- Optimization: Persistent Spatial Grid ---
+// ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
+export class SpatialGrid {
+  private grid: SpatialHashGrid;
 
   constructor() {
-    // Defined resolutions
-    this.layers = [
-      { cellSize: 150, grid: new Map() },  // 0: High Precision
-      { cellSize: 450, grid: new Map() },  // 1: Medium Range
-      { cellSize: 1500, grid: new Map() }  // 2: Long Range (Vision)
-    ];
-  }
-
-  // INTEGER key via bit-shifting
-  private getKey(cellX: number, cellY: number): number {
-    // 16-bit packed coordinates (Limits world to +/- 32768 cells)
-    // For 150 size, that's roughly 5,000,000 units. Plenty.
-    return ((cellX + 32768) << 16) | ((cellY + 32768) & 0xFFFF);
+    this.grid = new SpatialHashGrid({
+      worldSize: 6000,
+      cellSize: 150,
+      enableDynamicResizing: false // Legacy engine expects fixed behavior maybe?
+    });
   }
 
   clear() {
-    this.frameCount++;
-    for (const layer of this.layers) {
-      for (const bucket of layer.grid.values()) {
-        bucket.length = 0;
-      }
-
-      // Garbage Collection for empty buckets (staggered)
-      if (this.frameCount % 120 === 0) {
-        for (const [key, bucket] of layer.grid.entries()) {
-          if (bucket.length === 0) layer.grid.delete(key);
-        }
-      }
-    }
+    this.grid.clear();
   }
 
-  // EIDOLON-V OPTIMIZATION: Clear only dynamic layers (0 & 1), leave static layer (2) for food
+  // Clear only dynamic entities (used by optimized engine)
   clearDynamic() {
-    this.frameCount++;
-    // Only clear high precision and medium range layers (0 & 1)
-    // Layer 2 (long range) is used for static food and remains persistent
-    for (let i = 0; i <= 1; i++) {
-      const layer = this.layers[i];
-      for (const bucket of layer.grid.values()) {
-        bucket.length = 0;
-      }
-
-      // Garbage Collection for empty buckets (staggered)
-      if (this.frameCount % 120 === 0) {
-        for (const [key, bucket] of layer.grid.entries()) {
-          if (bucket.length === 0) layer.grid.delete(key);
-        }
-      }
-    }
+    this.grid.clearDynamic();
   }
 
   insert(entity: Entity) {
-    // Dynamic entities go to all layers
-    for (const layer of this.layers) {
-      const cx = Math.floor(entity.position.x / layer.cellSize);
-      const cy = Math.floor(entity.position.y / layer.cellSize);
-      const key = this.getKey(cx, cy);
-
-      let bucket = layer.grid.get(key);
-      if (!bucket) {
-        bucket = [];
-        layer.grid.set(key, bucket);
-      }
-      bucket.push(entity);
-    }
+    this.grid.addEntity(entity);
   }
 
-  // EIDOLON-V OPTIMIZATION: Insert static food only into long range layer (2)
   insertStatic(entity: Entity) {
-    const layer = this.layers[2]; // Long range layer only
-    const cx = Math.floor(entity.position.x / layer.cellSize);
-    const cy = Math.floor(entity.position.y / layer.cellSize);
-    const key = this.getKey(cx, cy);
-
-    let bucket = layer.grid.get(key);
-    if (!bucket) {
-      bucket = [];
-      layer.grid.set(key, bucket);
-    }
-    bucket.push(entity);
+    entity.isStatic = true;
+    this.grid.addEntity(entity);
   }
 
-  // Remove static food from layer 2
   removeStatic(entity: Entity) {
-    const layer = this.layers[2];
-    const cx = Math.floor(entity.position.x / layer.cellSize);
-    const cy = Math.floor(entity.position.y / layer.cellSize);
-    const key = this.getKey(cx, cy);
-
-    const bucket = layer.grid.get(key);
-    if (bucket) {
-      const index = bucket.indexOf(entity);
-      if (index !== -1) {
-        bucket.splice(index, 1);
-      }
-    }
+    this.grid.removeEntity(entity);
   }
 
-  /**
-   * Get nearby entities using the most appropriate layer for the requested range.
-   * Auto-selects layer based on maxDistance.
-   */
   getNearby(entity: Entity, maxDistance: number = 200): Entity[] {
-    // Select appropriate layer
-    // We want the cell size that is roughly >= 2 * maxDistance, or slightly smaller?
-    // Actually, smaller cell size = more checks but less entities per cell.
-    // Larger cell size = fewer checks but more entities.
-    // Best practice: Cell Size ~= Query Diameter (2 * r).
-    // range 100 -> Layer 0 (150)
-    // range 300 -> Layer 1 (450)
-    // range 1000 -> Layer 2 (1500)
+    const result = this.grid.queryRadius(entity.position, maxDistance);
+    return result.entities;
+  }
 
-    let layerIdx = 0;
-    if (maxDistance > 600) layerIdx = 2;
-    else if (maxDistance > 200) layerIdx = 1;
-
-    const layer = this.layers[layerIdx];
-    const cellSize = layer.cellSize;
-
-    const cx = Math.floor(entity.position.x / cellSize);
-    const cy = Math.floor(entity.position.y / cellSize);
-    const distSq = maxDistance * maxDistance;
-
-    const nearby: Entity[] = [];
-
-    // Check 3x3 neighbor cells
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const key = this.getKey(cx + dx, cy + dy);
-        const bucket = layer.grid.get(key);
-        if (bucket) {
-          for (let i = 0; i < bucket.length; i++) {
-            const other = bucket[i];
-            if (other === entity) continue;
-
-            const ddx = other.position.x - entity.position.x;
-            const ddy = other.position.y - entity.position.y;
-            if (ddx * ddx + ddy * ddy <= distSq) {
-              nearby.push(other);
-            }
-          }
-        }
-      }
+  // Zero-allocation query (optimally supported by native methods, but adapter proxies it)
+  getNearbyInto(entity: Entity, outArray: Entity[], maxDistance: number = 200): number {
+    // The new grid allocates array in queryRadius. 
+    // To strictly support zero-alloc here, we would need to add queryInto to SpatialHashGrid.
+    // For now, we accept the allocation overhead of the adapter OR modify SpatialHashGrid.
+    // Given step 4 constraints, let's just copy result.
+    const result = this.grid.queryRadius(entity.position, maxDistance);
+    outArray.length = 0;
+    for (let i = 0; i < result.entities.length; i++) {
+      outArray.push(result.entities[i]);
     }
-    return nearby;
+    return result.entities.length;
   }
 }
 
