@@ -146,7 +146,49 @@ export interface Player extends Entity {
   rewindHistory: { position: Vector2; health: number; time: number }[];
   stationaryTime: number;
 
-  // Status Effects
+  // ==========================================================================
+  // DOD STATUS FLAGS - Bitmask system (V8 optimized, zero GC)
+  // ==========================================================================
+  // Core status flags (shielded, burning, slowed, etc.)
+  statusFlags: number;
+  // Tattoo-specific effect flags
+  tattooFlags: number;
+  // Extended flags for overflow
+  extendedFlags: number;
+
+  // Timer values for duration-based effects
+  statusTimers: {
+    burnTimer: number;
+    slowTimer: number;
+    poisonTimer: number;
+    invulnerableTimer: number;
+    kingFormTimer: number;
+    overdriveTimer: number;
+    commitShieldTimer: number;
+    pityBoostTimer: number;
+    colorBoostTimer: number;
+    magnetTimer: number;
+    pulseTimer: number;
+    tempSpeedTimer: number;
+    stealthCharge: number;
+    rootedTimer: number;
+    speedSurgeTimer: number;
+  };
+
+  // Multiplier values for scaled effects
+  statusMultipliers: {
+    speedBoost: number;
+    tempSpeedBoost: number;
+    slowMultiplier: number;
+    damageBoost: number;
+    defenseBoost: number;
+    regen: number;
+    colorBoostMultiplier: number;
+  };
+
+  // ==========================================================================
+  // LEGACY Status Effects (backward compatibility - will be deprecated)
+  // ==========================================================================
   statusEffects: {
     speedBoost: number;
     tempSpeedBoost: number;

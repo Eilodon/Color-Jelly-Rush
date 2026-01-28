@@ -67,11 +67,13 @@ export const SHAPE_SKILLS: Record<ShapeId, ShapeSkillDef> = {
             const bumpRadius = entity.radius * 2.5;
             const knockbackPower = 400;
 
-            // Find nearby entities
+            // Find nearby entities (V8 optimized - for loop)
             const nearby = state.engine.spatialGrid.getNearby(entity);
-            nearby.forEach((other: any) => {
-                if (other.id === entity.id || other.isDead) return;
-                if (!('score' in other)) return; // Only affect units
+            const nearbyLen = nearby.length;
+            for (let i = 0; i < nearbyLen; i++) {
+                const other = nearby[i] as any;
+                if (other.id === entity.id || other.isDead) continue;
+                if (!('score' in other)) continue; // Only affect units
 
                 const dist = distance(entity.position, other.position);
                 if (dist < bumpRadius) {
@@ -88,7 +90,7 @@ export const SHAPE_SKILLS: Record<ShapeId, ShapeSkillDef> = {
                         other.currentHealth -= 10;
                     }
                 }
-            });
+            }
 
             // Grant shield
             entity.statusEffects.shielded = true;
@@ -158,9 +160,12 @@ export const SHAPE_SKILLS: Record<ShapeId, ShapeSkillDef> = {
             const buffDuration = 2.0;
             entity.statusEffects.pityBoost = buffDuration; // Reuse timer
 
-            // Pull effect (applied in physics loop)
-            state.food.forEach(f => {
-                if (f.isDead) return;
+            // Pull effect (V8 optimized - for loop)
+            const foodArr = state.food;
+            const foodLen = foodArr.length;
+            for (let i = 0; i < foodLen; i++) {
+                const f = foodArr[i];
+                if (f.isDead) continue;
                 const dist = distance(entity.position, f.position);
                 if (dist < 200) {
                     const dir = normalize({
@@ -170,7 +175,7 @@ export const SHAPE_SKILLS: Record<ShapeId, ShapeSkillDef> = {
                     f.velocity.x += dir.x * 150;
                     f.velocity.y += dir.y * 150;
                 }
-            });
+            }
 
             // VFX: Spiral particles
             for (let i = 0; i < 30; i++) {

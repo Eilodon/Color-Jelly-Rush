@@ -141,18 +141,21 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
       player.statusEffects.catalystAttractionRadius = 300;
       player.statusEffects.goldenMagneticForce = 2.0;
       
-      // Attract nearby catalysts
-      state.food.forEach(food => {
-        if (food.isDead || food.kind !== 'catalyst') return;
+      // Attract nearby catalysts (V8 optimized - for loop)
+      const foodArr = state.food;
+      const foodLen = foodArr.length;
+      for (let i = 0; i < foodLen; i++) {
+        const food = foodArr[i];
+        if (food.isDead || food.kind !== 'catalyst') continue;
         const dist = Math.hypot(food.position.x - player.position.x, food.position.y - player.position.y);
-        if (dist < player.statusEffects.catalystAttractionRadius) {
-          const force = player.statusEffects.goldenMagneticForce * 50;
+        if (dist < player.statusEffects.catalystAttractionRadius!) {
+          const force = player.statusEffects.goldenMagneticForce! * 50;
           const dx = player.position.x - food.position.x;
           const dy = player.position.y - food.position.y;
           food.velocity.x += (dx / dist) * force;
           food.velocity.y += (dy / dist) * force;
         }
-      });
+      }
       
       createSynergyVisualEffect(player, {
         particleColor: '#FFD700',
@@ -247,8 +250,12 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
       player.magneticFieldRadius = Math.max(player.magneticFieldRadius || 0, 180);
       player.statusEffects.magnetTimer = Math.max(player.statusEffects.magnetTimer || 0, 3.0);
 
-      state.food.forEach(food => {
-        if (food.isDead || food.kind !== 'catalyst') return;
+      // V8 optimized - for loop
+      const foodArr = state.food;
+      const foodLen = foodArr.length;
+      for (let i = 0; i < foodLen; i++) {
+        const food = foodArr[i];
+        if (food.isDead || food.kind !== 'catalyst') continue;
         const dx = player.position.x - food.position.x;
         const dy = player.position.y - food.position.y;
         const dist = Math.hypot(dx, dy);
@@ -257,7 +264,7 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
           food.velocity.x += (dx / dist) * force;
           food.velocity.y += (dy / dist) * force;
         }
-      });
+      }
 
       createSynergyVisualEffect(player, {
         particleColor: '#10B981',
@@ -629,40 +636,65 @@ export class TattooSynergyManager {
 
   /**
    * Remove synergy effects from player
+   * Uses bitmask operations for V8 optimization (no GC from delete)
    */
   private removeSynergyEffects(playerId: string, synergyId: string, state: GameState): void {
     const player = state.player.id === playerId ? state.player : state.bots.find(b => b.id === playerId);
     if (!player) return;
-    
-    // Remove all synergy effects
-    delete player.statusEffects.neutralPurification;
-    delete player.statusEffects.purificationRadius;
-    delete player.statusEffects.overdriveExplosive;
-    delete player.statusEffects.explosiveSpeed;
-    delete player.statusEffects.explosionRadius;
-    delete player.statusEffects.goldenAttraction;
-    delete player.statusEffects.catalystAttractionRadius;
-    delete player.statusEffects.goldenMagneticForce;
-    delete player.statusEffects.elementalBalance;
-    delete player.statusEffects.solventShieldPower;
-    delete player.statusEffects.shieldSolventSynergy;
-    delete player.statusEffects.colorImmunity;
-    delete player.statusEffects.chromaticImmunityDuration;
-    delete player.statusEffects.catalystMasteryRadius;
-    delete player.statusEffects.catalystGuarantee;
-    delete player.statusEffects.neutralGodMode;
-    delete player.statusEffects.kineticExplosion;
-    delete player.statusEffects.explosionDamage;
-    delete player.statusEffects.shieldPiercing;
-    delete player.statusEffects.absoluteMastery;
-    delete player.statusEffects.colorControl;
-    delete player.statusEffects.perfectMatchThreshold;
-    delete player.statusEffects.catalystGuarantee;
-    delete player.statusEffects.neutralGodMode;
-    delete player.statusEffects.temporalDistortion;
-    delete player.statusEffects.timeManipulation;
-    delete player.statusEffects.speedAmplifier;
-    delete player.statusEffects.explosionTimeDilation;
+
+    // Clear all tattoo synergy flags via bitmask (V8 optimized - no delete)
+    // TattooFlag values: NEUTRAL_PURIFICATION, OVERDRIVE_EXPLOSIVE, GOLDEN_ATTRACTION,
+    // ELEMENTAL_BALANCE, SHIELD_SOLVENT_SYNERGY, COLOR_IMMUNITY, CATALYST_GUARANTEE, NEUTRAL_GOD_MODE
+    const SYNERGY_MASK = ~(
+      (1 << 24) | // NEUTRAL_PURIFICATION
+      (1 << 25) | // OVERDRIVE_EXPLOSIVE
+      (1 << 26) | // GOLDEN_ATTRACTION
+      (1 << 27) | // ELEMENTAL_BALANCE
+      (1 << 28) | // SHIELD_SOLVENT_SYNERGY
+      (1 << 29) | // COLOR_IMMUNITY
+      (1 << 30) | // CATALYST_GUARANTEE
+      (1 << 31)   // NEUTRAL_GOD_MODE
+    );
+    player.tattooFlags &= SYNERGY_MASK;
+
+    // Clear extended flags
+    const EXTENDED_MASK = ~(
+      (1 << 0) | // KINETIC_EXPLOSION
+      (1 << 1) | // SHIELD_PIERCING
+      (1 << 2) | // ABSOLUTE_MASTERY
+      (1 << 3) | // TEMPORAL_DISTORTION
+      (1 << 4) | // CATALYST_MASTERY
+      (1 << 5)   // COLOR_CONTROL
+    );
+    player.extendedFlags &= EXTENDED_MASK;
+
+    // Reset numeric synergy values to defaults (no delete - stable hidden class)
+    player.statusEffects.neutralPurification = false;
+    player.statusEffects.purificationRadius = 0;
+    player.statusEffects.overdriveExplosive = false;
+    player.statusEffects.explosiveSpeed = 0;
+    player.statusEffects.explosionRadius = 0;
+    player.statusEffects.goldenAttraction = false;
+    player.statusEffects.catalystAttractionRadius = 0;
+    player.statusEffects.goldenMagneticForce = 0;
+    player.statusEffects.elementalBalance = false;
+    player.statusEffects.solventShieldPower = 0;
+    player.statusEffects.shieldSolventSynergy = false;
+    player.statusEffects.colorImmunity = false;
+    player.statusEffects.chromaticImmunityDuration = 0;
+    player.statusEffects.catalystMasteryRadius = 0;
+    player.statusEffects.catalystGuarantee = false;
+    player.statusEffects.neutralGodMode = false;
+    player.statusEffects.kineticExplosion = false;
+    player.statusEffects.explosionDamage = 0;
+    player.statusEffects.shieldPiercing = false;
+    player.statusEffects.absoluteMastery = false;
+    player.statusEffects.colorControl = 0;
+    player.statusEffects.perfectMatchThreshold = 0;
+    player.statusEffects.temporalDistortion = false;
+    player.statusEffects.timeManipulation = 0;
+    player.statusEffects.speedAmplifier = 0;
+    player.statusEffects.explosionTimeDilation = 0;
   }
 
   /**

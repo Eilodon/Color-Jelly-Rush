@@ -38,13 +38,16 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
     let closestPreyDist = Infinity;
     let bestFoodScore = -Infinity;
 
-    nearby.forEach(e => {
-      if (e === bot) return;
+    // V8 optimized - for loop instead of forEach
+    const nearbyLen = nearby.length;
+    for (let i = 0; i < nearbyLen; i++) {
+      const e = nearby[i];
+      if (e === bot) continue;
       const dist = distance(bot.position, e.position);
 
       if ('score' in e) { // Agent
         const other = e as Player | Bot;
-        if (other.isDead) return;
+        if (other.isDead) continue;
 
         if (other.radius > bot.radius * 1.1) {
           if (dist < closestThreatDist) {
@@ -59,7 +62,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
         }
       } else if ('value' in e) { // Food
         const f = e as Food;
-        if (f.isDead) return;
+        if (f.isDead) continue;
         // Score based on distance and COLOR MATCH
         // If pigment matches target, high score.
         let score = 100 / (dist + 10);
@@ -79,7 +82,7 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
           targetFood = f;
         }
       }
-    });
+    }
 
     // Decision Tree
     if (threat && closestThreatDist < 300) {

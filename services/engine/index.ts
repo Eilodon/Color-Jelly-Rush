@@ -96,19 +96,26 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   // ==========================================================================
   // PHASE 3: PHYSICS INTEGRATION (DOD)
   // Physics runs directly on Float32Arrays via indices
+  // V8 Optimized: Pure for loops instead of forEach (no callback overhead)
   // ==========================================================================
   // Players physics
-  players.forEach(p => {
+  const playersLen = players.length;
+  for (let i = 0; i < playersLen; i++) {
+    const p = players[i];
     if (!p.isDead) integrateEntity(p, dt);
-  });
+  }
 
   // Bots physics
-  state.bots.forEach(b => {
+  const botsLen = state.bots.length;
+  for (let i = 0; i < botsLen; i++) {
+    const b = state.bots[i];
     if (!b.isDead) integrateEntity(b, dt);
-  });
+  }
 
   // Food physics (simple movement for magnetically attracted items)
-  state.food.forEach(f => {
+  const foodLen = state.food.length;
+  for (let i = 0; i < foodLen; i++) {
+    const f = state.food[i];
     if (!f.isDead && (f.velocity.x !== 0 || f.velocity.y !== 0)) {
       f.prevPosition.x = f.position.x;
       f.prevPosition.y = f.position.y;
@@ -118,7 +125,7 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
       f.velocity.x *= 0.95;
       f.velocity.y *= 0.95;
     }
-  });
+  }
 
   // ==========================================================================
   // PHASE 4: SYNC PHYSICS WORLD BACK TO ENTITIES
@@ -136,16 +143,35 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   }
 
   // ==========================================================================
-  // PHASE 6: SPATIAL GRID INSERTION
+  // PHASE 6: SPATIAL GRID INSERTION (V8 Optimized for loops)
   // ==========================================================================
-  const allEntities = [...players, ...state.bots, ...state.food, ...state.projectiles];
-  allEntities.forEach(entity => grid.insert(entity));
+  // Insert players
+  for (let i = 0; i < playersLen; i++) {
+    grid.insert(players[i]);
+  }
+  // Insert bots
+  for (let i = 0; i < botsLen; i++) {
+    grid.insert(state.bots[i]);
+  }
+  // Insert food
+  for (let i = 0; i < foodLen; i++) {
+    grid.insert(state.food[i]);
+  }
+  // Insert projectiles
+  const projLen = state.projectiles.length;
+  for (let i = 0; i < projLen; i++) {
+    grid.insert(state.projectiles[i]);
+  }
 
   // ==========================================================================
-  // PHASE 7: GAME LOGIC UPDATES
+  // PHASE 7: GAME LOGIC UPDATES (V8 Optimized for loops)
   // ==========================================================================
-  players.forEach(player => updatePlayer(player, state, dt));
-  state.bots.forEach(bot => updateBot(bot, state, dt));
+  for (let i = 0; i < playersLen; i++) {
+    updatePlayer(players[i], state, dt);
+  }
+  for (let i = 0; i < botsLen; i++) {
+    updateBot(state.bots[i], state, dt);
+  }
 
   // ... Rest of Loop ...
   updateProjectiles(state, dt);
@@ -154,20 +180,33 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
   cleanupTransientEntities(state);
 
   updateWaveSpawner(state, dt);
-  players.forEach(player => updateRingLogic(player, dt, state.levelConfig, state));
-  state.bots.forEach(b => updateRingLogic(b, dt, state.levelConfig, state));
+  // Ring logic (V8 optimized for loops)
+  for (let i = 0; i < playersLen; i++) {
+    updateRingLogic(players[i], dt, state.levelConfig, state);
+  }
+  for (let i = 0; i < botsLen; i++) {
+    updateRingLogic(state.bots[i], dt, state.levelConfig, state);
+  }
   updateBossLogic(state, dt);
   updateDynamicBounty(state, dt);
   updateWinCondition(state, dt, state.levelConfig);
 
-  players.forEach(player => updateEmotion(player, dt));
-  state.bots.forEach(b => updateEmotion(b, dt));
+  // Emotion updates (V8 optimized for loops)
+  for (let i = 0; i < playersLen; i++) {
+    updateEmotion(players[i], dt);
+  }
+  for (let i = 0; i < botsLen; i++) {
+    updateEmotion(state.bots[i], dt);
+  }
   updateCamera(state);
 
   checkTattooUnlock(state);
   vfxIntegrationManager.update(state, dt);
 
-  players.forEach(player => tattooSynergyManager.checkSynergies(player, state));
+  // Tattoo synergies (V8 optimized for loops)
+  for (let i = 0; i < playersLen; i++) {
+    tattooSynergyManager.checkSynergies(players[i], state);
+  }
   tattooSynergyManager.updateSynergies(state, dt);
 
   const shakeOffset = vfxIntegrationManager.getScreenShakeOffset();
@@ -210,9 +249,13 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
   if (magnetRadius > 0 || catalystSense) {
     const catalystRange = (player.statusEffects.catalystSenseRange || 2.0) * 130; // Base 130, scaled
     const radius = catalystSense ? catalystRange : magnetRadius;
-    state.food.forEach(f => {
-      if (f.isDead) return;
-      if (catalystSense && f.kind !== 'catalyst') return;
+    // V8 optimized - for loop instead of forEach
+    const foodArr = state.food;
+    const foodLen = foodArr.length;
+    for (let i = 0; i < foodLen; i++) {
+      const f = foodArr[i];
+      if (f.isDead) continue;
+      if (catalystSense && f.kind !== 'catalyst') continue;
       const dx = player.position.x - f.position.x;
       const dy = player.position.y - f.position.y;
       const dist = Math.hypot(dx, dy);
@@ -221,7 +264,7 @@ const updatePlayer = (player: Player, state: GameState, dt: number) => {
         f.velocity.x += (dx / dist) * pull;
         f.velocity.y += (dy / dist) * pull;
       }
-    });
+    }
   }
 
   // Regen / Decay
@@ -332,15 +375,18 @@ const handleInput = (player: Player, inputs: { space: boolean; w: boolean }, dt:
   // Movement vector is set by UI/Mouse elsewhere (player.targetPosition)
   // Here we just process actions like Space (Dash/Split in original, Skill in new)
 
-  // Phase 3: Event Queue Processing
+  // Phase 3: Event Queue Processing (V8 optimized - for loop)
   if (player.inputEvents && player.inputEvents.length > 0) {
-    player.inputEvents.forEach(evt => {
+    const events = player.inputEvents;
+    const evtLen = events.length;
+    for (let i = 0; i < evtLen; i++) {
+      const evt = events[i];
       if (evt.type === 'skill') {
         applySkill(player, undefined, state);
       }
       // handle 'eject' if separate
-    });
-    player.inputEvents = []; // Consume
+    }
+    player.inputEvents.length = 0; // Clear without allocation
   }
 
   // Legacy / Continuous Hold Support (Optional)
@@ -381,31 +427,38 @@ const handleCollision = (entity: Player | Bot, other: Entity, state: GameState, 
 
 
 const updateProjectiles = (state: GameState, dt: number) => {
-  state.projectiles.forEach(p => {
-    if (p.isDead) return;
+  const projectiles = state.projectiles;
+  const len = projectiles.length;
+
+  for (let i = 0; i < len; i++) {
+    const p = projectiles[i];
+    if (p.isDead) continue;
 
     p.duration -= dt;
     if (p.duration <= 0) {
       p.isDead = true;
-      return;
+      continue;
     }
 
     p.position.x += p.velocity.x * dt;
     p.position.y += p.velocity.y * dt;
 
-    // Collision logic could be here or in generic collision
+    // Collision logic (V8 optimized for loop)
     const nearby = getCurrentSpatialGrid().getNearby(p, 150);
-    nearby.forEach(other => {
-      if (other.id !== p.ownerId && ('score' in other)) { // Hit a unit
+    const nearbyLen = nearby.length;
+    for (let j = 0; j < nearbyLen; j++) {
+      const other = nearby[j];
+      if (other.id !== p.ownerId && ('score' in other)) {
         const unit = other as Player | Bot;
         const dist = distance(p.position, unit.position);
         if (dist < p.radius + unit.radius) {
           applyProjectileEffect(p, unit, state);
           p.isDead = true;
+          break; // Exit after first hit
         }
       }
-    });
-  });
+    }
+  }
 };
 
 const updateParticles = (state: GameState, dt: number) => {
@@ -484,47 +537,69 @@ const updateFloatingTexts = (state: GameState, dt: number) => {
 const cleanupTransientEntities = (state: GameState) => {
   const physicsWorld = getPhysicsWorld();
 
-  // Cleanup dead food and free from physics world
+  // Cleanup dead food and free from physics world (V8 optimized - single pass)
   if (state.food.length > 0) {
-    state.food.forEach(f => {
+    let writeIdx = 0;
+    const food = state.food;
+    const foodLen = food.length;
+    for (let i = 0; i < foodLen; i++) {
+      const f = food[i];
       if (f.isDead) {
         physicsWorld.free(f.id);
+      } else {
+        food[writeIdx++] = f;
       }
-    });
-    state.food = state.food.filter(f => !f.isDead);
+    }
+    food.length = writeIdx; // Truncate in place (zero GC)
   }
 
-  // Cleanup dead projectiles
+  // Cleanup dead projectiles (V8 optimized - single pass)
   if (state.projectiles.length > 0) {
-    state.projectiles.forEach(p => {
+    let writeIdx = 0;
+    const projectiles = state.projectiles;
+    const projLen = projectiles.length;
+    for (let i = 0; i < projLen; i++) {
+      const p = projectiles[i];
       if (p.isDead) {
         physicsWorld.free(p.id);
+      } else {
+        projectiles[writeIdx++] = p;
       }
-    });
-    state.projectiles = state.projectiles.filter(p => !p.isDead);
+    }
+    projectiles.length = writeIdx; // Truncate in place (zero GC)
   }
 
-  // Cleanup dead bots
-  state.bots.forEach(b => {
-    if (b.isDead) {
-      physicsWorld.free(b.id);
+  // Cleanup dead bots - free from physics world (V8 optimized for loop)
+  const bots = state.bots;
+  const botsLen = bots.length;
+  for (let i = 0; i < botsLen; i++) {
+    if (bots[i].isDead) {
+      physicsWorld.free(bots[i].id);
     }
-  });
+  }
 };
 
 const handleSpawning = (state: GameState, dt: number) => {
-  // Respawn Bots
-  const activeBots = state.bots.filter(b => !b.isDead).length;
+  // Respawn Bots (V8 optimized - count without filter allocation)
+  let activeBots = 0;
+  const bots = state.bots;
+  const botsLen = bots.length;
+  for (let i = 0; i < botsLen; i++) {
+    if (!bots[i].isDead) activeBots++;
+  }
   if (activeBots < BOT_COUNT) {
-    // Logic to respawn random bot
-    // Simplified
     const newBot = createBot(Math.random().toString());
     assignRandomPersonality(newBot);
     state.bots.push(newBot);
   }
 
-  // Respawn Food
-  const activeFood = state.food.filter(f => !f.isDead).length;
+  // Respawn Food (V8 optimized - count without filter allocation)
+  let activeFood = 0;
+  const food = state.food;
+  const foodLen = food.length;
+  for (let i = 0; i < foodLen; i++) {
+    if (!food[i].isDead) activeFood++;
+  }
   if (activeFood < FOOD_COUNT) {
     state.food.push(createFood());
   }

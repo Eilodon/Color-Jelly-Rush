@@ -107,6 +107,42 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
     rewindHistory: [],
     stationaryTime: 0,
 
+    // DOD Status Flags (Bitmask system - zero GC)
+    statusFlags: 0x0080, // Start with INVULNERABLE flag set
+    tattooFlags: 0,
+    extendedFlags: 0,
+
+    // Status timers for duration-based effects
+    statusTimers: {
+      burnTimer: 0,
+      slowTimer: 0,
+      poisonTimer: 0,
+      invulnerableTimer: 3, // Start with 3s invulnerability
+      kingFormTimer: 0,
+      overdriveTimer: 0,
+      commitShieldTimer: 0,
+      pityBoostTimer: 0,
+      colorBoostTimer: 0,
+      magnetTimer: 0,
+      pulseTimer: 0,
+      tempSpeedTimer: 0,
+      stealthCharge: 0,
+      rootedTimer: 0,
+      speedSurgeTimer: 0,
+    },
+
+    // Status multipliers for scaled effects
+    statusMultipliers: {
+      speedBoost: 1,
+      tempSpeedBoost: 1,
+      slowMultiplier: 1,
+      damageBoost: 1,
+      defenseBoost: 1,
+      regen: 0,
+      colorBoostMultiplier: 1,
+    },
+
+    // Legacy statusEffects (backward compatibility)
     statusEffects: {
       speedBoost: 1,
       tempSpeedBoost: 1,
