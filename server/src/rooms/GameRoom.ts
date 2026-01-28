@@ -24,6 +24,7 @@ import {
 // Import shared game logic
 import { updateGameState, createInitialState } from '../../../services/engine/index';
 import { createPlayer } from '../../../services/engine/factories';
+import { getPhysicsWorld, bindEngine } from '../../../services/engine/context';
 import { GameRuntimeState } from '../../../types';
 import { getLevelConfig } from '../../../services/cjr/levels';
 import { vfxIntegrationManager } from '../../../services/vfx/vfxIntegration';
@@ -94,6 +95,12 @@ export class GameRoom extends Room<GameRoomState> {
     console.log(client.sessionId, 'left!');
     this.state.players.delete(client.sessionId);
     this.inputQueueBySession.delete(client.sessionId); // Cleanup
+
+    // DOD Cleanup: Free physics world slot for leaving player
+    bindEngine(this.simState.engine);
+    const physicsWorld = getPhysicsWorld();
+    physicsWorld.free(client.sessionId);
+
     this.simState.players = this.simState.players.filter(p => p.id !== client.sessionId);
     if (this.simState.players.length > 0) {
       this.simState.player = this.simState.players[0];

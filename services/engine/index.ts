@@ -26,7 +26,7 @@ import {
   Vector2,
 } from '../../types';
 import { mixPigment, calcMatchPercent } from '../cjr/colorMath';
-import { bindEngine, createGameEngine, GameEngine, getCurrentSpatialGrid } from './context';
+import { bindEngine, createGameEngine, GameEngine, getCurrentSpatialGrid, getPhysicsWorld } from './context';
 import {
   createBoss,
   createBot,
@@ -39,7 +39,13 @@ import { createFloatingText } from './effects';
 import { distance, normalize, randomRange } from './math';
 import { updateAI } from './systems/ai';
 import { applyProjectileEffect, resolveCombat, consumePickup } from './systems/combat';
-import { integrateEntity, checkCollisions, constrainToMap } from './systems/physics';
+import {
+  integrateEntity,
+  checkCollisions,
+  constrainToMap,
+  syncEntitiesToPhysicsWorld,
+  syncPhysicsWorldToEntities,
+} from './systems/physics';
 import { applySkill } from './systems/skills';
 import { updateRingLogic } from '../cjr/ringSystem';
 import { updateWaveSpawner, resetWaveTimers } from '../cjr/waveSpawner';
@@ -68,42 +74,76 @@ export const updateGameState = (state: GameState, dt: number): GameState => {
     state.player = players[0];
   }
 
-  // 1. Bind Engine Context & Grid Setup
+  // ==========================================================================
+  // PHASE 1: BIND ENGINE & INITIALIZE DOD SYSTEMS
+  // ==========================================================================
   bindEngine(state.engine);
   const grid = getCurrentSpatialGrid();
+  const physicsWorld = getPhysicsWorld();
   grid.clear();
 
-  // PHASE 1 REFACTOR: REMOVED PHYSICS WORLD SYNC
-  // Now we integrate directly in Step 2.
+  // ==========================================================================
+  // PHASE 2: SYNC ENTITIES TO PHYSICS WORLD (DOD)
+  // Single batch sync at frame start - NO per-entity sync during physics
+  // ==========================================================================
+  const allPhysicsEntities = [
+    ...players,
+    ...state.bots.filter(b => !b.isDead),
+    ...state.food.filter(f => !f.isDead),
+  ];
+  syncEntitiesToPhysicsWorld(physicsWorld, allPhysicsEntities);
 
-  // 2. PHYSICS INTEGRATION (The Flow)
-  // Input Handling + Physics for Players
+  // ==========================================================================
+  // PHASE 3: PHYSICS INTEGRATION (DOD)
+  // Physics runs directly on Float32Arrays via indices
+  // ==========================================================================
+  // Players physics
   players.forEach(p => {
-    // Inputs already mapped to velocity in input handling or client prediction?
-    // Actually, updatePlayer calls handleInput which usually modifies velocity or target.
-    // We'll integrate movement here.
-    integrateEntity(p, dt);
+    if (!p.isDead) integrateEntity(p, dt);
   });
 
-  // Physics for Bots
+  // Bots physics
   state.bots.forEach(b => {
     if (!b.isDead) integrateEntity(b, dt);
   });
 
-  // 3. REMOVED SYNC BACK (Clean!)
+  // Food physics (simple movement for magnetically attracted items)
+  state.food.forEach(f => {
+    if (!f.isDead && (f.velocity.x !== 0 || f.velocity.y !== 0)) {
+      f.prevPosition.x = f.position.x;
+      f.prevPosition.y = f.position.y;
+      f.position.x += f.velocity.x * dt;
+      f.position.y += f.velocity.y * dt;
+      // Damping
+      f.velocity.x *= 0.95;
+      f.velocity.y *= 0.95;
+    }
+  });
 
-  // 4. Game Time & Round Logic
+  // ==========================================================================
+  // PHASE 4: SYNC PHYSICS WORLD BACK TO ENTITIES
+  // Required for game logic that still uses Entity objects
+  // ==========================================================================
+  syncPhysicsWorldToEntities(physicsWorld, [...players, ...state.bots.filter(b => !b.isDead)]);
+
+  // ==========================================================================
+  // PHASE 5: GAME TIME & ROUND LOGIC
+  // ==========================================================================
   state.gameTime += dt;
   if (state.gameTime > state.levelConfig.timeLimit && !state.result) {
     state.result = 'lose';
     state.isPaused = true;
   }
 
-  // 5. Batch Entity Insertion
+  // ==========================================================================
+  // PHASE 6: SPATIAL GRID INSERTION
+  // ==========================================================================
   const allEntities = [...players, ...state.bots, ...state.food, ...state.projectiles];
   allEntities.forEach(entity => grid.insert(entity));
 
-  // 6. LOGIC UPDATES
+  // ==========================================================================
+  // PHASE 7: GAME LOGIC UPDATES
+  // ==========================================================================
   players.forEach(player => updatePlayer(player, state, dt));
   state.bots.forEach(bot => updateBot(bot, state, dt));
 
@@ -442,12 +482,34 @@ const updateFloatingTexts = (state: GameState, dt: number) => {
 };
 
 const cleanupTransientEntities = (state: GameState) => {
+  const physicsWorld = getPhysicsWorld();
+
+  // Cleanup dead food and free from physics world
   if (state.food.length > 0) {
+    state.food.forEach(f => {
+      if (f.isDead) {
+        physicsWorld.free(f.id);
+      }
+    });
     state.food = state.food.filter(f => !f.isDead);
   }
+
+  // Cleanup dead projectiles
   if (state.projectiles.length > 0) {
+    state.projectiles.forEach(p => {
+      if (p.isDead) {
+        physicsWorld.free(p.id);
+      }
+    });
     state.projectiles = state.projectiles.filter(p => !p.isDead);
   }
+
+  // Cleanup dead bots
+  state.bots.forEach(b => {
+    if (b.isDead) {
+      physicsWorld.free(b.id);
+    }
+  });
 };
 
 const handleSpawning = (state: GameState, dt: number) => {
