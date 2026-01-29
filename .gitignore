@@ -27,3 +27,9 @@ dist-ssr
 server/src/**/*.js
 server/src/**/*.js.map
 server/dist/
+
+# EIDOLON-V: Security Blocklist
+.env
+.env.production
+.env.test
+.env.local

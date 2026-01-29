@@ -78,11 +78,4 @@ export interface GameState {
     vfxHead: number; // Deprecated if using full array replacement strategy
     vfxTail: number; // Deprecated
 
-    /** @deprecated Use InputManager */
-    inputs: {
-        space: boolean;
-        w: boolean;
-    };
-    /** @deprecated Use InputManager */
-    inputEvents: any[]; // Mark deprecated
 }

@@ -9,7 +9,7 @@ import { WORLD_WIDTH, WORLD_HEIGHT, MAP_RADIUS } from '../constants';
 export interface ValidationResult {
   isValid: boolean;
   reason?: string;
-  correctedValue?: any;
+  correctedValue?: unknown;
 }
 
 export interface PositionValidation {
@@ -22,7 +22,7 @@ export class ServerValidator {
   private static readonly MAX_SPEED = 500; // pixels per second
   private static readonly TELEPORT_THRESHOLD = 200; // max distance per update
   private static readonly POSITION_HISTORY_SIZE = 10;
-  
+
   private positionHistory: Map<string, { x: number; y: number; timestamp: number }[]> = new Map();
   private lastUpdateTime: Map<string, number> = new Map();
 
@@ -37,7 +37,7 @@ export class ServerValidator {
   ): PositionValidation {
     // Check world boundaries
     if (newPosition.x < -WORLD_WIDTH / 2 || newPosition.x > WORLD_WIDTH / 2 ||
-        newPosition.y < -WORLD_HEIGHT / 2 || newPosition.y > WORLD_HEIGHT / 2) {
+      newPosition.y < -WORLD_HEIGHT / 2 || newPosition.y > WORLD_HEIGHT / 2) {
       return {
         isValid: false,
         reason: 'Position outside world boundaries',
@@ -57,10 +57,10 @@ export class ServerValidator {
 
     // Check for teleportation (speed hack)
     const distance = Math.sqrt(
-      Math.pow(newPosition.x - oldPosition.x, 2) + 
+      Math.pow(newPosition.x - oldPosition.x, 2) +
       Math.pow(newPosition.y - oldPosition.y, 2)
     );
-    
+
     const maxDistance = this.MAX_SPEED * deltaTime;
     if (distance > maxDistance) {
       return {
@@ -104,7 +104,7 @@ export class ServerValidator {
 
     // Validate target position
     if (input.targetX < -WORLD_WIDTH / 2 || input.targetX > WORLD_WIDTH / 2 ||
-        input.targetY < -WORLD_HEIGHT / 2 || input.targetY > WORLD_HEIGHT / 2) {
+      input.targetY < -WORLD_HEIGHT / 2 || input.targetY > WORLD_HEIGHT / 2) {
       return {
         isValid: false,
         reason: 'Target position outside world boundaries'
@@ -168,8 +168,8 @@ export class ServerValidator {
 
     // Validate color values
     if (newStats.pigment.r < 0 || newStats.pigment.r > 1 ||
-        newStats.pigment.g < 0 || newStats.pigment.g > 1 ||
-        newStats.pigment.b < 0 || newStats.pigment.b > 1) {
+      newStats.pigment.g < 0 || newStats.pigment.g > 1 ||
+      newStats.pigment.b < 0 || newStats.pigment.b > 1) {
       return {
         isValid: false,
         reason: 'Invalid pigment values - must be between 0 and 1'
@@ -188,7 +188,7 @@ export class ServerValidator {
     damage: number
   ): ValidationResult {
     let targetX: number, targetY: number;
-    
+
     // Handle different position properties
     if ('position' in target) {
       targetX = target.position.x;
@@ -227,19 +227,23 @@ export class ServerValidator {
   /**
    * Sanitize incoming data to prevent injection attacks
    */
-  static sanitizeInput(input: any): any {
+  /**
+   * Sanitize incoming data to prevent injection attacks
+   */
+  static sanitizeInput(input: unknown): Record<string, unknown> {
     if (typeof input !== 'object' || input === null) {
       return {};
     }
 
-    const sanitized: any = {};
+    const typedInput = input as Record<string, unknown>;
+    const sanitized: Record<string, unknown> = {};
 
     // Only allow known safe properties
     const allowedProperties = ['targetX', 'targetY', 'space', 'w', 'seq'];
     for (const prop of allowedProperties) {
-      if (prop in input) {
-        const value = input[prop];
-        
+      if (prop in typedInput) {
+        const value = typedInput[prop];
+
         // Type validation
         if (prop === 'targetX' || prop === 'targetY' || prop === 'seq') {
           sanitized[prop] = Number(value) || 0;
@@ -264,13 +268,13 @@ export class ServerValidator {
   ): ValidationResult {
     const now = Date.now();
     const key = `${sessionId}_${actionType}`;
-    
+
     if (!this.actionTimestamps.has(key)) {
       this.actionTimestamps.set(key, []);
     }
 
     const timestamps = this.actionTimestamps.get(key)!;
-    
+
     // Remove old timestamps (older than 1 second)
     const oneSecondAgo = now - 1000;
     while (timestamps.length > 0 && timestamps[0] < oneSecondAgo) {
@@ -287,7 +291,7 @@ export class ServerValidator {
 
     // Add current timestamp
     timestamps.push(now);
-    
+
     return { isValid: true };
   }
 

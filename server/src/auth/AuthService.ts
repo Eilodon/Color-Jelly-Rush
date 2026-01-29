@@ -8,6 +8,8 @@ import crypto from 'crypto';
 import * as argon2 from 'argon2';
 import { Request } from 'express';
 
+import { logger } from '../logging/Logger';
+
 // Extend Express Request interface
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -33,8 +35,36 @@ const sessions = new Map<string, {
   lastActivity: number;
 }>();
 
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
-const JWT_EXPIRES_IN = '24h';
+// ... (users map)
+
+// ... (sessions map)
+
+type JwtAlg = 'HS256' | 'HS384' | 'HS512';
+
+const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+const JWT_ALG: JwtAlg = (process.env.JWT_ALG as JwtAlg) || 'HS256';
+const JWT_ISSUER = process.env.JWT_ISSUER || 'cjr-server';
+const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'cjr-client';
+
+// Production invariant: secret must be stable across restarts/instances.
+// Random per-boot secret makes all issued tokens invalid after restart and prevents horizontal scaling.
+const JWT_SECRET = (() => {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret.length >= 32) return envSecret;
+
+  if (!isDev) {
+    // Fail-fast in non-development environments (Production, Staging, QA)
+    throw new Error(`JWT_SECRET must be set (>= 32 chars) in ${process.env.NODE_ENV} environment`);
+  }
+
+  // Dev fallback: stable-ish secret derived from machine/user context to avoid constant logouts.
+  // Still not secure; intended for local dev only.
+  logger.warn('⚠️ SECURITY: Using insecure fallback JWT_SECRET for development');
+  const seed = `${process.env.USER || 'dev'}:${process.env.HOSTNAME || 'localhost'}:${process.cwd()}`;
+  return crypto.createHash('sha256').update(seed).digest('hex');
+})();
+
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 export interface User {
@@ -53,17 +83,32 @@ export class AuthService {
   static async createDefaultAdmin() {
     const adminId = 'admin-001';
     const adminUsername = 'admin';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123'; // Change in production!
+
+    // EIDOLON-V SECURITY: Fail fast if no ADMIN_PASSWORD in production
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    if (!adminPassword) {
+      if (isDev) {
+        logger.warn('⚠️ SECURITY: Using default admin password in development. Set ADMIN_PASSWORD env var for production!', {});
+        // Only allow weak default in development
+      } else {
+        logger.error('🚨 FATAL: ADMIN_PASSWORD environment variable is required in production!', {});
+        process.exit(1); // Fail fast - don't start with insecure config
+      }
+    }
+
+    const password = adminPassword || 'dev-admin-123'; // Only used in dev
 
     if (!users.has(adminId)) {
-      const passwordHash = await this.hashPassword(adminPassword);
+      const passwordHash = await this.hashPassword(password);
       users.set(adminId, {
         id: adminId,
         username: adminUsername,
         passwordHash,
         createdAt: Date.now()
       });
-      console.log('🔐 PHASE2: Default admin user created (Argon2id Secured)');
+      logger.security('Default admin user created (Argon2id Secured)');
     }
   }
 
@@ -82,7 +127,7 @@ export class AuthService {
     try {
       return await argon2.verify(hash, password);
     } catch (err) {
-      console.error('Password verification error:', err);
+      logger.error('Password verification error', { error: err });
       return false; // Fail secure
     }
   }
@@ -105,7 +150,14 @@ export class AuthService {
       iat: Math.floor(Date.now() / 1000)
     };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const signOptions: jwt.SignOptions = {
+      algorithm: JWT_ALG as jwt.Algorithm,
+      expiresIn: JWT_EXPIRES_IN as any, // Cast to any to satisfy specific string literal types if needed
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, signOptions);
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
 
     // Store session
@@ -126,7 +178,11 @@ export class AuthService {
   // Verify token (Sync - JWT verification is fast enough)
   static verifyToken(token: string): User | null {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: [JWT_ALG],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE
+      }) as any;
 
       // Check session exists and is not expired
       const session = sessions.get(token);
@@ -168,11 +224,12 @@ export class AuthService {
 
   // Get session stats
   static getSessionStats() {
+    const createdAts = Array.from(sessions.values()).map(s => s.createdAt);
     return {
       activeUsers: sessions.size,
       totalUsers: users.size,
-      oldestSession: Math.min(...Array.from(sessions.values()).map(s => s.createdAt)),
-      newestSession: Math.max(...Array.from(sessions.values()).map(s => s.createdAt))
+      oldestSession: createdAts.length ? Math.min(...createdAts) : null,
+      newestSession: createdAts.length ? Math.max(...createdAts) : null
     };
   }
 
@@ -188,7 +245,12 @@ export class AuthService {
       isGuest: true
     };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1h' }); // Guests get 1 hour
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
+      algorithm: JWT_ALG,
+      expiresIn: '1h', // Guests get 1 hour
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
+    });
     const expiresAt = Date.now() + (60 * 60 * 1000);
 
     sessions.set(token, {
@@ -237,10 +299,18 @@ export const optionalAuthMiddleware = (req: AuthenticatedRequest, res: any, next
   next();
 };
 
-// Initialize default admin (fire and forget)
-AuthService.createDefaultAdmin().catch(console.error);
+/**
+ * Initialize authentication subsystem.
+ * IMPORTANT: Call this from the server entrypoint (not as a module side-effect),
+ * so boot ordering is deterministic and test environments can control behavior.
+ */
+export async function initAuthService(): Promise<void> {
+  await AuthService.createDefaultAdmin();
+}
 
-// Cleanup sessions every 5 minutes
-setInterval(() => {
-  AuthService.cleanupSessions();
-}, 5 * 60 * 1000);
+export function startAuthMaintenance(): NodeJS.Timeout {
+  // Cleanup sessions every 5 minutes
+  return setInterval(() => {
+    AuthService.cleanupSessions();
+  }, 5 * 60 * 1000);
+}

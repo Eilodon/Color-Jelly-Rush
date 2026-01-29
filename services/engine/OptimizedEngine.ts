@@ -80,36 +80,77 @@ class OptimizedGameEngine {
     }
   }
 
-  private syncBatchFromDOD(entities: Entity[]): void {
+  // EIDOLON-V 2.2: Camera viewport bounds for render set filtering
+  private viewportMinX: number = 0;
+  private viewportMaxX: number = 0;
+  private viewportMinY: number = 0;
+  private viewportMaxY: number = 0;
+  private viewportMargin: number = 200; // Extra margin around viewport
+
+  private updateViewportBounds(state: GameState): void {
+    // Assume viewport size based on typical screen (can be made dynamic)
+    const viewWidth = 1920;
+    const viewHeight = 1080;
+    const halfW = viewWidth / 2;
+    const halfH = viewHeight / 2;
+
+    this.viewportMinX = state.camera.x - halfW - this.viewportMargin;
+    this.viewportMaxX = state.camera.x + halfW + this.viewportMargin;
+    this.viewportMinY = state.camera.y - halfH - this.viewportMargin;
+    this.viewportMaxY = state.camera.y + halfH + this.viewportMargin;
+  }
+
+  private isInViewport(x: number, y: number): boolean {
+    return x >= this.viewportMinX && x <= this.viewportMaxX &&
+      y >= this.viewportMinY && y <= this.viewportMaxY;
+  }
+
+  private syncBatchFromDOD(entities: Entity[], alwaysSyncId?: string): void {
     const tData = TransformStore.data;
     const pData = PhysicsStore.data;
-    const sData = StatsStore.data; // EIDOLON-V: Stats Access
+    const sData = StatsStore.data;
     const stateFlags = StateStore.flags;
+
+    // EIDOLON-V 2.1: Throttle stats sync (every 4 frames)
+    const syncStats = (this.frameCount % 4) === 0;
 
     const count = entities.length;
     for (let i = 0; i < count; i++) {
       const ent = entities[i];
+
+      // EIDOLON-V 2.1: Skip dead entities early (no render needed)
+      if (ent.isDead) continue;
+
       const idx = ent.physicsIndex;
       if (idx !== undefined) {
         const tIdx = idx * 8;
-        const pIdx = idx * 8;
-        const sIdx = idx * 8; // Stats Stride 8
 
+        // EIDOLON-V 2.2: Camera-based filtering (skip entities outside viewport)
+        // Always sync local player regardless of position
+        if (ent.id !== alwaysSyncId) {
+          const x = tData[tIdx];
+          const y = tData[tIdx + 1];
+          if (!this.isInViewport(x, y)) continue;
+        }
+
+        const pIdx = idx * 8;
+
+        // Position/Velocity sync
         ent.position.x = tData[tIdx];
         ent.position.y = tData[tIdx + 1];
         ent.velocity.x = pData[pIdx];
         ent.velocity.y = pData[pIdx + 1];
 
-        // Sync Stats
-        if ('score' in ent) {
+        // EIDOLON-V 2.1: Stats sync throttled (every 4 frames)
+        if (syncStats && 'score' in ent) {
+          const sIdx = idx * 8;
           const unit = ent as any;
           unit.currentHealth = sData[sIdx];
-          // ent.maxHealth = sData[sIdx+1]; // Usually static or managed by upgrades
           unit.score = sData[sIdx + 2];
           unit.matchPercent = sData[sIdx + 3];
         }
 
-        // Sync Dead Flag
+        // Sync Dead Flag (still every frame for cleanup)
         ent.isDead = (stateFlags[idx] & EntityFlags.DEAD) !== 0;
       }
     }
@@ -658,9 +699,13 @@ class OptimizedGameEngine {
     bindEngine(state.engine);
     this.spatialGrid = getCurrentSpatialGrid();
 
+    // EIDOLON-V 2.2: Update viewport bounds for camera-based filtering
+    this.updateViewportBounds(state);
+
     // EIDOLON-V: Pull Sync from DOD for Rendering (Phase 6)
-    // Disabled in integratePhysics, so we sync here for the View.
-    this.syncBatchFromDOD(state.players);
+    // Pass local player ID to always sync it regardless of position
+    const localPlayerId = state.player?.id;
+    this.syncBatchFromDOD(state.players, localPlayerId);
     this.syncBatchFromDOD(state.bots);
     this.syncBatchFromDOD(state.projectiles);
 

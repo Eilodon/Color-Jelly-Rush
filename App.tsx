@@ -4,6 +4,8 @@ import { useGameSession } from './hooks/useGameSession';
 import { inputManager } from './services/input/InputManager';
 import { ScreenManager } from './components/ScreenManager';
 import { AssetLoader } from './services/AssetLoader';
+import { clientLogger } from './services/logging/ClientLogger';
+import { mobileOptimizer } from './services/mobile/MobileOptimizer';
 
 import { audioEngine } from './services/audio/AudioEngine';
 
@@ -11,12 +13,16 @@ const App: React.FC = () => {
   const session = useGameSession();
   const [bootError, setBootError] = useState<string | null>(null);
 
-  // Initialize Systems (Asset Loader + Input + Audio)
+  // Initialize Systems (Asset Loader + Input + Audio + Mobile)
   useEffect(() => {
+    // EIDOLON-V PHASE1: Log Lifecycle
+    clientLogger.info('App component mounted');
+
     const boot = async () => {
       try {
-        console.log('🚀 SYSTEM BOOT INITIATED');
+        clientLogger.info('🚀 SYSTEM BOOT INITIATED');
         inputManager.init();
+        mobileOptimizer.optimizeForMobile();
 
         // EIDOLON-V FIX: REAL LOADING (Parallel)
         // Load assets, audio, and wait for basic network handshake if needed
@@ -26,10 +32,10 @@ const App: React.FC = () => {
           // Optional: NetClient.connect()
         ]);
 
-        console.log('✅ BOOT COMPLETE. ENTERING MENU.');
+        clientLogger.info('✅ BOOT COMPLETE. ENTERING MENU.');
         session.actions.ui.setScreen('menu');
       } catch (e: any) {
-        console.error("FATAL: Boot failed", e);
+        clientLogger.error("FATAL: Boot failed", undefined, e);
         setBootError(e.message || "Unknown Boot Error");
       }
     };
@@ -39,6 +45,8 @@ const App: React.FC = () => {
     // EIDOLON ARCHITECT: Cleanup for HMR (Hot Module Reload)
     return () => {
       inputManager.dispose();
+      mobileOptimizer.cleanup();
+      clientLogger.info('App component unmounting');
     };
   }, []);
 

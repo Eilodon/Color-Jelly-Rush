@@ -10,6 +10,7 @@ import { MovementSystem } from '../engine/dod/systems/MovementSystem';
 import { PhysicsSystem } from '../engine/dod/systems/PhysicsSystem';
 import { TransformStore, PhysicsStore } from '../engine/dod/ComponentStores';
 import { InputRingBuffer } from './InputRingBuffer';
+import { clientLogger } from '../logging/ClientLogger';
 
 // EIDOLON-V P4: Module-level reusable vectors (zero allocation after init)
 const _serverPos = { x: 0, y: 0 };
@@ -135,61 +136,31 @@ export class NetworkClient {
       // Reset ring buffer on new connection
       this.snapshotHead = 0;
       this.snapshotCount = 0;
-      console.log('Connected to CJR Server', this.room.sessionId);
+      clientLogger.info('Connected to CJR Server', { sessionId: this.room.sessionId });
 
       this.setupRoomListeners();
       return true;
     } catch (e) {
-      console.error('Connection failed', e);
+      clientLogger.error('Connection failed', undefined, e as Error);
       return false;
     }
   }
 
 
   private handleBinaryUpdate(buffer: any) {
-    // EIDOLON ARCHITECT: Zero-Allocation Binary Update Handler
-    // Buffer is likely Uint8Array or ArrayBuffer
+    // EIDOLON-V Phase 2: SSOT - Write ONLY to PhysicsWorld (DOD stores via buffer)
+    // Objects are synced via syncBatchFromDOD at render time
     const data = typeof buffer === 'object' && buffer.buffer ? buffer.buffer : buffer;
 
-    // CRITICAL OPTIMIZATION: Direct entity sync via callback - NO intermediate allocations
     const timestamp = BinaryPacker.unpackAndApply(data, (id, x, y, vx, vy) => {
-      // Direct lookup and in-place mutation (no object creation)
-      const player = this.playerMap.get(id);
-      if (player) {
-        player.position.x = x;
-        player.position.y = y;
-        player.velocity.x = vx;
-        player.velocity.y = vy;
-
-        // Sync to PhysicsWorld if available
-        if (this.localState?.engine.physicsWorld) {
-          this.localState.engine.physicsWorld.syncBody(id, x, y, vx, vy);
-        }
-        return; // Early exit if found in playerMap
+      // SSOT: Queue to PhysicsWorld ONLY (no direct object writes)
+      if (this.localState?.engine.physicsWorld) {
+        this.localState.engine.physicsWorld.syncBody(id, x, y, vx, vy);
       }
-
-      const bot = this.botMap.get(id);
-      if (bot) {
-        bot.position.x = x;
-        bot.position.y = y;
-        bot.velocity.x = vx;
-        bot.velocity.y = vy;
-
-        // Sync to PhysicsWorld if available
-        if (this.localState?.engine.physicsWorld) {
-          this.localState.engine.physicsWorld.syncBody(id, x, y, vx, vy);
-        }
-      }
-      // If entity not found in either map, silently ignore (entity may have been deleted)
     });
 
     // Invalid packet - abort
     if (timestamp === null) return;
-
-    // NOTE: Snapshot management for interpolation still allocates Maps once per packet
-    // This is acceptable amortized cost (1 allocation vs 100+ per entity)
-    // Future optimization: Ring buffer of pre-allocated EntitySnapshot arrays
-    // For now, keeping interpolation system functional
   }
 
   async disconnect() {
@@ -261,7 +232,6 @@ export class NetworkClient {
           radius: sPlayer.radius,
           color: '#ffffff',
           isDead: sPlayer.isDead,
-          trail: [],
           name: sPlayer.name,
           score: sPlayer.score,
           kills: sPlayer.kills,
@@ -440,7 +410,6 @@ export class NetworkClient {
           radius: sBot.radius,
           color: '#fff',
           isDead: sBot.isDead,
-          trail: [],
           name: sBot.name,
           score: sBot.score,
           kills: sBot.kills,
@@ -656,10 +625,12 @@ export class NetworkClient {
   }
 
   private applyEntitySnapshot(entities: Array<Player | Bot>, snapshot: Map<string, EntitySnapshot>, excludeId?: string) {
-    const byId = new Map<string, Player | Bot>(entities.map(e => [e.id, e]));
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n) if not found
     snapshot.forEach((data, id) => {
       if (id === excludeId) return; // SKIP LOCAL
-      const entity = byId.get(id);
+      let entity = this.playerMap.get(id) || this.botMap.get(id);
+      // Fallback: O(n) search for testing/edge cases
+      if (!entity) entity = entities.find(e => e.id === id);
       if (!entity) return;
       entity.position.x = data.x;
       entity.position.y = data.y;
@@ -669,9 +640,10 @@ export class NetworkClient {
   }
 
   private applyFoodSnapshot(foods: Food[], snapshot: Map<string, EntitySnapshot>) {
-    const byId = new Map<string, Food>(foods.map(f => [f.id, f]));
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
     snapshot.forEach((data, id) => {
-      const food = byId.get(id);
+      let food = this.foodMap.get(id);
+      if (!food) food = foods.find(f => f.id === id);
       if (!food) return;
       food.position.x = data.x;
       food.position.y = data.y;
@@ -685,10 +657,11 @@ export class NetworkClient {
     t: number,
     excludeId?: string
   ) {
-    const byId = new Map<string, Player | Bot>(entities.map(e => [e.id, e]));
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n)
     newer.forEach((next, id) => {
       if (id === excludeId) return; // SKIP LOCAL
-      const entity = byId.get(id);
+      let entity = this.playerMap.get(id) || this.botMap.get(id);
+      if (!entity) entity = entities.find(e => e.id === id);
       if (!entity) return;
       const prev = older.get(id) || next;
       entity.position.x = prev.x + (next.x - prev.x) * t;
@@ -708,9 +681,10 @@ export class NetworkClient {
     newer: Map<string, EntitySnapshot>,
     t: number
   ) {
-    const byId = new Map<string, Food>(foods.map(f => [f.id, f]));
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
     newer.forEach((next, id) => {
-      const food = byId.get(id);
+      let food = this.foodMap.get(id);
+      if (!food) food = foods.find(f => f.id === id);
       if (!food) return;
       const prev = older.get(id) || next;
       food.position.x = prev.x + (next.x - prev.x) * t;

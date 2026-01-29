@@ -18,7 +18,7 @@ export interface VFXEvent {
 
 export class VFXRingBuffer {
   private data: Float32Array;
-  private head: number;
+  private head: number; // number of queued events for the current frame
   private capacity: number;
   private readonly EVENT_SIZE = 5; // x, y, color, type, data
 
@@ -32,6 +32,18 @@ export class VFXRingBuffer {
    * Add VFX event to buffer (zero allocation)
    */
   push(x: number, y: number, color: number, type: number, data: number = 0): void {
+    // This buffer is designed as a per-frame queue (flushed each frame).
+    // We prefer dropping overflow events over corrupting order via wrap-around.
+    if (this.head >= this.capacity) {
+      // EIDOLON-V: Safety Cap
+      // If we hit capacity, we likely have a stall. Better to reset or drop than crash.
+      // In dev/test, warn. In prod, silent drop or reset.
+      if (this.head === this.capacity) {
+        console.warn(`[VFXRingBuffer] Overflow! Capacity ${this.capacity} reached. Dropping events.`);
+      }
+      return;
+    }
+
     const index = this.head * this.EVENT_SIZE;
     this.data[index] = x;
     this.data[index + 1] = y;
@@ -39,7 +51,7 @@ export class VFXRingBuffer {
     this.data[index + 3] = type;
     this.data[index + 4] = data;
 
-    this.head = (this.head + 1) % this.capacity;
+    this.head++;
   }
 
   /**
@@ -61,7 +73,7 @@ export class VFXRingBuffer {
   }
 
   /**
-   * Get all events since last read
+   * Get all events since last read (ALLOCATES - use getEventsInto for zero-alloc)
    */
   getEvents(): VFXEvent[] {
     const events: VFXEvent[] = [];
@@ -80,6 +92,43 @@ export class VFXRingBuffer {
     // Reset head for next frame
     this.head = 0;
     return events;
+  }
+
+  /**
+   * EIDOLON-V Phase 4.1: Zero-allocation event reading
+   * Copies events into pre-allocated target array by mutating existing objects.
+   * @param target Pre-allocated VFXEvent[] array
+   * @returns Number of events copied
+   */
+  getEventsInto(target: VFXEvent[]): number {
+    const count = Math.min(this.head, target.length);
+
+    for (let i = 0; i < count; i++) {
+      const index = i * this.EVENT_SIZE;
+      const evt = target[i];
+      evt.x = this.data[index];
+      evt.y = this.data[index + 1];
+      evt.color = this.data[index + 2];
+      evt.type = this.data[index + 3];
+      evt.data = this.data[index + 4];
+    }
+
+    // Reset head for next frame
+    this.head = 0;
+    return count;
+  }
+
+  /**
+   * EIDOLON-V Phase 4.1: Direct Float32Array access for maximum performance
+   * Format: [x, y, color, type, data, x, y, color, type, data, ...]
+   * @returns { data: Float32Array, count: number }
+   */
+  getRawData(): { data: Float32Array; count: number; eventSize: number } {
+    return {
+      data: this.data,
+      count: this.head,
+      eventSize: this.EVENT_SIZE
+    };
   }
 
   /**
@@ -102,6 +151,27 @@ export class VFXRingBuffer {
   get isFull(): boolean {
     return this.head >= this.capacity;
   }
+}
+
+/**
+ * EIDOLON-V Phase 4.1: Helper to copy VFX events without allocation
+ * Use this instead of getEvents() for zero-GC performance
+ */
+export function copyVFXToArray(target: VFXEvent[], buffer: VFXRingBuffer): number {
+  return buffer.getEventsInto(target);
+}
+
+/**
+ * Pre-allocate a VFX event pool for use with copyVFXToArray
+ */
+export function createVFXEventPool(size: number): VFXEvent[] {
+  return Array.from({ length: size }, () => ({
+    x: 0,
+    y: 0,
+    color: 0,
+    type: 0,
+    data: 0
+  }));
 }
 
 // VFX Event Types

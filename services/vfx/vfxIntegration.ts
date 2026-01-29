@@ -2,6 +2,7 @@ import { GameState, Player } from '../../types';
 import { RingId, TattooId } from '../cjr/cjrTypes';
 import { vfxSystem } from './vfxSystem';
 import { tattooVFXSystem } from './tattooVFX';
+import { copyVFXToArray, vfxBuffer } from '../engine/VFXRingBuffer';
 
 export class VFXIntegrationManager {
   private lastRingCommit: Map<string, number> = new Map();
@@ -30,7 +31,13 @@ export class VFXIntegrationManager {
 
   update(state: GameState, dt: number): void {
     if (!this.vfxEnabled) return;
-    // Chỉ update logic shake, còn particle do Pixi lo
+
+    // EIDOLON-V Phase 4.1: Consume VFX ring buffer into state pool (zero allocation)
+    const vfxCount = copyVFXToArray(state.vfxEvents, vfxBuffer);
+    // Store count for UI rendering (optional - can add vfxEventCount to GameState)
+    (state as any).vfxEventCount = vfxCount;
+
+    // Update VFX effects (shake, particles via Pixi)
     vfxSystem.updateEffects(state, dt);
   }
 
@@ -40,3 +47,4 @@ export class VFXIntegrationManager {
 }
 
 export const vfxIntegrationManager = new VFXIntegrationManager();
+

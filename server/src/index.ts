@@ -14,7 +14,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { GameRoom } from './rooms/GameRoom.js';
 import authRoutes from './auth/authRoutes.js';
-import { authMiddleware, optionalAuthMiddleware } from './auth/AuthService.js';
+import { authMiddleware, initAuthService, startAuthMaintenance } from './auth/AuthService.js';
 import monitoringRoutes from './monitoring/monitoringRoutes.js';
 import { monitoringService } from './monitoring/MonitoringService.js';
 import { logger, errorHandler } from './logging/Logger.js';
@@ -33,30 +33,30 @@ const HOST = process.env.HOST || '0.0.0.0';
 async function main() {
   // EIDOLON-V PHASE1: Setup global error handlers
   errorHandler.setupGlobalHandlers();
-  
+
   logger.info('🚀 PHASE1: Starting CJR Server...', {
     nodeVersion: process.version,
     platform: process.platform,
     port: PORT,
     host: HOST
   });
-  
+
   const app = express();
 
   // EIDOLON-V PHASE1: Secure CORS configuration
-  const allowedOrigins = process.env.CORS_ORIGIN ? 
-    process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : 
+  const allowedOrigins = process.env.CORS_ORIGIN ?
+    process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) :
     ['http://localhost:5173', 'http://localhost:3000']; // Dev fallback
-  
+
   app.use(cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl)
       if (!origin) return callback(null, true);
-      
+
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.warn(`CORS blocked: ${origin}`);
+        logger.warn(`CORS blocked: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -66,29 +66,29 @@ async function main() {
     maxAge: 86400 // 24 hours
   }));
   app.use(express.json({ limit: '10mb' })); // EIDOLON-V PHASE1: Limit payload size
-  
+
   // EIDOLON-V PHASE1: Rate limiting middleware
   const rateLimit = new Map<string, { count: number; resetTime: number }>();
   const RATE_LIMIT_WINDOW = 60000; // 1 minute
   const RATE_LIMIT_MAX = 100; // requests per minute
-  
+
   app.use((req, res, next) => {
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
     const now = Date.now();
     const client = rateLimit.get(clientIp);
-    
+
     if (!client || now > client.resetTime) {
       rateLimit.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
       return next();
     }
-    
+
     if (client.count >= RATE_LIMIT_MAX) {
       return res.status(429).json({
         error: 'Too Many Requests',
         retryAfter: Math.ceil((client.resetTime - now) / 1000)
       });
     }
-    
+
     client.count++;
     next();
   });
@@ -97,7 +97,7 @@ async function main() {
   app.get('/health', (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
     const rateLimitInfo = rateLimit.get(clientIp);
-    
+
     res.json({
       status: 'healthy',
       timestamp: Date.now(),
@@ -149,7 +149,11 @@ async function main() {
   // Start listening
   await gameServer.listen(PORT);
 
-  console.log(`
+  // Auth init/maintenance (explicit boot order; no module side-effects)
+  await initAuthService();
+  startAuthMaintenance();
+
+  logger.info(`
   ╔═══════════════════════════════════════════════════╗
   ║                                                   ║
   ║   🎨 COLOR-JELLY-RUSH SERVER v1.0.0              ║
@@ -166,11 +170,11 @@ async function main() {
 
   // EIDOLON-V PHASE1: Enhanced error handling middleware
   app.use(errorHandler.asyncErrorHandler());
-  
+
   // EIDOLON-V PHASE1: Request logging middleware
   app.use((req, res, next) => {
     const start = Date.now();
-    
+
     res.on('finish', () => {
       const duration = Date.now() - start;
       logger.info('HTTP Request', {
@@ -182,12 +186,12 @@ async function main() {
         userAgent: req.get('User-Agent')
       });
     });
-    
+
     next();
   });
-  
+
   // EIDOLON-V PHASE1: Start metrics collection
-  console.log('📊 PHASE1: Starting monitoring service...');
+  logger.info('📊 PHASE1: Starting monitoring service...');
   setInterval(() => {
     monitoringService.collectMetrics();
   }, 5000); // Collect metrics every 5 seconds
@@ -198,7 +202,7 @@ async function main() {
 
     // Give clients time to disconnect
     await gameServer.gracefullyShutdown(true);
-    
+
     logger.info('✅ PHASE1: Server shutdown complete');
     process.exit(0);
   };

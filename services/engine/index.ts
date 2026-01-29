@@ -36,6 +36,7 @@ import { resetContributionLog } from '../cjr/contribution';
 
 import { optimizedEngine } from './OptimizedEngine';
 import { gameStateManager } from './GameStateManager';
+import { createVFXEventPool } from './VFXRingBuffer';
 
 // EIDOLON-V FIX: Export unified game state manager
 export { gameStateManager, optimizedEngine };
@@ -105,13 +106,10 @@ export const createInitialState = (level: number = 1): GameState => {
     unlockedTattoos: [],
     isPaused: false,
     result: null,
-    // EIDOLON-V FIX: Replace string array with VFX ring buffer
-    // EIDOLON-V FIX: Replace string array with VFX ring buffer
-    // vfxEvents: [], // Removed - replaced by VFXRingBuffer
-    vfxEvents: Array.from({ length: 50 }, () => ({ type: 0, x: 0, y: 0, data: 0, id: '', seq: 0, color: 0 })) as any[], // Explicit cast to satisfy strict mode
+    // EIDOLON-V: Pre-allocated event objects for zero-GC VFX consumption.
+    // (vfxBuffer is the producer; this array is the UI-consumable staging pool.)
+    vfxEvents: createVFXEventPool(50),
     vfxHead: 0,
     vfxTail: 0,
-    inputs: { space: false, w: false },
-    inputEvents: [],
   };
 };

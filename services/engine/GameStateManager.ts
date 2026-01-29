@@ -17,6 +17,7 @@ import { InputStore } from './dod/ComponentStores';
 import { NetworkClient, networkClient as defaultNetworkClient, NetworkStatus } from '../networking/NetworkClient';
 import { AudioEngine, audioEngine as defaultAudioEngine } from '../audio/AudioEngine';
 import { ShapeId } from '../cjr/cjrTypes';
+import { clientLogger } from '../logging/ClientLogger';
 
 // EIDOLON-V FIX: Event System Types
 export type GameEvent =
@@ -94,7 +95,7 @@ export class GameStateManager {
 
   // EIDOLON-V FIX: Initialize system dependencies
   public initialize(): void {
-    console.log('🜂 EIDOLON-V: GameStateManager initializing systems...');
+    clientLogger.info('🜂 EIDOLON-V: GameStateManager initializing systems...');
     // pooledEntityFactory auto-initializes via singleton access
     mathPerformanceMonitor.reset();
   }

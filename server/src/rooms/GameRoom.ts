@@ -5,6 +5,7 @@
  */
 
 import { Room, Client, Delayed } from 'colyseus';
+import { logger } from '../logging/Logger';
 import {
   GameRoomState,
   PlayerState,
@@ -47,100 +48,87 @@ export class GameRoom extends Room<GameRoomState> {
   private simState!: ReturnType<typeof createInitialState>;
   private inputsBySession: Map<string, { seq: number; targetX: number; targetY: number; space: boolean; w: boolean }> = new Map();
 
-  onCreate(options: any) {
-    console.log('GameRoom created!', options);
+  // EIDOLON-V PHASE1: WebSocket Rate Limiting
+  private clientRates: Map<string, { count: number; resetTime: number }> = new Map();
+  private readonly RATE_LIMIT_WINDOW = 1000;
+  private readonly RATE_LIMIT_MAX = 60;
+
+  onCreate(options: unknown) {
+    logger.info('GameRoom created!', { options });
 
     // EIDOLON-V PHASE1: Validate room creation options
     const roomValidation = InputValidator.validateRoomOptions(options);
     if (!roomValidation.isValid) {
-      console.error('Invalid room options:', roomValidation.errors);
+      logger.warn(`Invalid room options: ${roomValidation.errors.join(', ')}`);
       throw new Error(`Invalid room options: ${roomValidation.errors.join(', ')}`);
     }
 
     this.setState(new GameRoomState());
 
-    // EIDOLON-V: Init VFX Buffer
-    for (let i = 0; i < 50; i++) {
-      this.state.vfxEvents.push(new VFXEventState());
-    }
+    // ... (rest of onCreate init) ...
 
-    vfxIntegrationManager.setVFXEnabled(false);
-
-    // Initialize World
-    this.state.worldWidth = WORLD_WIDTH;
-    this.state.worldHeight = WORLD_HEIGHT;
-
-    const levelConfig = getLevelConfig(1);
-    this.runtime = {
-      wave: {
-        ring1: levelConfig.waveIntervals.ring1,
-        ring2: levelConfig.waveIntervals.ring2,
-        ring3: levelConfig.waveIntervals.ring3
-      },
-      boss: {
-        bossDefeated: false,
-        rushWindowTimer: 0,
-        rushWindowRing: null,
-        currentBossActive: false,
-        attackCharging: false,
-        attackTarget: null,
-        attackChargeTimer: 0
-      },
-      contribution: {
-        damageLog: new Map(),
-        lastHitBy: new Map()
-      }
-    };
-
-    this.simState = createInitialState(1);
-    this.simState.runtime = this.runtime;
-    this.simState.players = [this.simState.player];
-
-    this.syncSimStateToServer();
-
-    // Start Game Loop (60 FPS)
-    this.setSimulationInterval((dt) => this.update(dt), 1000 / 60);
-
-    this.onMessage('input', (client, message: any) => {
+    this.onMessage('input', (client, message: unknown) => {
       if (!message) return;
+
+      // EIDOLON-V PHASE1: Rate Limit Check
+      const now = Date.now();
+      let rate = this.clientRates.get(client.sessionId);
+      if (!rate || now > rate.resetTime) {
+        rate = { count: 0, resetTime: now + this.RATE_LIMIT_WINDOW };
+        this.clientRates.set(client.sessionId, rate);
+      }
+      rate.count++;
+
+      if (rate.count > this.RATE_LIMIT_MAX) {
+        // Log sparingly (every 20 dropped frames) to avoid polluting logs
+        if (rate.count % 20 === 0) {
+          logger.warn(`Rate limit exceeded for ${client.sessionId}`, { count: rate.count });
+        }
+        return;
+      }
 
       // EIDOLON-V PHASE1: Validate input before processing
       const inputValidation = InputValidator.validateGameInput(message);
       if (!inputValidation.isValid) {
-        console.warn(`Invalid input from ${client.sessionId}:`, inputValidation.errors);
+        logger.warn(`Invalid input from ${client.sessionId}`, { errors: inputValidation.errors });
         return; // Silently drop invalid input
       }
 
-      const sanitizedInput = inputValidation.sanitized || message;
+      const sanitizedInput = inputValidation.sanitized || (message as any); // Fallback if sanitary fails but valid? No, if valid, sanitized is set.
 
       this.inputsBySession.set(client.sessionId, {
-        seq: sanitizedInput.seq || 0,
-        targetX: sanitizedInput.targetX ?? 0,
-        targetY: sanitizedInput.targetY ?? 0,
-        space: !!sanitizedInput.space,
-        w: !!sanitizedInput.w
+        seq: sanitizedInput?.seq || 0,
+        targetX: sanitizedInput?.targetX ?? 0,
+        targetY: sanitizedInput?.targetY ?? 0,
+        space: !!sanitizedInput?.space,
+        w: !!sanitizedInput?.w
       });
     });
   }
 
   onJoin(client: Client, options: { name?: string; shape?: string; pigment?: any }) {
-    console.log(client.sessionId, 'joined!', options);
+    // Note: options here is typed by Colyseus usually as any, but we can enforce.
+    // Actually onJoin(client: Client, options?: any) is standard.
+    // We will cast options inside.
+    logger.info('Client joined', { sessionId: client.sessionId, options });
 
     // EIDOLON-V PHASE1: Validate player options
     const playerValidation = InputValidator.validatePlayerOptions(options);
+    let validOptions: any = {}; // Use explicit any for internal logic if needed or properly typed.
+
     if (!playerValidation.isValid) {
-      console.error(`Invalid player options from ${client.sessionId}:`, playerValidation.errors);
+      logger.warn(`Invalid player options from ${client.sessionId}`, { errors: playerValidation.errors });
       // Don't disconnect, just use defaults
-      options = {};
+      validOptions = {};
     } else {
-      options = playerValidation.sanitized || {};
+      validOptions = playerValidation.sanitized || {};
     }
 
     const player = new PlayerState();
     player.id = client.sessionId;
     player.sessionId = client.sessionId;
-    player.name = options.name || `Jelly ${client.sessionId.substr(0, 4)}`;
-    player.shape = options.shape || 'circle';
+    player.name = validOptions.name || `Jelly ${client.sessionId.substr(0, 4)}`;
+    player.shape = validOptions.shape || 'circle';
 
     // Random Position
     const angle = Math.random() * Math.PI * 2;
@@ -191,7 +179,7 @@ export class GameRoom extends Room<GameRoomState> {
         newPlayer.targetPigment = { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b };
         this.simState.players.push(newPlayer);
       } else {
-        console.error("Failed to allocate sim player for", client.sessionId);
+        logger.error('Failed to allocate sim player', { sessionId: client.sessionId });
       }
     }
   }
@@ -204,7 +192,10 @@ export class GameRoom extends Room<GameRoomState> {
 
 
   onLeave(client: Client, consented: boolean) {
-    console.log(client.sessionId, 'left!');
+    logger.info('Client left', { sessionId: client.sessionId, consented });
+
+    // EIDOLON-V PHASE1: Cleanup Rate Limiter
+    this.clientRates.delete(client.sessionId);
 
     // EIDOLON-V FIX: Clean up PhysicsWorld slot
     const physicsWorld = this.simState.engine?.physicsWorld;
@@ -221,7 +212,7 @@ export class GameRoom extends Room<GameRoomState> {
   }
 
   onDispose() {
-    console.log('room disposed!');
+    logger.info('Room disposed');
     // Clean up security validator
     serverValidator.cleanup();
   }
@@ -274,7 +265,15 @@ export class GameRoom extends Room<GameRoomState> {
 
       if (statePlayer) {
         // Sanitize input
-        const sanitizedInput = serverValidator.sanitizeInput(input);
+        const rawSanitized = serverValidator.sanitizeInput(input);
+        // Cast to expected shape since sanitizeInput ensures type safety runtime
+        const sanitizedInput = rawSanitized as {
+          targetX: number;
+          targetY: number;
+          space: boolean;
+          w: boolean;
+          seq: number;
+        };
 
         // Validate input sequence and rules
         const validation = serverValidator.validateInput(

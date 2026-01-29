@@ -5,6 +5,7 @@
 
 import express, { Request } from 'express';
 import { AuthService, authMiddleware, optionalAuthMiddleware } from './AuthService';
+import { logger } from '../logging/Logger';
 
 // EIDOLON-V PHASE1: Extend Express Request interface
 interface AuthenticatedRequest extends Request {
@@ -29,7 +30,7 @@ router.post('/login', async (req, res) => {
 
     // EIDOLON-V PHASE1: Rate limiting for login attempts
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
-    console.log(`🔐 PHASE1: Login attempt from ${clientIp} for user: ${username}`);
+    logger.security('Login attempt', { clientIp, username });
 
     const authResult = await AuthService.authenticate(username, password);
 
@@ -47,7 +48,7 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('🔐 PHASE1: Login error:', error);
+    logger.error('🔐 PHASE1: Login error', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -56,7 +57,7 @@ router.post('/login', async (req, res) => {
 router.post('/guest', (req, res) => {
   try {
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
-    console.log(`🔐 PHASE1: Guest login from ${clientIp}`);
+    logger.security('Guest login', { clientIp });
 
     const guestResult = AuthService.createGuestUser();
 
@@ -69,7 +70,7 @@ router.post('/guest', (req, res) => {
     });
 
   } catch (error) {
-    console.error('🔐 PHASE1: Guest login error:', error);
+    logger.error('🔐 PHASE1: Guest login error', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
 });

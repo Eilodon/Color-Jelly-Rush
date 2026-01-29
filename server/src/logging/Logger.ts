@@ -14,7 +14,7 @@ export interface LogEntry {
   timestamp: number;
   level: LogLevel;
   message: string;
-  context?: any;
+  context?: unknown;
   userId?: string;
   sessionId?: string;
   ip?: string;
@@ -29,21 +29,21 @@ export class Logger {
   private static instance: Logger;
   private logs: LogEntry[] = [];
   private maxLogSize = 10000; // Keep last 10k logs
-  private logLevel = process.env.LOG_LEVEL ? 
-    LogLevel[process.env.LOG_LEVEL.toUpperCase() as keyof typeof LogLevel] : 
+  private logLevel = process.env.LOG_LEVEL ?
+    LogLevel[process.env.LOG_LEVEL.toUpperCase() as keyof typeof LogLevel] :
     LogLevel.INFO;
-  
+
   static getInstance(): Logger {
     if (!Logger.instance) {
       Logger.instance = new Logger();
     }
     return Logger.instance;
   }
-  
+
   // EIDOLON-V PHASE1: Core logging method
-  protected log(level: LogLevel, message: string, context?: any, error?: Error): void {
+  protected log(level: LogLevel, message: string, context?: unknown, error?: Error): void {
     if (level > this.logLevel) return;
-    
+
     const logEntry: LogEntry = {
       timestamp: Date.now(),
       level,
@@ -55,26 +55,26 @@ export class Logger {
         stack: error.stack
       } : undefined
     };
-    
+
     // Add to memory buffer
     this.logs.push(logEntry);
-    
+
     // Trim if too many logs
     if (this.logs.length > this.maxLogSize) {
       this.logs = this.logs.slice(-this.maxLogSize);
     }
-    
+
     // Output to console with formatting
     this.outputToConsole(logEntry);
   }
-  
+
   // EIDOLON-V PHASE1: Console output with colors
   private outputToConsole(entry: LogEntry): void {
     const timestamp = new Date(entry.timestamp).toISOString();
     const levelStr = LogLevel[entry.level].padEnd(5);
     const contextStr = entry.context ? ` | ${JSON.stringify(entry.context)}` : '';
     const errorStr = entry.error ? ` | ${entry.error.message}` : '';
-    
+
     let colorCode = '';
     switch (entry.level) {
       case LogLevel.ERROR:
@@ -90,10 +90,10 @@ export class Logger {
         colorCode = '\x1b[37m'; // White
         break;
     }
-    
+
     const resetCode = '\x1b[0m';
     const logMessage = `${colorCode}[${timestamp}] ${levelStr} | ${entry.message}${contextStr}${errorStr}${resetCode}`;
-    
+
     switch (entry.level) {
       case LogLevel.ERROR:
         console.error(logMessage);
@@ -112,68 +112,70 @@ export class Logger {
         break;
     }
   }
-  
+
   // EIDOLON-V PHASE1: Public logging methods
-  error(message: string, context?: any, error?: Error): void {
+  error(message: string, context?: unknown, error?: Error): void {
     this.log(LogLevel.ERROR, message, context, error);
   }
-  
-  warn(message: string, context?: any): void {
+
+  warn(message: string, context?: unknown): void {
     this.log(LogLevel.WARN, message, context);
   }
-  
-  info(message: string, context?: any): void {
+
+  info(message: string, context?: unknown): void {
     this.log(LogLevel.INFO, message, context);
   }
-  
-  debug(message: string, context?: any): void {
+
+  debug(message: string, context?: unknown): void {
     this.log(LogLevel.DEBUG, message, context);
   }
-  
+
   // EIDOLON-V PHASE1: Security-specific logging
-  security(event: string, details: any, severity: 'low' | 'medium' | 'high' = 'medium'): void {
-    const level = severity === 'high' ? LogLevel.ERROR : 
-                  severity === 'medium' ? LogLevel.WARN : LogLevel.INFO;
-    
-    this.log(level, `SECURITY: ${event}`, {
-      severity,
-      ...details
-    });
+  security(event: string, details: unknown, severity: 'low' | 'medium' | 'high' = 'medium'): void {
+    const level = severity === 'high' ? LogLevel.ERROR :
+      severity === 'medium' ? LogLevel.WARN : LogLevel.INFO;
+
+    // Ensure details is an object if possible
+    const context = (typeof details === 'object' && details !== null)
+      ? { severity, ...details }
+      : { severity, details };
+
+    this.log(level, `SECURITY: ${event}`, context);
   }
-  
+
   // EIDOLON-V PHASE1: Game-specific logging
-  game(event: string, details: any): void {
+  game(event: string, details: unknown): void {
     this.log(LogLevel.INFO, `GAME: ${event}`, details);
   }
-  
+
   // EIDOLON-V PHASE1: Performance logging
-  performance(operation: string, duration: number, details?: any): void {
+  performance(operation: string, duration: number, details?: unknown): void {
     this.log(LogLevel.DEBUG, `PERF: ${operation} took ${duration}ms`, details);
   }
-  
+
   // EIDOLON-V PHASE1: Get recent logs
   getRecentLogs(count: number = 100, level?: LogLevel): LogEntry[] {
     let logs = this.logs.slice(-count);
-    
+
     if (level !== undefined) {
       logs = logs.filter(log => log.level <= level);
     }
-    
+
     return logs;
   }
-  
+
   // EIDOLON-V PHASE1: Get logs by level
   getLogsByLevel(level: LogLevel, count: number = 100): LogEntry[] {
     return this.logs
       .filter(log => log.level === level)
       .slice(-count);
   }
-  
+
   // EIDOLON-V PHASE1: Clear logs
   clearLogs(): void {
     this.logs = [];
   }
-  
+
   // EIDOLON-V PHASE1: Get log statistics
   getLogStats(): {
     total: number;
@@ -182,12 +184,12 @@ export class Logger {
     newest: number;
   } {
     const byLevel: Record<string, number> = {};
-    
+
     for (const log of this.logs) {
       const levelName = LogLevel[log.level];
       byLevel[levelName] = (byLevel[levelName] || 0) + 1;
     }
-    
+
     return {
       total: this.logs.length,
       byLevel,
@@ -200,30 +202,30 @@ export class Logger {
 // EIDOLON-V PHASE1: Global error handler
 export class ErrorHandler {
   private static logger = Logger.getInstance();
-  
+
   // EIDOLON-V PHASE1: Handle uncaught exceptions
   static setupGlobalHandlers(): void {
     // Uncaught exceptions
     process.on('uncaughtException', (error: Error) => {
-      this.logger.error('Uncaught Exception', { 
+      this.logger.error('Uncaught Exception', {
         pid: process.pid,
         uptime: process.uptime()
       }, error);
-      
+
       // Give time for logging then exit
       setTimeout(() => {
         process.exit(1);
       }, 1000);
     });
-    
+
     // Unhandled promise rejections
-    process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
       this.logger.error('Unhandled Promise Rejection', {
-        reason: reason?.toString?.() || reason,
-        promise: promise.toString()
+        reason: typeof reason === 'object' ? reason : String(reason),
+        promise: String(promise)
       });
     });
-    
+
     // Warning events
     process.on('warning', (warning: Error) => {
       this.logger.warn('Process Warning', {
@@ -233,14 +235,14 @@ export class ErrorHandler {
       });
     });
   }
-  
+
   // EIDOLON-V PHASE1: Handle async errors in Express
   static asyncErrorHandler() {
     return (error: Error, req: any, res: any, next: any) => {
       const requestId = req.id || 'unknown';
       const userId = req.user?.id || 'anonymous';
       const ip = req.ip || req.connection.remoteAddress || 'unknown';
-      
+
       this.logger.error('Request Error', {
         requestId,
         userId,
@@ -249,11 +251,11 @@ export class ErrorHandler {
         url: req.url,
         userAgent: req.get('User-Agent')
       }, error);
-      
+
       // Don't expose internal errors to clients
       const isDevelopment = process.env.NODE_ENV !== 'production';
       const message = isDevelopment ? error.message : 'Internal server error';
-      
+
       res.status(500).json({
         error: message,
         requestId,
@@ -261,7 +263,7 @@ export class ErrorHandler {
       });
     };
   }
-  
+
   // EIDOLON-V PHASE1: Handle game room errors
   static handleGameRoomError(error: Error, context: {
     roomId: string;
@@ -270,7 +272,7 @@ export class ErrorHandler {
   }): void {
     this.logger.error('Game Room Error', context, error);
   }
-  
+
   // EIDOLON-V PHASE1: Handle authentication errors
   static handleAuthError(error: Error, context: {
     ip: string;
@@ -282,12 +284,13 @@ export class ErrorHandler {
       error: error.message
     }, 'medium');
   }
-  
+
   // EIDOLON-V PHASE1: Handle validation errors
-  static handleValidationError(message: string, context: any): void {
+  static handleValidationError(message: string, context: unknown): void {
+    const details = (typeof context === 'object' && context !== null) ? context : { context };
     this.logger.warn('Validation Error', {
       message,
-      ...context
+      ...details
     });
   }
 }
@@ -297,21 +300,21 @@ export function logMethod(level: LogLevel = LogLevel.DEBUG) {
   return function (target: any, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value;
     const logger = Logger.getInstance();
-    
+
     descriptor.value = function (...args: any[]) {
       const startTime = Date.now();
       const className = target.constructor.name;
-      
+
       logger.debug(`METHOD: ${className}.${propertyName} called`, {
         args: args.length,
-        argsPreview: args.slice(0, 3).map(arg => 
+        argsPreview: args.slice(0, 3).map(arg =>
           typeof arg === 'object' ? '[Object]' : String(arg)
         )
       });
-      
+
       try {
         const result = method.apply(this, args);
-        
+
         if (result && typeof result.catch === 'function') {
           // Handle Promise
           return result.catch((error: Error) => {
@@ -346,7 +349,7 @@ export function logMethod(level: LogLevel = LogLevel.DEBUG) {
         throw error;
       }
     };
-    
+
     return descriptor;
   };
 }

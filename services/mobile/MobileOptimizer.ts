@@ -2,7 +2,8 @@
  * MOBILE EXPERIENCE OPTIMIZER
  * Touch controls, haptic feedback, gesture recognition
  */
-
+// ...
+import { clientLogger } from '../logging/ClientLogger';
 export interface TouchGesture {
   type: 'tap' | 'doubleTap' | 'swipe' | 'pinch' | 'longPress';
   startPoint: { x: number; y: number };
@@ -38,30 +39,61 @@ export class MobileOptimizer {
   }
 
   private detectMobileDevice() {
-    this.isMobile = 'ontouchstart' in window || 
-                   navigator.maxTouchPoints > 0 || 
-                   /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
+    this.isMobile = 'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
     if (this.isMobile) {
       document.body.classList.add('mobile-device');
-      console.log('📱 Mobile device detected - Optimizing experience');
+      clientLogger.info('📱 Mobile device detected - Optimizing experience');
     }
+    clientLogger.info('📱 Mobile optimizations applied');
   }
+
+  // Stored event listeners for cleanup
+  private boundTouchStart = this.handleTouchStart.bind(this);
+  private boundTouchMove = this.handleTouchMove.bind(this);
+  private boundTouchEnd = this.handleTouchEnd.bind(this);
+  private boundTouchCancel = this.handleTouchCancel.bind(this);
+  private boundPreventDefault = (e: Event) => e.preventDefault();
+  private boundPreventContextMenu = (e: Event) => e.preventDefault();
+  private boundPreventDoubleTap = (e: TouchEvent) => {
+    const now = Date.now();
+    if (now - this.lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    this.lastTouchEnd = now;
+  };
+
+  private lastTouchEnd = 0;
+  private isOptimized = false;
+
+  // ... (detectMobileDevice stays same) ...
 
   private setupTouchListeners() {
     if (!this.isMobile) return;
 
+    this.removeTouchListeners(); // Ensure clean start
+
     const element = document.documentElement;
-    
-    element.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
-    element.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-    element.addEventListener('touchend', this.handleTouchEnd.bind(this), { passive: false });
-    element.addEventListener('touchcancel', this.handleTouchCancel.bind(this));
+
+    element.addEventListener('touchstart', this.boundTouchStart, { passive: false });
+    element.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+    element.addEventListener('touchend', this.boundTouchEnd, { passive: false });
+    element.addEventListener('touchcancel', this.boundTouchCancel);
+  }
+
+  private removeTouchListeners() {
+    const element = document.documentElement;
+    element.removeEventListener('touchstart', this.boundTouchStart);
+    element.removeEventListener('touchmove', this.boundTouchMove);
+    element.removeEventListener('touchend', this.boundTouchEnd);
+    element.removeEventListener('touchcancel', this.boundTouchCancel);
   }
 
   private handleTouchStart(e: TouchEvent) {
     e.preventDefault();
-    
+
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       this.touchStartPoints.set(touch.identifier, {
@@ -74,7 +106,7 @@ export class MobileOptimizer {
 
   private handleTouchMove(e: TouchEvent) {
     e.preventDefault();
-    
+
     // Handle multi-touch gestures
     if (e.touches.length === 2) {
       this.handlePinchGesture(e.touches[0], e.touches[1]);
@@ -83,16 +115,16 @@ export class MobileOptimizer {
 
   private handleTouchEnd(e: TouchEvent) {
     e.preventDefault();
-    
+
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       const startPoint = this.touchStartPoints.get(touch.identifier);
-      
+
       if (startPoint) {
         const endPoint = { x: touch.clientX, y: touch.clientY };
         const duration = Date.now() - startPoint.time;
         const distance = Math.sqrt(
-          Math.pow(endPoint.x - startPoint.x, 2) + 
+          Math.pow(endPoint.x - startPoint.x, 2) +
           Math.pow(endPoint.y - startPoint.y, 2)
         );
 
@@ -115,11 +147,11 @@ export class MobileOptimizer {
 
   private analyzeGesture(gesture: TouchGesture) {
     const { duration, distance } = gesture;
-    
+
     // Tap detection
     if (duration < this.gestureThresholds.tapTime && (distance || 0) < 10) {
       const now = Date.now();
-      
+
       // Double tap detection
       if (now - this.lastTapTime < this.gestureThresholds.doubleTapTime) {
         gesture.type = 'doubleTap';
@@ -130,7 +162,7 @@ export class MobileOptimizer {
         this.triggerHaptic('light');
         this.executeGestureCallback('tap', gesture);
       }
-      
+
       this.lastTapTime = now;
     }
     // Swipe detection
@@ -149,7 +181,7 @@ export class MobileOptimizer {
 
   private handlePinchGesture(touch1: Touch, touch2: Touch) {
     const currentDistance = Math.sqrt(
-      Math.pow(touch2.clientX - touch1.clientX, 2) + 
+      Math.pow(touch2.clientX - touch1.clientX, 2) +
       Math.pow(touch2.clientY - touch1.clientY, 2)
     );
 
@@ -234,33 +266,39 @@ export class MobileOptimizer {
 
   // Mobile-specific optimizations
   optimizeForMobile() {
-    if (!this.isMobile) return;
+    if (!this.isMobile || this.isOptimized) return;
+    this.isOptimized = true;
 
     // Prevent default touch behaviors
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-    
+    document.addEventListener('touchmove', this.boundPreventDefault, { passive: false });
+
     // Prevent double-tap zoom
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTouchEnd <= 300) {
-        e.preventDefault();
-      }
-      lastTouchEnd = now;
-    }, false);
+    document.addEventListener('touchend', this.boundPreventDoubleTap, false);
 
     // Prevent context menu
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    document.addEventListener('contextmenu', this.boundPreventContextMenu);
 
     // Optimize viewport
     const viewport = document.querySelector('meta[name="viewport"]');
     if (viewport) {
-      viewport.setAttribute('content', 
+      viewport.setAttribute('content',
         'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
       );
     }
 
-    console.log('📱 Mobile optimizations applied');
+    clientLogger.info('📱 Mobile optimizations applied');
+  }
+
+  cleanup() {
+    this.removeTouchListeners();
+    if (this.isOptimized) {
+      document.removeEventListener('touchmove', this.boundPreventDefault);
+      document.removeEventListener('touchend', this.boundPreventDoubleTap);
+      document.removeEventListener('contextmenu', this.boundPreventContextMenu);
+      this.isOptimized = false;
+    }
+    this.touchStartPoints.clear();
+    this.gestureCallbacks.clear();
   }
 
   // Get device capabilities
@@ -282,12 +320,12 @@ export class MobileOptimizer {
 
     const capabilities = this.getDeviceCapabilities();
     const memory = (performance as any).memory;
-    
+
     return {
       ...capabilities,
       memoryUsage: memory ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : 'unknown',
       batteryLevel: 'getBattery' in navigator ? 'supported' : 'unsupported',
-      connectionType: 'connection' in navigator ? 
+      connectionType: 'connection' in navigator ?
         (navigator as any).connection?.effectiveType || 'unknown' : 'unknown',
     };
   }
