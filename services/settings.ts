@@ -44,7 +44,8 @@ const loadFromStorage = (): GameSettings => {
   }
 };
 
-let currentSettings: GameSettings = loadFromStorage();
+// Export trực tiếp biến này để Engine import và đọc (Direct Access)
+export let currentSettings: GameSettings = loadFromStorage();
 
 const persist = () => {
   if (typeof window === 'undefined' || !window.localStorage) return;

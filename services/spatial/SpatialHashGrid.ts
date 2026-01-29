@@ -1,6 +1,5 @@
-// EIDOLON-V FORGE: SOTA 2026 Spatial Hashing Optimization
-// Validated "Cache Miss Killer": Stores Int32 Indices, reads form Float32Arrays.
-// Zero Object Access during Query Loop.
+// EIDOLON ARCHITECT: Zero-Allocation Spatial Hash Grid
+// Flat Array Linked List Architecture - Zero GC Pressure
 
 import { fastMath } from '../math/FastMath';
 import { Entity } from '../../types';
@@ -14,7 +13,6 @@ export interface SpatialHashConfig {
   enableMultiLevel: boolean;
 }
 
-// Result is now a list of Indices
 export interface SpatialQueryResult {
   indices: number[]; // DOD Indices
   cellCount: number;
@@ -22,15 +20,18 @@ export interface SpatialQueryResult {
 }
 
 export class SpatialHashGrid {
-  // Grid stores Indices (Int32)
-  private grid: Map<number, number[]> = new Map();
-  // Map Entity Index -> Cell Hashes
-  private entityToCells: Map<number, number[]> = new Map();
+  // EIDOLON ARCHITECT: Flat Array Linked List (Zero Allocation)
+  private cellHead: Int32Array;      // First entity in each cell (-1 if empty)
+  private nextEntity: Int32Array;    // Next entity in linked list (-1 if end)
   private staticEntityIndices: Set<number> = new Set();
 
   private config: SpatialHashConfig;
   private cellCount: number;
+  private totalCells: number;
   private worldBounds: { min: number; max: number };
+
+  // Reusable temp arrays (pre-allocated)
+  private tempCellArray: number[] = [];
 
   // Debug stats
   private queryCount: number = 0;
@@ -47,12 +48,19 @@ export class SpatialHashGrid {
     };
 
     this.cellCount = Math.ceil(this.config.worldSize / this.config.cellSize);
+    this.totalCells = this.cellCount * this.cellCount;
     this.worldBounds = {
       min: -this.config.worldSize / 2,
       max: this.config.worldSize / 2
     };
 
-    this.grid.clear();
+    // EIDOLON ARCHITECT: Pre-allocate flat arrays
+    this.cellHead = new Int32Array(this.totalCells);
+    this.nextEntity = new Int32Array(this.config.maxEntities);
+
+    // Initialize to -1 (empty/end-of-list sentinel)
+    this.cellHead.fill(-1);
+    this.nextEntity.fill(-1);
   }
 
   private hashPosition(x: number, y: number): number {
@@ -62,9 +70,6 @@ export class SpatialHashGrid {
     const clampedY = fastMath.clamp(gridY, 0, this.cellCount - 1);
     return clampedY * this.cellCount + clampedX;
   }
-
-  // Reusable array for bounds to avoid alloc
-  private tempCellArray: number[] = [];
 
   private getCellsForBounds(minX: number, maxX: number, minY: number, maxY: number, outCells: number[]): void {
     outCells.length = 0;
@@ -86,166 +91,91 @@ export class SpatialHashGrid {
     }
   }
 
-  // EIDOLON-V FIX: Get Cells using DOD Stores
-  private getEntityCells(index: number): number[] {
-    // Read directly from stores
-    const tIdx = index * 8;
-    const pIdx = index * 8;
+  // EIDOLON ARCHITECT: O(1) Insert via Linked List Prepend
+  add(entityIndex: number, isStatic: boolean = false): void {
+    // Read entity position and radius from DOD stores
+    const tIdx = entityIndex * 8;
     const x = TransformStore.data[tIdx];
     const y = TransformStore.data[tIdx + 1];
+    const radius = PhysicsStore.data[entityIndex * 8 + 4] || 10;
 
-    // Safety check: if physics data is missing, Assume tiny radius?
-    // Use PhysicsStore radius if available, else fallback default
-    // Wait, all entities in Grid MUST be migrated to DOD.
-    const radius = PhysicsStore.data[pIdx + 4] || 10;
+    // Get cells this entity occupies (writes to tempCellArray - pre-allocated)
+    this.getCellsForBounds(x - radius, x + radius, y - radius, y + radius, this.tempCellArray);
 
-    this.getCellsForBounds(
-      x - radius,
-      x + radius,
-      y - radius,
-      y + radius,
-      this.tempCellArray
-    );
+    // Insert into each cell (linked list prepend - O(1) per cell)
+    for (let i = 0; i < this.tempCellArray.length; i++) {
+      const cellIndex = this.tempCellArray[i];
 
-    return [...this.tempCellArray]; // Return copy
-  }
-
-  private getCell(cellKey: number): number[] {
-    let cell = this.grid.get(cellKey);
-    if (!cell) {
-      cell = [];
-      this.grid.set(cellKey, cell);
+      // CRITICAL: Linked list prepend (zero allocation)
+      // nextEntity[entityIndex] points to current head (or -1 if empty)
+      this.nextEntity[entityIndex] = this.cellHead[cellIndex];
+      // cellHead now points to this entity
+      this.cellHead[cellIndex] = entityIndex;
     }
-    return cell;
-  }
-
-  // EIDOLON-V FIX: Add by Index
-  add(index: number, isStatic: boolean = false): void {
-    const cells = this.getEntityCells(index);
-    // Note: We don't store lastCellHash on the Store (no space). 
-    // We rely on entityToCells map.
-
-    for (const cellHash of cells) {
-      const cell = this.getCell(cellHash);
-      cell.push(index);
-    }
-
-    this.entityToCells.set(index, cells);
 
     if (isStatic) {
-      this.staticEntityIndices.add(index);
+      this.staticEntityIndices.add(entityIndex);
     }
   }
 
-  // EIDOLON-V FIX: Remove by Index
-  remove(index: number): void {
-    const cells = this.entityToCells.get(index);
-    if (!cells) return;
-
-    for (const cellHash of cells) {
-      const cell = this.grid.get(cellHash);
-      if (cell) {
-        // Swap-remove (O(1)) matches better with Array of Ints
-        const idx = cell.indexOf(index);
-        if (idx > -1) {
-          const last = cell.pop();
-          if (idx < cell.length && last !== undefined) {
-            cell[idx] = last;
-          }
-        }
-      }
-    }
-
-    this.entityToCells.delete(index);
-    this.staticEntityIndices.delete(index);
+  // EIDOLON ARCHITECT: O(cellCount) Clear via Fill
+  clear(): void {
+    // CRITICAL: Only reset cellHead, nextEntity becomes "unreachable garbage"
+    // No need to clear nextEntity - it will be overwritten on next insert
+    this.cellHead.fill(-1);
+    this.staticEntityIndices.clear();
   }
 
-  // EIDOLON-V FIX: Clear Dynamic entities (keep static)
+  // Clear only dynamic entities (keep static)
   clearDynamic(): void {
-    for (const [cellKey, bucket] of this.grid.entries()) {
-      if (bucket.length === 0) continue;
+    // Traverse all cells and rebuild linked lists with only static entities
+    for (let cellIndex = 0; cellIndex < this.totalCells; cellIndex++) {
+      let newHead = -1;
+      let currentEntityIndex = this.cellHead[cellIndex];
 
-      let writeIdx = 0;
-      for (let i = 0; i < bucket.length; i++) {
-        const idx = bucket[i];
-        if (this.staticEntityIndices.has(idx)) {
-          bucket[writeIdx++] = idx;
+      // Traverse existing linked list
+      while (currentEntityIndex !== -1) {
+        const nextInList = this.nextEntity[currentEntityIndex];
+
+        if (this.staticEntityIndices.has(currentEntityIndex)) {
+          // Keep static entity - prepend to new list
+          this.nextEntity[currentEntityIndex] = newHead;
+          newHead = currentEntityIndex;
         }
-      }
-      bucket.length = writeIdx;
-    }
 
-    // Cleanup map
-    for (const id of Array.from(this.entityToCells.keys())) {
-      if (!this.staticEntityIndices.has(id)) {
-        this.entityToCells.delete(id);
+        currentEntityIndex = nextInList;
       }
+
+      this.cellHead[cellIndex] = newHead;
     }
   }
 
-  // EIDOLON-V FIX: Update entity (check movement)
-  update(index: number, isStatic: boolean = false): void {
-    // Logic:
-    // 1. Get current cells from Store position
-    // 2. Compare with cached cells
-    // 3. If different, re-add.
+  // EIDOLON ARCHITECT: Zero-Allocation Query with Linked List Traversal
+  queryRadiusInto(x: number, y: number, radius: number, outResults: number[]): void {
+    outResults.length = 0; // Reset output array (no allocation)
 
-    const currentCells = this.getEntityCells(index);
-    const oldCells = this.entityToCells.get(index) || [];
+    // Get cells to check (writes to tempCellArray - pre-allocated)
+    this.getCellsForBounds(x - radius, x + radius, y - radius, y + radius, this.tempCellArray);
 
-    // Quick check: Same first cell?
-    if (oldCells.length > 0 && currentCells[0] === oldCells[0] && isStatic) {
-      // Optimization for static things that rarely move? 
-      // Dynamic things move every frame, so this check is valid.
-      // Correctness check: Are all cells same?
-      if (currentCells.length === oldCells.length) {
-        // Approximate check.
-        return;
-        // Actually for strict correctness we should check all.
-        // But usually if center cell is same, others likely same.
-      }
-    }
-
-    // Re-insert
-    // Since 'remove' needs 'entityToCells', and we just read it.
-    // We can optimize 'remove' to use 'oldCells' passed in?
-    // For now reuse standard methods.
-    this.remove(index);
-    this.add(index, isStatic);
-  }
-
-  // EIDOLON-V FIX: Query returning Indices
-  queryRadiusInto(x: number, y: number, radius: number, outIndices: number[]): void {
-    outIndices.length = 0;
-
-    this.getCellsForBounds(
-      x - radius,
-      x + radius,
-      y - radius,
-      y + radius,
-      this.tempCellArray
-    );
-
-    // Use Set for dedup
-    const checked = new Set<number>();
+    const radiusSq = radius * radius;
     const tData = TransformStore.data;
     const pData = PhysicsStore.data;
-    const radiusSq = radius * radius;
 
-    for (const cellHash of this.tempCellArray) {
-      const cell = this.grid.get(cellHash);
-      if (!cell) continue;
+    // EIDOLON ARCHITECT: Zero-allocation iteration
+    // Note: May produce duplicates if entity spans multiple cells
+    // Consumers (collision system) already handle duplicate checks
+    for (let c = 0; c < this.tempCellArray.length; c++) {
+      const cellIndex = this.tempCellArray[c];
 
-      for (let i = 0; i < cell.length; i++) {
-        const idx = cell[i];
-        if (checked.has(idx)) continue;
-        checked.add(idx);
+      // CRITICAL: Traverse linked list (zero allocation)
+      let currentEntityIndex = this.cellHead[cellIndex];
 
-        // DOD Distance Check
-        const tIdx = idx * 8;
+      while (currentEntityIndex !== -1) {
+        // DOD Distance Check (direct array access)
+        const tIdx = currentEntityIndex * 8;
         const ex = tData[tIdx];
         const ey = tData[tIdx + 1];
-        const er = pData[idx * 8 + 4]; // Physics Radius
+        const er = pData[currentEntityIndex * 8 + 4];
 
         const dx = x - ex;
         const dy = y - ey;
@@ -253,44 +183,97 @@ export class SpatialHashGrid {
         const radSum = radius + er;
 
         if (distSq <= radSum * radSum) {
-          outIndices.push(idx);
+          outResults.push(currentEntityIndex);
         }
+
+        // CRITICAL: Advance to next in linked list
+        currentEntityIndex = this.nextEntity[currentEntityIndex];
       }
     }
   }
 
-  // Convenience for consumers
+  // Convenience wrapper (allocates array - use queryRadiusInto for hot paths)
   queryRadius(position: { x: number; y: number }, radius: number): SpatialQueryResult {
     const startTime = performance.now();
     const indices: number[] = [];
     this.queryRadiusInto(position.x, position.y, radius, indices);
 
+    this.queryCount++;
+    const queryTime = performance.now() - startTime;
+    this.totalQueryTime += queryTime;
+
     return {
       indices,
       cellCount: this.tempCellArray.length,
-      queryTime: performance.now() - startTime
+      queryTime
     };
   }
 
-  // EIDOLON-V: Convenience helper to get Objects (for legacy support during migration)
-  // WARNING: Use sparingly, defeats cache purpose.
-  getNearby(entity: Entity, radiusOverride?: number): Entity[] {
-    const idx = entity.physicsIndex;
-    if (idx === undefined) return []; // Should not happen if migrated
-
-    // EIDOLON-V FIX: Read FRESH position from Store
-    const tIdx = idx * 8; // TransformStore STRIDE
+  // EIDOLON ARCHITECT: O(n) Remove via Linked List Unlink
+  remove(entityIndex: number): void {
+    // Read entity position and radius from DOD stores
+    const tIdx = entityIndex * 8;
     const x = TransformStore.data[tIdx];
     const y = TransformStore.data[tIdx + 1];
+    const radius = PhysicsStore.data[entityIndex * 8 + 4] || 10;
 
-    // Safety fallback (if entity just created and not synced yet? rare)
-    // If x/y are 0,0 and entity.position isn't, maybe fallback? 
-    // Assuming Store is authoritative.
+    // Get cells this entity was in
+    this.getCellsForBounds(x - radius, x + radius, y - radius, y + radius, this.tempCellArray);
+
+    // Remove from each cell's linked list
+    for (let i = 0; i < this.tempCellArray.length; i++) {
+      const cellIndex = this.tempCellArray[i];
+
+      // CRITICAL: Unlink from linked list (requires traversal)
+      let prevIndex = -1;
+      let currentIndex = this.cellHead[cellIndex];
+
+      while (currentIndex !== -1) {
+        if (currentIndex === entityIndex) {
+          // Found it - unlink
+          if (prevIndex === -1) {
+            // Removing head
+            this.cellHead[cellIndex] = this.nextEntity[currentIndex];
+          } else {
+            // Removing middle/end
+            this.nextEntity[prevIndex] = this.nextEntity[currentIndex];
+          }
+          break;
+        }
+
+        prevIndex = currentIndex;
+        currentIndex = this.nextEntity[currentIndex];
+      }
+    }
+
+    this.staticEntityIndices.delete(entityIndex);
+  }
+
+  // Update entity position (check if cell changed)
+  update(entityIndex: number, isStatic: boolean = false): void {
+    // For dynamic entities, simpler to remove and re-add
+    // For static entities, check if actually moved
+    if (isStatic) {
+      // TODO: Optimize by checking if cell boundaries crossed
+      // For now, always re-add static entities (rare operation)
+    }
+
+    this.remove(entityIndex);
+    this.add(entityIndex, isStatic);
+  }
+
+  // Legacy compatibility helpers
+  getNearby(entity: Entity, radiusOverride?: number): Entity[] {
+    const idx = entity.physicsIndex;
+    if (idx === undefined) return [];
+
+    const tIdx = idx * 8;
+    const x = TransformStore.data[tIdx];
+    const y = TransformStore.data[tIdx + 1];
 
     const indices: number[] = [];
     const r = radiusOverride || entity.radius;
 
-    // Query at REAL position
     this.queryRadiusInto(x, y, r, indices);
 
     const results: Entity[] = [];
@@ -301,7 +284,6 @@ export class SpatialHashGrid {
     return results;
   }
 
-  // Helpers for inserting legacy objects (wraps add(index))
   insert(entity: Entity): void {
     if (entity.physicsIndex !== undefined) {
       this.add(entity.physicsIndex, entity.isStatic);
@@ -316,30 +298,34 @@ export class SpatialHashGrid {
 
   // Stats
   getStats() {
-    // ... (Implementation similar to before but counting numbers)
-    let occupied = 0;
-    let count = 0;
-    for (const bucket of this.grid.values()) {
-      if (bucket.length > 0) {
-        occupied++;
-        count += bucket.length;
+    let occupiedCells = 0;
+    let totalEntities = 0;
+    let maxChainLength = 0;
+
+    for (let cellIndex = 0; cellIndex < this.totalCells; cellIndex++) {
+      let chainLength = 0;
+      let currentEntityIndex = this.cellHead[cellIndex];
+
+      while (currentEntityIndex !== -1) {
+        chainLength++;
+        currentEntityIndex = this.nextEntity[currentEntityIndex];
+      }
+
+      if (chainLength > 0) {
+        occupiedCells++;
+        totalEntities += chainLength;
+        maxChainLength = Math.max(maxChainLength, chainLength);
       }
     }
-    // ...
-    return { totalEntities: count, occupiedCells: occupied };
-  }
 
-  clear(): void {
-    this.grid.clear();
-    this.entityToCells.clear();
-    this.staticEntityIndices.clear();
+    return {
+      totalEntities,
+      occupiedCells,
+      maxChainLength,
+      avgQueryTime: this.queryCount > 0 ? this.totalQueryTime / this.queryCount : 0
+    };
   }
 }
 
 // Global Export
 export { SpatialHashGrid as SpatialGrid };
-
-// MultiLevel is deprecated in favor of Single Level high-performance grid for this optimization pass
-// If needed, can be re-implemented with indices.
-
-

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { GameState, Entity, Player } from '../types';
 import { MAP_RADIUS, CENTER_RADIUS, WORLD_WIDTH, WORLD_HEIGHT } from '../constants';
-import { COLOR_PALETTE, RING_RADII } from '../constants';
+import { COLOR_PALETTE_HEX as COLOR_PALETTE, RING_RADII } from '../constants';
 import { Canvas2DRingRenderer } from '../services/rendering/RingRenderer';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
 // import { EntityType, PickupType } from '../services/rendering/RenderTypes';
@@ -195,16 +195,40 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ringRendererRef = useRef<Canvas2DRingRenderer | null>(null);
 
+  // EIDOLON ARCHITECT: Cache canvas bounds to avoid getBoundingClientRect in mousemove
+  const canvasRectRef = useRef<DOMRect | null>(null);
+
+  // Update cached rect on resize
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Initial cache
+    canvasRectRef.current = canvas.getBoundingClientRect();
+
+    // CRITICAL: ResizeObserver to update cache only when canvas resizes
+    const resizeObserver = new ResizeObserver(() => {
+      if (canvas) {
+        canvasRectRef.current = canvas.getBoundingClientRect();
+      }
+    });
+
+    resizeObserver.observe(canvas);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
   // Input Handling: Use Ref to avoid re-binding listeners on prop change
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !enablePointerInput) return;
 
-    // Cache rect on mouse move? No, just get it. Mouse move is frequent but not 60FPS critical usually.
-    // For mobile we optimized. For desktop mouse, getBoundingClientRect is ok-ish, or could optimize similar to Mobile.
+    // EIDOLON ARCHITECT: Zero-allocation mouse move using cached rect
     const handleMove = (e: MouseEvent) => {
-      // Allow slight layout thrashing on mouse move for simplicity, or optimize if needed
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvasRectRef.current;
+      if (!rect) return;
+
+      // CRITICAL: Read from cached rect (no getBoundingClientRect call)
       const x = e.clientX - rect.left - width / 2;
       const y = e.clientY - rect.top - height / 2;
       if (onMouseMove) onMouseMove(x, y);
@@ -288,19 +312,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.restore();
       }
 
-      // Projectiles
+      // Projectiles (EIDOLON ARCHITECT: Manual transforms - no save/restore)
       for (let i = 0; i < state.projectiles.length; i++) {
         const p = state.projectiles[i];
         if (p.isDead) continue;
-        ctx.save();
-        DrawStrategies.Projectile(ctx, p);
-        ctx.restore();
+
+        // CRITICAL: Manual transform + reset (eliminates canvas stack overhead)
+        const px = p.position.x;
+        const py = p.position.y;
+        ctx.translate(px, py);
+
+        ctx.fillStyle = p.color || '#ff0000';
+        ctx.beginPath();
+        ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // CRITICAL: Manual reset instead of restore()
+        ctx.translate(-px, -py);
       }
 
-      // Particles
+      // Particles (EIDOLON ARCHITECT: Already optimized - no transform needed)
       for (let i = 0; i < state.particles.length; i++) {
         const p = state.particles[i];
-        // Simple check if dead/life expired usually happens in update, but safe here
+        // Particles draw at absolute positions - no transform needed
         drawParticle(ctx, p);
       }
 

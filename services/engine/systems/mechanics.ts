@@ -4,16 +4,41 @@ import {
     MAX_ENTITY_RADIUS,
 } from '../../../constants';
 import { Player, Bot, SizeTier } from '../../../types';
+import { PhysicsStore, StatsStore, EntityLookup } from '../dod/ComponentStores';
 
 // Logic ported from legacy physics.ts
 export const applyGrowth = (entity: Player | Bot, amount: number) => {
-    const currentArea = Math.PI * entity.radius * entity.radius;
-    const newArea = currentArea + amount * 25;
-    entity.radius = Math.sqrt(newArea / Math.PI);
-    if (entity.radius > MAX_ENTITY_RADIUS) entity.radius = MAX_ENTITY_RADIUS;
+    // Legacy Wrapper
+    if (entity.physicsIndex !== undefined) {
+        applyGrowthDOD(entity.physicsIndex, amount);
+        // Sync back (Optional, for UI)
+        const pIdx = entity.physicsIndex * 8;
+        entity.radius = PhysicsStore.data[pIdx + 4];
+        // Tier update is purely visual/logic, keep locally or move?
+        updateTier(entity);
+    } else {
+        // Fallback for non-DOD entities (if any)
+        const currentArea = Math.PI * entity.radius * entity.radius;
+        const newArea = currentArea + amount * 25;
+        entity.radius = Math.sqrt(newArea / Math.PI);
+        if (entity.radius > MAX_ENTITY_RADIUS) entity.radius = MAX_ENTITY_RADIUS;
+        updateTier(entity);
+    }
+};
 
-    // Update Tier check
-    updateTier(entity);
+export const applyGrowthDOD = (id: number, amount: number) => {
+    const pIdx = id * 8; // PhysicsStore.STRIDE
+    const currentRadius = PhysicsStore.data[pIdx + 4];
+
+    const currentArea = Math.PI * currentRadius * currentRadius;
+    const newArea = currentArea + amount * 25; // Magic number from constants
+    let newRadius = Math.sqrt(newArea / Math.PI);
+
+    if (newRadius > MAX_ENTITY_RADIUS) newRadius = MAX_ENTITY_RADIUS;
+
+    PhysicsStore.data[pIdx + 4] = newRadius;
+    // Update Mass? Mass usually ~ Area or Radius. 
+    PhysicsStore.data[pIdx + 3] = newRadius; // Simplification: Mass = Radius
 };
 
 export const updateTier = (entity: Player | Bot) => {

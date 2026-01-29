@@ -54,6 +54,7 @@ export const JELLY_FRAGMENT = `
   uniform float uTime;
   uniform float uEnergy;
   uniform int uPatternMode;
+  uniform float uAberration; // EIDOLON-V: Juice Uniform
 
   // EIDOLON-V: Fast Hash thay vì sin/cos nặng nề
   float hash(vec2 p) {
@@ -63,12 +64,19 @@ export const JELLY_FRAGMENT = `
   }
 
   void main() {
-    // 1. Soft Circle
+    // 1. Soft Circle (Procedural Aberration)
     vec2 center = vec2(0.5);
     float dist = length(vUvs - center) * 2.0;
+
+    // EIDOLON-V: Chromatic Aberration (Shape Split)
+    float distR = length((vUvs + vec2(uAberration, 0.0)) - center) * 2.0;
+    float distB = length((vUvs - vec2(uAberration, 0.0)) - center) * 2.0;
+
     float alpha = 1.0 - smoothstep(0.8, 1.0, dist);
+    float alphaR = 1.0 - smoothstep(0.8, 1.0, distR);
+    float alphaB = 1.0 - smoothstep(0.8, 1.0, distB);
     
-    if (alpha < 0.01) discard;
+    if (max(alpha, max(alphaR, alphaB)) < 0.01) discard;
 
     // 2. Base Color & Rim Light
     vec3 color = uColor;
@@ -92,6 +100,21 @@ export const JELLY_FRAGMENT = `
         color += vec3(0.8, 0.9, 1.0) * bolt;
     }
 
-    gl_FragColor = vec4(color, alpha * uAlpha);
+    // EIDOLON-V: Apply Aberration (Phase 3.2)
+    // "The Juice": Split channels based on shifted masks
+    vec3 finalColor;
+    
+    // Simulate texture2D(uSampler, vUvs + offset).r
+    // But for procedural, we shift the input coordinate for distance field
+    finalColor.r = color.r * (uAberration > 0.0 ? alphaR : 1.0);
+    finalColor.g = color.g; // Green stays center
+    finalColor.b = color.b * (uAberration > 0.0 ? alphaB : 1.0);
+    
+    // Mix pattern result (simplified: apply pattern to all, but mask R/B)
+    
+    // Use the max alpha for the container
+    float finalAlpha = (uAberration > 0.0) ? max(alpha, max(alphaR, alphaB)) : alpha;
+
+    gl_FragColor = vec4(finalColor, finalAlpha * uAlpha);
   }
 `;

@@ -1,4 +1,4 @@
-import { RING_RADII, COLOR_PALETTE } from '../../constants';
+import { RING_RADII, COLOR_PALETTE_HEX as COLOR_PALETTE } from '../../constants';
 
 // EIDOLON-V FIX: Centralized ring rendering logic
 // Eliminates code duplication between PixiGameCanvas and GameCanvas

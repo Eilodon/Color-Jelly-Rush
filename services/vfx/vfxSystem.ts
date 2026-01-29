@@ -1,6 +1,7 @@
 import { GameState, Player, Vector2 } from '../../types';
 import { RingId } from '../cjr/cjrTypes';
 import { audioEngine } from '../audio/AudioEngine';
+import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../engine/VFXRingBuffer';
 
 export class VFXSystem {
   private screenShake: ScreenShakeController;
@@ -21,7 +22,7 @@ export class VFXSystem {
       // Runtime check:
       if (state.vfxEvents.length === 0 || typeof state.vfxEvents[0] !== 'object') {
         // Reset
-        state.vfxEvents = Array.from({ length: MAX_EVENTS }, () => ({ type: 0, x: 0, y: 0, data: 0, id: '', seq: 0 }));
+        state.vfxEvents = Array.from({ length: MAX_EVENTS }, () => ({ type: 0, x: 0, y: 0, data: 0, id: '', seq: 0, color: 0 }));
         state.vfxHead = 0;
       }
     }
@@ -50,15 +51,21 @@ export class VFXSystem {
     const intensity = ringId === 3 ? 0.7 : (ringId === 2 ? 0.5 : 0.3);
     this.screenShake.applyShake({ intensity, duration: 0.5, frequency: 20 });
 
-    state.floatingTexts.push({
-      id: Math.random().toString(),
-      position: { ...player.position, y: player.position.y - 50 },
-      text: `RING ${ringId}!`,
-      color: '#ffd700',
-      size: 24,
-      life: 2.0,
-      velocity: { x: 0, y: -50 }
-    });
+    // Zero-GC VFX
+    let textId: number = TEXT_IDS.NONE;
+    if (ringId === 1) textId = TEXT_IDS.RING_1;
+    else if (ringId === 2) textId = TEXT_IDS.RING_2;
+    else if (ringId === 3) textId = TEXT_IDS.RING_3;
+
+    if (textId !== TEXT_IDS.NONE) {
+      vfxBuffer.push(
+        player.position.x,
+        player.position.y - 50,
+        packHex('#ffd700'),
+        VFX_TYPES.FLOATING_TEXT,
+        textId
+      );
+    }
   }
 
   updateEffects(state: GameState, dt: number): void {

@@ -2,6 +2,7 @@
 import { GameState, Bot, Player } from '../../types';
 import { distance } from '../engine/math';
 import { createFloatingText } from '../engine/effects';
+import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../engine/VFXRingBuffer';
 
 export const updateBossLogic = (state: GameState, dt: number) => {
     // Check if Boss exists
@@ -85,6 +86,7 @@ export const onBossDeath = (state: GameState, boss: Bot) => {
     // Distribute Rewards
     state.players.forEach(p => {
         p.score += 500;
-        createFloatingText(p.position, 'BOSS SLAIN', '#ffcc00', 40, state);
+        // Zero-GC VFX
+        vfxBuffer.push(p.position.x, p.position.y, packHex('#ffcc00'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.BOSS_SLAIN);
     });
 };

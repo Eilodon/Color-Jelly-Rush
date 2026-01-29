@@ -24,10 +24,10 @@ if (typeof window !== 'undefined') {
     resume() { return Promise.resolve(); }
     suspend() { return Promise.resolve(); }
     createMediaStream() { return {} as MediaStream; }
-    currentTime: 0
-    outputTimestamp: 0
-    sampleRate: 48000
-    state: 'suspended'
+    currentTime = 0;
+    outputTimestamp = 0;
+    sampleRate = 48000;
+    state: AudioContextState = 'suspended';
   };
 
   // Override AudioContext

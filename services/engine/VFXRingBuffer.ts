@@ -7,9 +7,13 @@
 export interface VFXEvent {
   x: number;
   y: number;
-  color: number; // Packed RGB
+  color: number; // Packed RGB (Required for Engine, default 0 for UI)
   type: number;  // 0=explode, 1=shockwave, 2=floating text
   data?: number; // Additional data (count, text char code, etc)
+
+  // UI/React Compatibility
+  id?: string;
+  seq?: number;
 }
 
 export class VFXRingBuffer {
@@ -34,7 +38,7 @@ export class VFXRingBuffer {
     this.data[index + 2] = color;
     this.data[index + 3] = type;
     this.data[index + 4] = data;
-    
+
     this.head = (this.head + 1) % this.capacity;
   }
 
@@ -43,7 +47,7 @@ export class VFXRingBuffer {
    */
   getEvents(): VFXEvent[] {
     const events: VFXEvent[] = [];
-    
+
     for (let i = 0; i < this.head; i++) {
       const index = i * this.EVENT_SIZE;
       events.push({
@@ -54,7 +58,7 @@ export class VFXRingBuffer {
         data: this.data[index + 4]
       });
     }
-    
+
     // Reset head for next frame
     this.head = 0;
     return events;
@@ -91,9 +95,28 @@ export const VFX_TYPES = {
   SCREEN_SHAKE: 4
 } as const;
 
+// Text Message IDs for Zero-GC Text
+export const TEXT_IDS = {
+  NONE: 0,
+  CATALYST: 1, // "Catalyst!"
+  SHIELD: 2,   // "Shield!"
+  CLEANSE: 3,  // "Cleanse"
+  MASS: 4,     // "+Mass"
+  BOSS_SLAIN: 5, // "BOSS SLAIN"
+  RING_1: 8,   // "RING 1!" (Added for consistency)
+  RING_2: 6,   // "RING 2!"
+  RING_3: 7,   // "RING 3!"
+  CANDY_VEIN: 9, // "CANDY VEIN!"
+  MUTATION: 10   // "MUTATION!"
+} as const;
+
 // Color packing utilities
 export const packRGB = (r: number, g: number, b: number): number => {
   return (Math.floor(r * 255) << 16) | (Math.floor(g * 255) << 8) | Math.floor(b * 255);
+};
+
+export const packHex = (hex: string): number => {
+  return parseInt(hex.replace('#', ''), 16);
 };
 
 export const unpackRGB = (packed: number): { r: number; g: number; b: number } => {

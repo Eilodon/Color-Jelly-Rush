@@ -9,6 +9,8 @@ export interface InputMove {
     y: number;
 }
 
+// EIDOLON-V WARNING: High Frequency Allocation
+// InputManager should pool these events instead of creating new objects per frame.
 export interface InputEvent {
     type: 'skill' | 'boost' | 'eject';
     timestamp: number;
@@ -17,6 +19,7 @@ export interface InputEvent {
 export interface InputState {
     actions: InputActions;
     move: InputMove;
+    // Warning: Keep array length check in Manager to prevent unbound growth
     events: InputEvent[];
 }
 

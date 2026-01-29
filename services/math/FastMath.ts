@@ -1,5 +1,5 @@
-// EIDOLON-V FORGE: SOTA 2026 Mathematical Optimization
-// Eliminates expensive sqrt operations - 40% CPU reduction
+// EIDOLON-V FORGE: FastMath - Native JIT Optimization
+// Removed Legacy Lookup Tables (Step 1.1)
 
 export interface Vector2 {
   x: number;
@@ -12,26 +12,13 @@ export interface Vector3 {
   z: number;
 }
 
-// EIDOLON-V FIX: Fast math utilities
 export class FastMath {
-  // EIDOLON-V FIX: Pre-calculated constants
-  private static readonly SQRT_LOOKUP: Float32Array = new Float32Array(10001);
-  private static initialized = false;
-
-  // EIDOLON-V FIX: Initialize sqrt lookup table
-  private static initialize(): void {
-    if (this.initialized) return;
-
-    for (let i = 0; i <= 10000; i++) {
-      this.SQRT_LOOKUP[i] = Math.sqrt(i);
-    }
-    this.initialized = true;
-  }
-
-  // EIDOLON-V FIX: Native Math.sqrt (JIT Optimized)
+  // Native Math.sqrt is now faster due to JIT intrinsics
   static fastSqrt(value: number): number {
     return Math.sqrt(value);
   }
+
+
 
   // EIDOLON-V FIX: Squared distance (NO SQRT)
   static distanceSquared(a: Vector2, b: Vector2): number {

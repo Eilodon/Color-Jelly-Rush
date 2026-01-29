@@ -53,7 +53,7 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
         >
           <PixiGameCanvas
             gameStateRef={refs.gameState}
-            inputEnabled={inputEnabled}
+            inputEnabled={!!inputEnabled}
             alphaRef={refs.alpha}
           />
         </ErrorBoundary>
@@ -62,7 +62,7 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
           gameStateRef={refs.gameState}
           width={window.innerWidth}
           height={window.innerHeight}
-          enablePointerInput={inputEnabled}
+          enablePointerInput={!!inputEnabled}
           onMouseMove={(x, y) => {
             // Normalize inputs for InputManager (Screen center relative -> -1..1)
             const centerX = window.innerWidth / 2;

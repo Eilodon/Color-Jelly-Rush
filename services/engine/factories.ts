@@ -28,7 +28,7 @@ import { pooledEntityFactory } from '../pooling/ObjectPool';
 import { createDefaultStatusTimers, createDefaultStatusMultipliers, createDefaultStatusScalars } from '../../types/status';
 import { StatusFlag } from './statusFlags';
 import { entityManager } from './dod/EntityManager';
-import { TransformStore, PhysicsStore, StateStore, EntityLookup } from './dod/ComponentStores';
+import { TransformStore, PhysicsStore, StateStore, StatsStore, SkillStore, TattooStore, EntityLookup, ProjectileStore } from './dod/ComponentStores';
 import { EntityFlags } from './dod/EntityFlags';
 
 // Helper: Random Pigment
@@ -40,17 +40,15 @@ export const randomPigment = (): PigmentVec3 => ({
 
 import { SynergyComponent } from '../components/SynergyComponent';
 
-export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime: number = 0): Player => {
+export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime: number = 0): Player | null => {
   const position = randomPosInRing(1);
   const pigment = randomPigment();
-  const id = Math.random().toString(36).substr(2, 9);
 
-  // EIDOLON-V: Players also need DOD indices if we want uniform handling
-  // But players are usually created once or infrequent.
-  // For now, focus on Food/Projectiles as per plan.
-  // Although, if Grid expects ALL entities to have indices...
-  // YES, Player needs an index too if it enters the grid.
+  // EIDOLON-V: Allocation Phase
   const entId = entityManager.createEntity();
+  if (entId === -1) return null; // Safety Check: Pool Full
+
+  const id = entId.toString(); // Integer Identity as String for backward compatibility
 
   const player: Player = {
     id,
@@ -142,25 +140,45 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
 
   player.components!.set('SynergyComponent', new SynergyComponent(player.id));
 
+  // Legacy Input Support
+  player.inputs = { space: false, w: false };
+
+  // EIDOLON-V: Initialize DOD Component Stores
+  // Shape Enum Map: Circle=1, Square=2, Triangle=3, Hex=4
+  const ShapeMap: Record<string, number> = { 'circle': 1, 'square': 2, 'triangle': 3, 'hex': 4 };
+  const shapeId = ShapeMap[shape] || 1;
+
+  // Init SkillStore
+  const sIdx = entId * SkillStore.STRIDE;
+  SkillStore.data[sIdx] = 0; // cooldown
+  SkillStore.data[sIdx + 1] = player.maxSkillCooldown; // maxCooldown
+  SkillStore.data[sIdx + 3] = shapeId;
+
+  // Init TattooStore
+  TattooStore.flags[entId] = 0;
+
+
+
   // Initialize DOD State
-  if (entId !== -1) {
-    TransformStore.set(entId, position.x, position.y, 0);
-    PhysicsStore.set(entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
-    StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
-    EntityLookup[entId] = player;
-  }
+  TransformStore.set(entId, position.x, position.y, 0);
+  PhysicsStore.set(entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+  StatsStore.set(entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
+  EntityLookup[entId] = player;
 
   return player;
 };
 
-export const createBot = (id: string, spawnTime: number = 0): Bot => {
+export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   // TODO: Refactor Bot Creation to be less reliant on createPlayer
   // But for now, we wrap it.
   const player = createPlayer(`Bot ${id.substr(0, 4)}`, 'circle', spawnTime);
 
+  if (!player) return null; // Handle allocation failure
+
   const bot: Bot = {
     ...player,
-    id,
+    id, // Override with Bot ID
     aiState: 'wander',
     targetEntityId: null,
     aiReactionTimer: 0,
@@ -177,8 +195,10 @@ export const createBot = (id: string, spawnTime: number = 0): Bot => {
   return bot;
 };
 
-export const createBoss = (spawnTime: number = 0): Bot => {
+export const createBoss = (spawnTime: number = 0): Bot | null => {
   const boss = createBot('BOSS_1', spawnTime);
+  if (!boss) return null;
+
   boss.name = 'Ring Guardian';
   boss.radius = 80;
   boss.maxHealth = 2000;
@@ -191,6 +211,8 @@ export const createBoss = (spawnTime: number = 0): Bot => {
     const pIdx = boss.physicsIndex * 8;
     PhysicsStore.data[pIdx + 3] = 500; // Mass
     PhysicsStore.data[pIdx + 4] = 80;  // Radius
+    // Update Stats Store
+    StatsStore.set(boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
   }
 
   return boss;
@@ -200,6 +222,8 @@ export const createBotCreeps = (count: number): Bot[] => {
   const creeps: Bot[] = [];
   for (let i = 0; i < count; i++) {
     const creep = createBot(`creep_${i}`);
+    if (!creep) continue; // Skip if failed to create
+
     creep.name = 'Jelly Bit';
     creep.radius = 15;
     creep.isCreep = true;
@@ -209,6 +233,9 @@ export const createBotCreeps = (count: number): Bot[] => {
       const pIdx = creep.physicsIndex * 8;
       PhysicsStore.data[pIdx + 3] = 5; // Mass
       PhysicsStore.data[pIdx + 4] = 15; // Radius
+      // Update Stats (HP/Score might be different? For now inherit from createBot defaults which is Player default)
+      // Creeps usually weak?
+      // Assuming defaults are okay for now unless we want weaker creeps.
     }
 
     creeps.push(creep);
@@ -216,20 +243,25 @@ export const createBotCreeps = (count: number): Bot[] => {
   return creeps;
 };
 
-export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => {
+export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | null => {
   // EIDOLON-V FIX: Use pooled entity instead of heap allocation
   const foodPool = pooledEntityFactory.createPooledFood();
   const food = foodPool.acquire();
 
   // EIDOLON-V FIX: Allocate DOD Index
   const entId = entityManager.createEntity();
+  if (entId === -1) {
+    foodPool.release(food);
+    return null;
+  }
+
   food.physicsIndex = entId; // Note: Need to add physicsIndex to Food type if missing (it IS in Entity interface)
 
   const pigment = randomPigment();
   const startPos = pos || randomPosInRing(1);
 
   // Setup pooled food object
-  food.id = Math.random().toString();
+  food.id = entId.toString(); // Integer ID
   food.position = startPos;
   food.velocity = { x: 0, y: 0 };
   food.radius = FOOD_RADIUS;
@@ -242,12 +274,19 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food => {
   food.trail.length = 0;
 
   // Initialize DOD State
-  if (entId !== -1) {
-    TransformStore.set(entId, startPos.x, startPos.y, 0);
-    PhysicsStore.set(entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
-    StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.FOOD);
-    EntityLookup[entId] = food;
-  }
+  TransformStore.set(entId, startPos.x, startPos.y, 0);
+  PhysicsStore.set(entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
+  // Determine Type Flag
+  let typeFlag = EntityFlags.FOOD;
+  if (food.kind === 'catalyst') typeFlag |= EntityFlags.FOOD_CATALYST;
+  else if (food.kind === 'pigment') typeFlag |= EntityFlags.FOOD_PIGMENT;
+  else if (food.kind === 'shield') typeFlag |= EntityFlags.FOOD_SHIELD;
+  else if (food.kind === 'solvent') typeFlag |= EntityFlags.FOOD_SOLVENT;
+  else if (food.kind === 'neutral') typeFlag |= EntityFlags.FOOD_NEUTRAL;
+
+  StateStore.setFlag(entId, EntityFlags.ACTIVE | typeFlag);
+  StatsStore.set(entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
+  EntityLookup[entId] = food;
 
   return food;
 };
@@ -265,14 +304,19 @@ export const createProjectile = (
   target: Vector2,
   damage: number = 10,
   type: 'web' | 'ice' | 'sting' = 'ice',
-  duration: number = 2.0
-): Projectile => {
+  duration: number = 2.0,
+  ownerIndex?: number // EIDOLON-V: Optimization
+): Projectile | null => {
   // EIDOLON-V FIX: Use pooled entity instead of heap allocation
   const projectilePool = pooledEntityFactory.createPooledProjectile();
   const projectile = projectilePool.acquire();
 
   // EIDOLON-V FIX: Allocate DOD Index
   const entId = entityManager.createEntity();
+  if (entId === -1) {
+    projectilePool.release(projectile);
+    return null;
+  }
   projectile.physicsIndex = entId;
 
   // Calculate velocity toward target
@@ -283,28 +327,30 @@ export const createProjectile = (
   const vx = dist > 0 ? (dx / dist) * speed : 0;
   const vy = dist > 0 ? (dy / dist) * speed : 0;
 
-  // Setup pooled projectile object
-  projectile.id = Math.random().toString();
+  projectile.id = entId.toString(); // or ownerId + timestamp?
+  // ... setup object ...
+  projectile.ownerId = ownerId;
   projectile.position = { ...position };
   projectile.velocity = { x: vx, y: vy };
-  projectile.radius = 8;
-  projectile.color = type === 'ice' ? '#88ccff' : type === 'web' ? '#888888' : '#ff4444';
-  projectile.isDead = false;
-  projectile.trail.length = 0;
-  projectile.ownerId = ownerId;
-  projectile.damage = damage;
-  projectile.type = type;
-  projectile.duration = duration;
 
-  // Initialize DOD State
-  if (entId !== -1) {
-    TransformStore.set(entId, position.x, position.y, 0);
-    PhysicsStore.set(entId, vx, vy, 0.5, 8); // Mass 0.5
-    StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
-    EntityLookup[entId] = projectile;
-  }
+  // DOD Stores
+  TransformStore.set(entId, position.x, position.y, 0);
+  PhysicsStore.set(entId, vx, vy, 0.5, 8, 0.5, 1.0);
+  StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
+  StatsStore.set(entId, 1, 1, 0, 0, 0, 1);
+  EntityLookup[entId] = projectile;
+
+  // EIDOLON-V: ProjectileStore
+  const oIdx = ownerIndex !== undefined ? ownerIndex : -1;
+  // If -1, we might fail self-collision checks if logic relies on int comparison only.
+  // But usually projectiles are created by Valid Entities.
+
+  ProjectileStore.set(entId, oIdx, damage, duration, 0);
 
   return projectile;
 };
+
+
+
 
 

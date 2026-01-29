@@ -40,32 +40,62 @@ export class BinaryPacker {
         return this._buffer.slice(0, offset);
     }
 
-    static unpackTransforms(buffer: ArrayBuffer): { timestamp: number, updates: { id: string, x: number, y: number, vx: number, vy: number }[] } | null {
+    // EIDOLON ARCHITECT: Zero-Allocation Callback Interface
+    // Pre-allocated buffers to eliminate runtime allocations
+    private static _textDecoder = new TextDecoder('utf-8');
+    private static _idBuffer = new Uint8Array(64); // Max ID length = 64 bytes
+
+    /**
+     * Zero-allocation binary unpacker using visitor pattern.
+     * @param buffer ArrayBuffer containing packed transform data
+     * @param callback Invoked for each entity with primitive values (no object creation)
+     * @returns timestamp if valid packet, null otherwise
+     */
+    static unpackAndApply(
+        buffer: ArrayBuffer,
+        callback: (id: string, x: number, y: number, vx: number, vy: number) => void
+    ): number | null {
         const view = new DataView(buffer);
         const u8 = new Uint8Array(buffer);
         let offset = 0;
 
+        // Validate packet type
         if (u8[offset++] !== PacketType.TRANSFORM_UPDATE) return null;
 
         const timestamp = view.getFloat32(offset, true); offset += 4;
         const count = view.getUint16(offset, true); offset += 2;
 
-        const updates = [];
+        // CRITICAL: Zero-allocation loop - no arrays, no objects
         for (let k = 0; k < count; k++) {
             const idLen = u8[offset++];
-            let id = "";
-            for (let i = 0; i < idLen; i++) {
-                id += String.fromCharCode(u8[offset++]);
-            }
+
+            // OPTIMIZATION: Use TextDecoder + pre-allocated buffer instead of string concat
+            // String concatenation creates intermediate strings per character
+            this._idBuffer.set(u8.subarray(offset, offset + idLen));
+            const id = this._textDecoder.decode(this._idBuffer.subarray(0, idLen));
+            offset += idLen;
 
             const x = view.getFloat32(offset, true); offset += 4;
             const y = view.getFloat32(offset, true); offset += 4;
             const vx = view.getFloat32(offset, true); offset += 4;
             const vy = view.getFloat32(offset, true); offset += 4;
 
-            updates.push({ id, x, y, vx, vy });
+            // VISITOR PATTERN: Direct callback invocation with primitives
+            // No object creation, no array push, data flows directly to consumer
+            callback(id, x, y, vx, vy);
         }
 
+        return timestamp;
+    }
+
+    // DEPRECATED: Legacy API kept for backwards compatibility - will be removed
+    // @deprecated Use unpackAndApply with callback instead
+    static unpackTransforms(buffer: ArrayBuffer): { timestamp: number, updates: { id: string, x: number, y: number, vx: number, vy: number }[] } | null {
+        const updates: { id: string, x: number, y: number, vx: number, vy: number }[] = [];
+        const timestamp = this.unpackAndApply(buffer, (id, x, y, vx, vy) => {
+            updates.push({ id, x, y, vx, vy });
+        });
+        if (timestamp === null) return null;
         return { timestamp, updates };
     }
 }

@@ -5,6 +5,7 @@
 
 import { gameFlowTest } from './integration/GameFlowTest';
 import { visualRegressionTest } from './e2e/VisualRegressionTest';
+import { TattooId } from '../services/cjr/cjrTypes';
 
 export interface TestSuiteResult {
   name: string;
@@ -403,11 +404,11 @@ export class AutomatedTestRunner {
     // Test tattoo application
     const testPlayer = {
       id: 'test',
-      tattoos: []
+      tattoos: [] as TattooId[]
     };
 
     // Simulate applying tattoo
-    testPlayer.tattoos.push('test-tattoo');
+    testPlayer.tattoos.push(TattooId.FilterInk);
 
     return testPlayer.tattoos.length === 1;
   }

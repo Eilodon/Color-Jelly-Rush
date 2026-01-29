@@ -2,6 +2,7 @@
 import { GameState, PickupKind, Food } from '../../types';
 import { RING_RADII } from '../../constants';
 import { randomRange } from '../engine/math';
+import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../engine/VFXRingBuffer';
 
 export const updateDynamicBounty = (state: GameState, dt: number) => {
     // Logic: Only spawn if players in Ring 3 are few compared to total alive
@@ -44,14 +45,15 @@ const spawnCandyVein = (state: GameState) => {
 
     state.food.push(vein);
     state.engine.spatialGrid.insert(vein);
-    // Optional: Global Alert
-    state.floatingTexts.push({
-        id: `alert_${Date.now()}`,
-        position: { x: vein.position.x, y: vein.position.y },
-        text: "CANDY VEIN!",
-        color: '#fbbf24',
-        size: 24,
-        life: 3.0,
-        velocity: { x: 0, y: -20 }
-    });
+    state.food.push(vein);
+    state.engine.spatialGrid.insert(vein);
+
+    // Zero-GC VFX
+    vfxBuffer.push(
+        vein.position.x,
+        vein.position.y,
+        packHex('#fbbf24'),
+        VFX_TYPES.FLOATING_TEXT,
+        TEXT_IDS.CANDY_VEIN
+    );
 };

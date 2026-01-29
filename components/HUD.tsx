@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo, useState } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { GameState } from '../types';
 import { getColorHint } from '../services/cjr/colorMath';
 import { THRESHOLDS } from '../constants';
@@ -10,20 +10,22 @@ interface HUDProps {
 }
 
 const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
-  const [colorHint, setColorHint] = useState('');
-  const [currentRing, setCurrentRing] = useState(1);
-  const [isWinHold, setIsWinHold] = useState(false);
-
+  // EIDOLON ARCHITECT: Zero-Render HUD - All updates via direct DOM manipulation
   const scoreRef = useRef<HTMLSpanElement>(null);
   const percentRef = useRef<HTMLSpanElement>(null);
   const percentCircleRef = useRef<SVGCircleElement>(null);
   const waveRef = useRef<HTMLDivElement>(null);
 
+  // CRITICAL: Direct DOM manipulation refs (no useState = no re-renders)
+  const colorHintRef = useRef<HTMLDivElement>(null);
+  const winHoldContainerRef = useRef<HTMLDivElement>(null);
+  const ringBadgeRef = useRef<HTMLSpanElement>(null); // For currentRing display if needed
+
   // EIDOLON-V FIX: The Blind HUD Fix
   const { getStats } = useGameDataBridge(gameStateRef);
 
   // Cache to avoid DOM thrashing
-  const cache = useRef({ score: -1, percent: -1, waveTime: -1 });
+  const cache = useRef({ score: -1, percent: -1, waveTime: -1, ring: -1, colorHint: '', isWinHold: false });
 
   useEffect(() => {
     let rafId: number;
@@ -78,25 +80,45 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
         }
       }
 
-      // 4. Slow Updates (React State)
-      if (p.ring !== currentRing) setCurrentRing(p.ring);
-      const hold = p.matchPercent >= THRESHOLDS.WIN_HOLD && p.ring === 3;
-      if (hold !== isWinHold) setIsWinHold(hold);
-
+      // 4. Color Hint (EIDOLON ARCHITECT: Direct DOM manipulation - no setState)
       const hint = getColorHint(p.pigment, p.targetPigment);
-      if (hint !== colorHint) setColorHint(hint);
+      if (hint !== cache.current.colorHint && colorHintRef.current) {
+        cache.current.colorHint = hint;
+        colorHintRef.current.textContent = hint || '...';
+        // Toggle visibility class
+        if (hint) {
+          colorHintRef.current.style.opacity = '1';
+        } else {
+          colorHintRef.current.style.opacity = '0';
+        }
+      }
+
+      // 5. Win Hold Animation (EIDOLON ARCHITECT: Direct classList manipulation)
+      const hold = p.matchPercent >= THRESHOLDS.WIN_HOLD && p.ring === 3;
+      if (hold !== cache.current.isWinHold && winHoldContainerRef.current) {
+        cache.current.isWinHold = hold;
+        // CRITICAL: Direct classList toggle (no React re-render)
+        winHoldContainerRef.current.classList.toggle('scale-110', hold);
+      }
+
+      // 6. Current Ring (optional - update badge if displayed)
+      if (p.ring !== cache.current.ring) {
+        cache.current.ring = p.ring;
+        // If you have a ring badge element, update it here:
+        // if (ringBadgeRef.current) ringBadgeRef.current.textContent = `R${p.ring}`;
+      }
 
       rafId = requestAnimationFrame(loop);
     };
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [currentRing, isWinHold, colorHint]);
+  }, []); // EIDOLON ARCHITECT: Empty deps - no re-renders, component mounts once
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none font-ui overflow-hidden">
       {/* Match Meter */}
-      <div className={`absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center transition-transform duration-300 ${isWinHold ? 'scale-110' : ''}`}>
+      <div ref={winHoldContainerRef} className={`absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center transition-transform duration-300`}>
         <div className="relative w-36 h-36">
           <svg className="w-full h-full drop-shadow-xl rotate-[-90deg]">
             <circle cx="72" cy="72" r="60" stroke="rgba(0,0,0,0.6)" strokeWidth="10" fill="rgba(0,0,0,0.2)" />
@@ -117,8 +139,8 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
             <span className="text-[10px] uppercase tracking-widest text-white/50">MATCH</span>
           </div>
         </div>
-        <div className={`mt-2 text-sm font-bold px-4 py-1 rounded-full bg-black/40 border border-white/10 text-white transition-opacity ${colorHint ? 'opacity-100' : 'opacity-0'}`}>
-          {colorHint || "..."}
+        <div ref={colorHintRef} className={`mt-2 text-sm font-bold px-4 py-1 rounded-full bg-black/40 border border-white/10 text-white transition-opacity opacity-0`}>
+          ...
         </div>
       </div>
 

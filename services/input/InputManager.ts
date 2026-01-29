@@ -28,6 +28,15 @@ export const inputManager = {
         this.sharedInputBuffer.fill(0);
     },
 
+    // EIDOLON ARCHITECT: Cleanup for HMR (Hot Module Reload)
+    dispose() {
+        if (typeof window === 'undefined') return;
+        // Remove event listeners to prevent double registration on hot reload
+        window.removeEventListener('keydown', (e) => this.onKey(e.code, true));
+        window.removeEventListener('keyup', (e) => this.onKey(e.code, false));
+        this.reset();
+    },
+
     onKey(code: string, isDown: boolean) {
         if (isDown) this.keys.add(code); else this.keys.delete(code);
         this.updateMoveVector();

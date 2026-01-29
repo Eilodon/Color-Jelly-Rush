@@ -1,5 +1,6 @@
 import { GameState, Player } from '../../types';
 import { TattooId } from '../cjr/cjrTypes';
+import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../engine/VFXRingBuffer';
 
 export class TattooVFXSystem {
 
@@ -11,16 +12,14 @@ export class TattooVFXSystem {
     // Currently dropped or need to map Enum to Int in future. For now visual cue generic.
     vfxSystem.emitVFX(state, 7, player.position.x, player.position.y, 0, player.id);
 
-    // Floating Text
-    state.floatingTexts.push({
-      id: Math.random().toString(),
-      position: { ...player.position, y: player.position.y - 60 },
-      text: 'MUTATION!',
-      color: '#a855f7', // Purple
-      size: 30,
-      life: 2.0,
-      velocity: { x: 0, y: -40 }
-    });
+    // Floating Text (Zero-GC)
+    vfxBuffer.push(
+      player.position.x,
+      player.position.y - 60,
+      packHex('#a855f7'),
+      VFX_TYPES.FLOATING_TEXT,
+      TEXT_IDS.MUTATION
+    );
   }
 
   updateEffects(state: GameState, dt: number): void {

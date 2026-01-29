@@ -89,8 +89,8 @@ export const TATTOO_SYNERGIES: TattooSynergy[] = [
             state.food.forEach(food => {
                 if (food.isDead || food.kind !== 'catalyst') return;
                 const dist = Math.hypot(food.position.x - player.position.x, food.position.y - player.position.y);
-                if (dist < player.statusScalars.catalystAttractionRadius!) {
-                    const force = player.statusMultipliers.goldenMagneticForce! * 50;
+                if (dist < (player.statusScalars.catalystAttractionRadius || 0)) {
+                    const force = (player.statusMultipliers.goldenMagneticForce || 0) * 50;
                     const dx = player.position.x - food.position.x;
                     const dy = player.position.y - food.position.y;
                     food.velocity.x += (dx / dist) * force;
@@ -211,10 +211,12 @@ export const TATTOO_SYNERGIES: TattooSynergy[] = [
             for (let i = 0; i < dropCount; i++) {
                 const offset = { x: (Math.random() - 0.5) * 60, y: (Math.random() - 0.5) * 60 };
                 const drop = createFood({ x: player.position.x + offset.x, y: player.position.y + offset.y });
-                drop.kind = 'neutral';
-                drop.color = '#9ca3af';
-                drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
-                state.food.push(drop);
+                if (drop) {
+                    drop.kind = 'neutral';
+                    drop.color = '#9ca3af';
+                    drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
+                    state.food.push(drop);
+                }
             }
             player.statusMultipliers.speed = Math.max(player.statusMultipliers.speed || 1, 1.2);
             player.statusTimers.tempSpeed = Math.max(player.statusTimers.tempSpeed || 0, 3.0);

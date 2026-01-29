@@ -27,13 +27,15 @@ export class PhysicsStore {
     public static readonly STRIDE = 8;
     public static readonly data = new Float32Array(MAX_ENTITIES * PhysicsStore.STRIDE);
 
-    static set(id: number, vx: number, vy: number, mass: number, radius: number) {
+    static set(id: number, vx: number, vy: number, mass: number, radius: number, restitution: number = 0.5, friction: number = 0.9) {
         const idx = id * 8;
         this.data[idx] = vx;
         this.data[idx + 1] = vy;
         this.data[idx + 2] = 0; // vRotation
         this.data[idx + 3] = mass;
         this.data[idx + 4] = radius;
+        this.data[idx + 5] = restitution;
+        this.data[idx + 6] = friction;
     }
 }
 
@@ -55,26 +57,81 @@ export class StateStore {
 }
 
 export class StatsStore {
-    // [currentHealth, maxHealth, score, matchPercent, _pad, _pad, _pad, _pad]
-    // Stride = 8 (Aligned for future expansion/SIMD thoughts, though 4 is tight)
-    // Let's use 8 to be safe or 4? 4 is fine.
-    // [currentHealth, maxHealth, score, matchPercent]
-    public static readonly STRIDE = 4;
+    // [currentHealth, maxHealth, score, matchPercent, defense, damageMultiplier, _pad, _pad]
+    public static readonly STRIDE = 8;
     public static readonly data = new Float32Array(MAX_ENTITIES * StatsStore.STRIDE);
 
-    static set(id: number, currentHealth: number, maxHealth: number, score: number, matchPercent: number) {
+    static set(id: number, currentHealth: number, maxHealth: number, score: number, matchPercent: number, defense: number = 1, damageMultiplier: number = 1) {
         const idx = id * StatsStore.STRIDE;
         this.data[idx] = currentHealth;
         this.data[idx + 1] = maxHealth;
         this.data[idx + 2] = score;
         this.data[idx + 3] = matchPercent;
+        this.data[idx + 4] = defense;
+        this.data[idx + 5] = damageMultiplier;
     }
 }
+
+export class SkillStore {
+    // [cooldown, maxCooldown, activeTimer, shapeId]
+    // Stride = 4
+    public static readonly STRIDE = 4;
+    public static readonly data = new Float32Array(MAX_ENTITIES * SkillStore.STRIDE);
+
+    static set(id: number, cooldown: number, maxCooldown: number, shapeId: number) {
+        const idx = id * SkillStore.STRIDE;
+        this.data[idx] = cooldown;
+        this.data[idx + 1] = maxCooldown;
+        this.data[idx + 2] = 0; // activeTimer
+        this.data[idx + 3] = shapeId;
+    }
+}
+
+export class TattooStore {
+    // [flags (u32 cast to f32), procChance, timer1, timer2]
+    // Note: Store flags as f32 is risky for bit ops if > 2^24. 
+    // JS Numbers are doubles (53 bit int safe), but Float32Array is 32-bit float (23 bit mantissa).
+    // Uint32Array backing might be better for flags?
+    // Let's use a separate Uint32Array for flags if we need full 32 bits.
+    // For now, let's behave like StateStore and use a separate typed array for Flags.
+
+    public static readonly STRIDE = 4;
+    public static readonly data = new Float32Array(MAX_ENTITIES * TattooStore.STRIDE);
+    public static readonly flags = new Uint32Array(MAX_ENTITIES); // Separate flags
+
+    static set(id: number, flags: number, procChance: number) {
+        this.flags[id] = flags;
+        const idx = id * TattooStore.STRIDE;
+        this.data[idx] = 0; // timer1
+        this.data[idx + 1] = 0; // timer2
+        this.data[idx + 2] = procChance;
+    }
+}
+
+export class ProjectileStore {
+    // [ownerId (int), damage, duration, typeId]
+    // Stride = 4
+    public static readonly STRIDE = 4;
+    public static readonly data = new Float32Array(MAX_ENTITIES * ProjectileStore.STRIDE);
+
+    static set(id: number, ownerId: number, damage: number, duration: number, typeId: number = 0) {
+        const idx = id * ProjectileStore.STRIDE;
+        this.data[idx] = ownerId;
+        this.data[idx + 1] = damage;
+        this.data[idx + 2] = duration; // Remaining duration
+        this.data[idx + 3] = typeId;
+    }
+}
+
 
 export function resetAllStores() {
     TransformStore.data.fill(0);
     PhysicsStore.data.fill(0);
     StatsStore.data.fill(0);
+    SkillStore.data.fill(0);
+    TattooStore.data.fill(0);
+    TattooStore.flags.fill(0);
+    ProjectileStore.data.fill(0);
     StateStore.flags.fill(0);
     EntityLookup.fill(null);
 }

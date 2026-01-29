@@ -24,7 +24,7 @@ interface TestCLIOptions {
 async function runTestsCLI(options: TestCLIOptions = {}): Promise<void> {
   console.log('🧪 COLOR JELLY RUSH - AUTOMATED TESTING SUITE');
   console.log('=====================================');
-  
+
   try {
     if (options.continuous) {
       console.log('🔄 Running in continuous mode...');
@@ -44,32 +44,32 @@ async function runTestsCLI(options: TestCLIOptions = {}): Promise<void> {
  */
 async function runSingleTestSuite(options: TestCLIOptions = {}): Promise<void> {
   const startTime = performance.now();
-  
+
   switch (options.type) {
     case 'integration':
       console.log('🧪 Running Integration Tests...');
       const integrationResult = await gameFlowTest.runCompleteTestSuite();
       outputResults(integrationResult, options.output, options.verbose);
       break;
-      
+
     case 'visual':
       console.log('📸 Running Visual Regression Tests...');
       const visualResult = await visualRegressionTest.runVisualTests();
       outputResults(visualResult, options.output, options.verbose);
       break;
-      
+
     case 'unit':
       console.log('🔬 Running Unit Tests...');
       const unitResult = await automatedTestRunner.runUnitTests();
       outputResults(unitResult, options.output, options.verbose);
       break;
-      
+
     case 'performance':
       console.log('⚡ Running Performance Tests...');
       const performanceResult = await automatedTestRunner.runPerformanceTests();
       outputResults(performanceResult, options.output, options.verbose);
       break;
-      
+
     case 'all':
     default:
       console.log('🚀 Running Complete Test Suite...');
@@ -77,10 +77,10 @@ async function runSingleTestSuite(options: TestCLIOptions = {}): Promise<void> {
       outputResults(completeResult, options.output, options.verbose);
       break;
   }
-  
+
   const endTime = performance.now();
   const duration = (endTime - startTime) / 1000;
-  
+
   console.log(`\n✅ Tests completed in ${duration.toFixed(2)}s`);
 }
 
@@ -89,23 +89,23 @@ async function runSingleTestSuite(options: TestCLIOptions = {}): Promise<void> {
  */
 async function runContinuousTests(options: TestCLIOptions = {}): Promise<void> {
   const interval = options.timeout || 30000; // Default 30 seconds
-  
+
   console.log(`🔄 Starting continuous testing (interval: ${interval}ms)`);
-  
+
   while (true) {
     try {
       const result = await automatedTestRunner.runCompleteTestSuite();
-      
+
       console.log(`\n📊 Test Results (${new Date().toLocaleTimeString()}):`);
       console.log(`Status: ${result.overallPassed ? '✅ PASSED' : '❌ FAILED'}`);
       console.log(`Success Rate: ${((result.passedTests / result.totalTests) * 100).toFixed(1)}%`);
       console.log(`Duration: ${(result.duration / 1000).toFixed(2)}s`);
-      
+
       if (!result.overallPassed) {
         console.log('⚠️ Tests failed - Stopping continuous mode');
         break;
       }
-      
+
       console.log(`⏳ Next test run in ${(interval / 1000).toFixed(1)}s...`);
       await new Promise(resolve => setTimeout(resolve, interval));
     } catch (error) {
@@ -118,7 +118,7 @@ async function runContinuousTests(options: TestCLIOptions = {}): Promise<void> {
 /**
  * Output test results in specified format
  */
-function outputResults(result: any, format: string, verbose: boolean): void {
+function outputResults(result: any, format: string | undefined, verbose: boolean | undefined): void {
   switch (format) {
     case 'json':
       console.log(JSON.stringify(result, null, 2));
@@ -126,11 +126,11 @@ function outputResults(result: any, format: string, verbose: boolean): void {
     case 'junit':
       console.log('📊 JUnit XML Output:');
       console.log('<testsuite name="ColorJellyRushTests">');
-      
+
       if (result.suites) {
         result.suites.forEach((suite: any) => {
           console.log(`  <testsuite name="${suite.name}">`);
-          
+
           if (suite.results) {
             suite.results.forEach((test: any) => {
               console.log(`    <testcase name="${test.name}" classname="${test.passed ? 'passed' : 'failed'}">`);
@@ -138,14 +138,14 @@ function outputResults(result: any, format: string, verbose: boolean): void {
               console.log('    </testcase>');
             });
           }
-          
+
           console.log('  </testsuite>');
         });
       }
-      
+
       console.log('</testsuite>');
       break;
-      
+
     case 'console':
     default:
       if (verbose) {
@@ -154,7 +154,7 @@ function outputResults(result: any, format: string, verbose: boolean): void {
           result.suites.forEach((suite: any) => {
             console.log(`\n${suite.passed ? '✅' : '❌'} ${suite.name} (${suite.type})`);
             console.log(`  Tests: ${suite.passedTests}/${suite.totalTests}`);
-            
+
             if (suite.results) {
               suite.results.forEach((test: any) => {
                 console.log(`  ${test.passed ? '✅' : '❌'} ${test.name}`);
@@ -178,10 +178,10 @@ function outputResults(result: any, format: string, verbose: boolean): void {
 function parseArgs(): TestCLIOptions {
   const args = process.argv.slice(2);
   const options: TestCLIOptions = {};
-  
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     switch (arg) {
       case '--type':
         options.type = args[++i] as any;
@@ -203,7 +203,7 @@ function parseArgs(): TestCLIOptions {
         process.exit(1);
     }
   }
-  
+
   return options;
 }
 

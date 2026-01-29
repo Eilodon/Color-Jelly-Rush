@@ -1,6 +1,13 @@
 import { DANGER_THRESHOLD_RATIO, EAT_THRESHOLD_RATIO } from '../constants';
 
-export type SizeInteraction = 'consume' | 'avoid' | 'combat';
+// EIDOLON-V: Integer States
+export const enum InteractionType {
+  COMBAT = 0,
+  CONSUME = 1,
+  AVOID = 2
+}
+
+export type SizeInteraction = InteractionType;
 
 export const getSizeInteraction = (
   ratio: number,
@@ -8,12 +15,12 @@ export const getSizeInteraction = (
   preyShielded: boolean,
   predatorCharging: boolean,
   preyCharging: boolean
-): SizeInteraction => {
+): InteractionType => {
   if (ratio >= DANGER_THRESHOLD_RATIO && !preyShielded && !preyCharging) {
-    return 'consume';
+    return InteractionType.CONSUME;
   }
   if (ratio <= EAT_THRESHOLD_RATIO && !predatorShielded && !predatorCharging) {
-    return 'avoid';
+    return InteractionType.AVOID;
   }
-  return 'combat';
+  return InteractionType.COMBAT;
 };

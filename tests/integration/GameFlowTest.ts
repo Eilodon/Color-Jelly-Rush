@@ -6,11 +6,13 @@
 
 import { GameState, Player } from '../../types';
 import { TattooId } from '../../services/cjr/cjrTypes';
-import { createInitialState, updateGameState } from '../../services/engine';
+import { createInitialState, updateGameState, updateClientVisuals } from '../../services/engine';
 import { createPlayer, createBot, createFood } from '../../services/engine/factories';
 import { applyTattoo } from '../../services/cjr/tattoos';
 import { calcMatchPercent } from '../../services/cjr/colorMath';
 import { colorMixingSystem } from '../../server/src/systems/ColorMixingSystem';
+import { getCurrentSpatialGrid } from '../../services/engine/context';
+import { TransformStore } from '../../services/engine/dod/ComponentStores';
 
 export interface TestResult {
   testName: string;
@@ -106,6 +108,8 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
 
     // Setup test player
     const defaultPlayer = createPlayer('TestPlayer');
+    if (!defaultPlayer) throw new Error('Failed to create test player');
+
     this.gameState.player = {
       ...defaultPlayer,
       id: 'test-player',
@@ -120,23 +124,38 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
       maxHealth: 100,
       currentHealth: 100, // Ensuring it overrides
     };
+    // Sync players array
+    this.gameState.players = [this.gameState.player];
 
     // Add test entities
     const bot = createBot('test-bot-1');
-    bot.position = { x: 200, y: 200 };
-    bot.currentHealth = 80;
-    bot.maxHealth = 80;
-    this.gameState.bots = [bot];
+    if (bot) {
+      bot.position = { x: 200, y: 200 };
+      bot.currentHealth = 80;
+      bot.maxHealth = 80;
+      this.gameState.bots = [bot];
+    } else {
+      console.warn('Failed to create test bot');
+      this.gameState.bots = [];
+    }
 
     const food1 = createFood({ x: 150, y: 150 });
-    food1.id = 'test-food-1';
-    food1.pigment = { r: 0.9, g: 0.1, b: 0.1 };
+    if (food1) {
+      food1.id = 'test-food-1';
+      food1.pigment = { r: 0.9, g: 0.1, b: 0.1 };
+    }
 
     const food2 = createFood({ x: 250, y: 250 });
-    food2.id = 'test-food-2';
-    food2.pigment = { r: 0.1, g: 0.9, b: 0.1 };
+    if (food2) {
+      food2.id = 'test-food-2';
+      food2.pigment = { r: 0.1, g: 0.9, b: 0.1 };
+    }
 
-    this.gameState.food = [food1, food2];
+    this.gameState.food = [food1, food2].filter((f): f is import('../../types').Food => f !== null);
+
+    // EIDOLON-V: Insert static entities into Grid for collision tests
+    const grid = getCurrentSpatialGrid();
+    this.gameState.food.forEach(f => grid.insertStatic(f));
 
     console.log('✅ Game state initialized for testing');
   }
@@ -155,12 +174,15 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             const initialPos = { ...this.gameState!.player.position };
             this.gameState!.player.targetPosition = { x: 50, y: 50 };
 
-            // Simulate game update
-            updateGameState(this.gameState!, 1 / 60);
+            // Simulate game update (multiple frames to allow physics/logic to settle)
+            for (let i = 0; i < 10; i++) {
+              updateGameState(this.gameState!, 1 / 60);
+              updateClientVisuals(this.gameState!, 1 / 60); // EIDOLON-V: Sync for Test
+            }
 
             // Check if player moved
-            const moved = Math.abs(this.gameState!.player.position.x - initialPos.x) > 0 ||
-              Math.abs(this.gameState!.player.position.y - initialPos.y) > 0;
+            const moved = Math.abs(this.gameState!.player.position.x - initialPos.x) > 0.1 ||
+              Math.abs(this.gameState!.player.position.y - initialPos.y) > 0.1;
 
             return moved;
           },
@@ -174,11 +196,28 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
 
             // Simulate eating food
             const food = this.gameState!.food[0];
+            // Manually move player to food
             this.gameState!.player.position = { x: food.position.x, y: food.position.y };
-            updateGameState(this.gameState!, 1 / 60);
+
+            // EIDOLON-V: Sync to DOD (Push Sync Removed)
+            if (this.gameState!.player.physicsIndex !== undefined) {
+              const tIdx = this.gameState!.player.physicsIndex * 8;
+              TransformStore.data[tIdx] = food.position.x;
+              TransformStore.data[tIdx + 1] = food.position.y;
+            }
+
+            // Sync logic position to DOD Store?
+            // Engine's integratePhysics will do it in step 1 of updateGameState.
+
+            // Simulate game update (multiple frames)
+            for (let i = 0; i < 5; i++) {
+              updateGameState(this.gameState!, 1 / 60);
+              updateClientVisuals(this.gameState!, 1 / 60); // EIDOLON-V: Sync for Test
+            }
 
             // Check if score increased and pigment changed
             const scoreIncreased = this.gameState!.player.score > initialScore;
+            // Pigment change is vector equality check
             const pigmentChanged = JSON.stringify(this.gameState!.player.pigment) !== JSON.stringify(initialPigment);
 
             return scoreIncreased && pigmentChanged;
@@ -193,6 +232,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             this.gameState!.player.targetPigment = { r: 0.8, g: 0.2, b: 0.2 };
 
             updateGameState(this.gameState!, 1 / 60);
+            updateClientVisuals(this.gameState!, 1 / 60);
 
             const matchPercent = calcMatchPercent(this.gameState!.player.pigment, this.gameState!.player.targetPigment);
             return matchPercent > 0.8; // Should be > 80% match
@@ -233,12 +273,14 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             // Activate skill
             this.gameState!.player.inputs.space = true;
             updateGameState(this.gameState!, 1 / 60);
+            updateClientVisuals(this.gameState!, 1 / 60);
 
             const cooldownSet = this.gameState!.player.skillCooldown > 0;
 
             // Wait for cooldown
             this.gameState!.player.skillCooldown = 0;
             updateGameState(this.gameState!, 1 / 60);
+            updateClientVisuals(this.gameState!, 1 / 60);
 
             const skillReady = this.gameState!.player.skillCooldown === 0;
 

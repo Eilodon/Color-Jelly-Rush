@@ -39,12 +39,13 @@ export enum TattooFlag {
     SHIELD_PIERCING = 1 << 9,
     ABSOLUTE_MASTERY = 1 << 10,
     TEMPORAL_DISTORTION = 1 << 11,
+    PRISM_GUARD = 1 << 12,
 
     // Active Tattoo State Flags
-    OVERDRIVE_ACTIVE = 1 << 12,
-    CORE_SHIELD_BONUS = 1 << 13,
-    PIGMENT_BOMB_ACTIVE = 1 << 14,
-    CATALYST_SENSE_ACTIVE = 1 << 15,
+    OVERDRIVE_ACTIVE = 1 << 13,
+    CORE_SHIELD_BONUS = 1 << 14,
+    PIGMENT_BOMB_ACTIVE = 1 << 15,
+    CATALYST_SENSE_ACTIVE = 1 << 16,
 }
 
 export enum ExtendedFlag {

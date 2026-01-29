@@ -3,71 +3,63 @@ import { SizeTier, MutationTier } from './shared';
 export type { SizeTier, MutationTier };
 import { PigmentVec3, RingId, Emotion, ShapeId, TattooId } from '../services/cjr/cjrTypes';
 import { StatusTimers, StatusMultipliers, StatusScalars } from './status';
-// Note: Enums are numbers at runtime, importing them here only for type docs if needed,
-// but logic uses them. Interfaces don't import values.
+import { InputEvent } from './input'; // Import InputEvent chuẩn
+
+// EIDOLON-V: DOD Bridge
+// Player and Bot structs are "Hot Objects" synced from DOD Stores.
+// They are used for Logic and UI, but Physics happens in PhysicsWorld (WASM/TypedArray).
 
 export function isPlayerOrBot(entity: Entity): entity is Player | Bot {
     return 'score' in entity;
 }
 
-// Status Effects Interface
-// Status effects moved to types/status.ts
-
 export interface Player extends Entity {
-    // #region Identity & Core Stats
+    // #region Identity
     name: string;
     score: number;
     kills: number;
-    /** @deprecated Use InputManager.state.events instead */
-    inputEvents?: any[];
+
     // Dopamine Stats
     killStreak: number;
-    streakTimer: number; // Decays to 0
+    streakTimer: number;
+
+    // Core Stats (Sync from DOD StatsStore)
     maxHealth: number;
     currentHealth: number;
-    tier: SizeTier;
-    targetPosition: Vector2; // Mouse/Input target
-    spawnTime: number;
-    // #endregion
 
-    // #region CJR Core Game Logic
+    tier: SizeTier;
+    targetPosition: Vector2;
+    spawnTime: number;
+
+    // #region Logic State
     pigment: PigmentVec3;
     targetPigment: PigmentVec3;
-    matchPercent: number; // 0..1
+    matchPercent: number;
     ring: RingId;
     emotion: Emotion;
     shape: ShapeId;
-    tattoos: TattooId[];
+    tattoos: TattooId[]; // Keep for UI/Save, but Logic uses TattooStore
+
+    // #region Visual Juice
+    aberrationIntensity?: number;
+    // #endregion
+
+    // Timers (Should ideally be in DOD, but keeping here for legacy logic compatibility)
     lastHitTime: number;
     lastEatTime: number;
     matchStuckTime: number;
     ring3LowMatchTime: number;
     emotionTimer: number;
     emotionOverride?: Emotion;
-    // #endregion
 
-    // #region Physics Properties
-    // TODO: EIDOLON-V - Extract to PhysicsBody component in future ECS refactor
+    // #region Physics Properties (Read-Only from PhysicsStore)
     acceleration: number;
     maxSpeed: number;
     friction: number;
+    magneticFieldRadius: number;
     // #endregion
 
-    // #region Game Mechanics
-    isInvulnerable: boolean;
-    skillCooldown: number;
-    maxSkillCooldown: number;
-    /** @deprecated Use InputManager.state instead */
-    inputs?: {
-        space: boolean;
-        w: boolean;
-    };
-    /** @deprecated Use InputManager.state.events instead */
-    inputSeq?: number;
-    // #endregion
-
-    // #region Combat & RPG Stats
-    // TODO: EIDOLON-V - Extract to CombatStats component in future ECS refactor
+    // #region RPG Stats (Read-Only from StatsStore/Config)
     defense: number;
     damageMultiplier: number;
     critChance: number;
@@ -84,10 +76,13 @@ export interface Player extends Entity {
     poisonOnHit: boolean;
     doubleCast: boolean;
     reviveAvailable: boolean;
-    magneticFieldRadius: number;
     // #endregion
 
-    // #region Ability System
+    // #region Cooldowns & History
+    isInvulnerable: boolean;
+    skillCooldown: number;
+    maxSkillCooldown: number;
+
     mutationCooldowns: {
         speedSurge: number;
         invulnerable: number;
@@ -96,24 +91,28 @@ export interface Player extends Entity {
         chaos: number;
         kingForm: number;
     };
+    // WARNING: Array of Objects. Limit size or use RingBuffer if Logic relies on it heavily.
     rewindHistory: { position: Vector2; health: number; time: number }[];
     stationaryTime: number;
     // #endregion
 
-    // #region Status Effects & Buffs
-    // EIDOLON-V: DOD Bitmask & Typed Structs (Strict Spec)
-    statusFlags: number; // StatusFlag
-    tattooFlags: number; // TattooFlag
-    extendedFlags: number; // ExtendedFlag
+    // #region Input (Legacy Support)
+    /** @deprecated Use InputManager */
+    inputs?: { space: boolean; w: boolean };
+    /** @deprecated Use InputManager */
+    inputEvents?: InputEvent[]; // Strong typing
+    /** @deprecated Use InputManager */
+    inputSeq?: number;
+    // #endregion
+
+    // #region Status (DOD Synced)
+    statusFlags: number; // integer
+    tattooFlags: number; // integer
+    extendedFlags: number; // integer
 
     statusTimers: StatusTimers;
     statusMultipliers: StatusMultipliers;
     statusScalars: StatusScalars;
-
-    /** @deprecated Use split fields */
-    statusValues?: never;
-    /** @deprecated Use split fields */
-    statusEffects?: never;
     // #endregion
 }
 
@@ -128,10 +127,10 @@ export interface Bot extends Player {
     bossAttackTimer?: number;
     bossAttackCharge?: number;
     respawnTimer?: number;
-    // CJR Bot Personality
     personality?: 'farmer' | 'hunter' | 'bully' | 'greedy' | 'trickster' | 'rubber';
 }
 
+// ... (Profile interfaces giữ nguyên, chúng chỉ dùng cho UI/Save)
 export interface TattooChoice {
     id: string;
     name: string;
@@ -142,6 +141,9 @@ export interface TattooChoice {
 export interface MatchSummary {
     score: number;
     kills: number;
+    // EIDOLON-V: Added missing fields often used in summary
+    rank?: number;
+    elapsedTime?: number;
 }
 
 export interface PlayerProfile {

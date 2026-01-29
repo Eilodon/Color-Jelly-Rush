@@ -355,10 +355,12 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
           x: player.position.x + offset.x,
           y: player.position.y + offset.y
         });
-        drop.kind = 'neutral';
-        drop.color = '#9ca3af';
-        drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
-        state.food.push(drop);
+        if (drop) {
+          drop.kind = 'neutral';
+          drop.color = '#9ca3af';
+          drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
+          state.food.push(drop);
+        }
       }
 
       player.statusMultipliers.speed = Math.max(player.statusMultipliers.speed || 1, 1.2);

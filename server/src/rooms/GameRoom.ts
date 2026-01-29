@@ -167,7 +167,7 @@ export class GameRoom extends Room<GameRoomState> {
     if (simPlayer) {
       simPlayer.id = client.sessionId;
       simPlayer.name = player.name;
-      simPlayer.shape = player.shape as any;
+      simPlayer.shape = player.shape as any; // TODO: properly cast to ShapeId
       simPlayer.position.x = player.position.x;
       simPlayer.position.y = player.position.y;
       simPlayer.targetPosition = { x: player.position.x, y: player.position.y };
@@ -177,12 +177,16 @@ export class GameRoom extends Room<GameRoomState> {
       this.simState.player = simPlayer;
     } else {
       const newPlayer = createPlayer(player.name, player.shape as any);
-      newPlayer.id = client.sessionId;
-      newPlayer.position = { x: player.position.x, y: player.position.y };
-      newPlayer.targetPosition = { x: player.position.x, y: player.position.y };
-      newPlayer.pigment = { r: player.pigment.r, g: player.pigment.g, b: player.pigment.b };
-      newPlayer.targetPigment = { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b };
-      this.simState.players.push(newPlayer);
+      if (newPlayer) {
+        newPlayer.id = client.sessionId;
+        newPlayer.position = { x: player.position.x, y: player.position.y };
+        newPlayer.targetPosition = { x: player.position.x, y: player.position.y };
+        newPlayer.pigment = { r: player.pigment.r, g: player.pigment.g, b: player.pigment.b };
+        newPlayer.targetPigment = { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b };
+        this.simState.players.push(newPlayer);
+      } else {
+        console.error("Failed to allocate sim player for", client.sessionId);
+      }
     }
   }
 
@@ -317,10 +321,10 @@ export class GameRoom extends Room<GameRoomState> {
       const physicsWorld = this.simState.engine?.physicsWorld;
       if (physicsWorld) {
         // EIDOLON-V FIX: Use accessors
-        px = physicsWorld.getX(player.id);
-        py = physicsWorld.getY(player.id);
-        vx = physicsWorld.getVx(player.id);
-        vy = physicsWorld.getVy(player.id);
+        px = physicsWorld.getX(player.id) ?? px;
+        py = physicsWorld.getY(player.id) ?? py;
+        vx = physicsWorld.getVx(player.id) ?? vx;
+        vy = physicsWorld.getVy(player.id) ?? vy;
       }
 
       // Validate position changes to prevent teleportation

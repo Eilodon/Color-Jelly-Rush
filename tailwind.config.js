@@ -8,7 +8,7 @@ const config = {
     './types.ts',
     './components/**/*.{ts,tsx}',
     './services/**/*.{ts,tsx}',
-    './tests/**/*.{ts,tsx}',
+
   ],
   theme: {
     extend: {},

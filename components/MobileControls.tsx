@@ -48,17 +48,32 @@ const MobileControls: React.FC = memo(() => {
     updateStick(t.clientX, t.clientY);
   };
 
+  // EIDOLON ARCHITECT: Zero-Allocation Touch Iteration
   const handleMove = (e: React.TouchEvent) => {
     if (touchIdRef.current === null) return;
-    const t = Array.from(e.changedTouches).find(T => T.identifier === touchIdRef.current);
-    if (t) updateStick(t.clientX, t.clientY);
+
+    // CRITICAL: Direct TouchList iteration (no Array.from allocation)
+    const touches = e.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      if (touch.identifier === touchIdRef.current) {
+        updateStick(touch.clientX, touch.clientY);
+        break;
+      }
+    }
   };
+  // EIDOLON ARCHITECT: Zero-Allocation Touch Iteration
   const handleEnd = (e: React.TouchEvent) => {
-    const touch = Array.from(e.changedTouches).find(t => t.identifier === touchIdRef.current);
-    if (touch) {
-      touchIdRef.current = null;
-      if (stickRef.current) stickRef.current.style.transform = `translate(0px, 0px)`;
-      inputManager.setJoystick(0, 0);
+    // CRITICAL: Direct TouchList iteration (no Array.from allocation)
+    const touches = e.changedTouches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      if (touch.identifier === touchIdRef.current) {
+        touchIdRef.current = null;
+        if (stickRef.current) stickRef.current.style.transform = `translate(0px, 0px)`;
+        inputManager.setJoystick(0, 0);
+        break;
+      }
     }
   };
 

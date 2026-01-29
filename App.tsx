@@ -35,7 +35,11 @@ const App: React.FC = () => {
     };
 
     boot();
-    // No cleanup required for singletons
+
+    // EIDOLON ARCHITECT: Cleanup for HMR (Hot Module Reload)
+    return () => {
+      inputManager.dispose();
+    };
   }, []);
 
   if (bootError) {

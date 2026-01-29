@@ -88,7 +88,11 @@ export const COMMIT_BUFFS = {
   }
 };
 
-export const COLOR_PALETTE = {
+/**
+ * @deprecated Prefer usage of COLOR_DATA (Float32Array) for rendering loops.
+ * This is a legacy string-based color palette. Use COLOR_DATA for GPU-optimized rendering.
+ */
+export const COLOR_PALETTE_HEX = {
   background: '#111111',
   rings: {
     r1: '#475569',
@@ -139,11 +143,11 @@ const hexToVec3 = (hex: string): Float32Array => {
 
 export const COLOR_DATA = {
   // #475569
-  R1: hexToVec3(COLOR_PALETTE.rings.r1),
+  R1: hexToVec3(COLOR_PALETTE_HEX.rings.r1),
   // #3b82f6
-  R2: hexToVec3(COLOR_PALETTE.rings.r2),
+  R2: hexToVec3(COLOR_PALETTE_HEX.rings.r2),
   // #ef4444
-  R3: hexToVec3(COLOR_PALETTE.rings.r3),
+  R3: hexToVec3(COLOR_PALETTE_HEX.rings.r3),
   // #111111
-  BG: hexToVec3(COLOR_PALETTE.background)
+  BG: hexToVec3(COLOR_PALETTE_HEX.background)
 };

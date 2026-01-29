@@ -63,9 +63,9 @@ const TattooPicker: React.FC<TattooPickerProps> = ({ choices, onSelect }) => {
                         <button
                             key={choice.id}
                             onClick={() => {
-    triggerHaptic('medium'); // EIDOLON-V: Add haptic feedback for power selection moment
-    onSelect(choice.id);
-}}
+                                triggerHaptic('medium'); // EIDOLON-V: Add haptic feedback for power selection moment
+                                onSelect(choice.id);
+                            }}
                             className={`group relative p-6 rounded-2xl border-2 text-left hover:scale-[1.03] transition-all duration-300 shadow-xl overflow-hidden
                 bg-[linear-gradient(140deg,rgba(29,22,33,0.95),rgba(13,10,16,0.95))] border-[color:rgba(225,214,200,0.12)]
                 ${tierColor(choice.tier)}`}
@@ -76,7 +76,7 @@ const TattooPicker: React.FC<TattooPickerProps> = ({ choices, onSelect }) => {
                             <div className="relative z-10">
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="text-2xl">{TATTOO_ICONS[choice.id] ?? '✦'}</div>
+                                        <div className="text-2xl">{TATTOO_ICONS[choice.id as TattooId] ?? '✦'}</div>
                                         <div className="text-xs font-bold uppercase tracking-widest border px-2 py-1 rounded bg-black/50">
                                             {tierLabel(choice.tier)}
                                         </div>

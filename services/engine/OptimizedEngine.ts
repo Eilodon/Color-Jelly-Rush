@@ -6,8 +6,9 @@ import { gameStateManager } from './GameStateManager';
 import { bindEngine, getCurrentSpatialGrid, getCurrentEngine } from './context';
 
 import { updateAI } from './systems/ai';
-import { applyProjectileEffect, resolveCombat, consumePickup } from './systems/combat';
+import { applyProjectileEffect, resolveCombat, consumePickupDOD } from './systems/combat';
 import { applySkill } from './systems/skills';
+import { EntityFlags } from './dod/EntityFlags';
 import { updateRingLogic } from '../cjr/ringSystem';
 import { updateWaveSpawner, resetWaveTimers } from '../cjr/waveSpawner';
 import { updateWinCondition } from '../cjr/winCondition';
@@ -20,13 +21,17 @@ import { TattooId } from '../cjr/cjrTypes';
 import { getLevelConfig } from '../cjr/levels';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { tattooSynergyManager } from '../cjr/tattooSynergies';
+
 import { resetContributionLog } from '../cjr/contribution';
+import { entityManager } from './dod/EntityManager'; // EIDOLON-V: DOD Manager
 
 import { pooledEntityFactory } from '../pooling/ObjectPool';
 import { filterInPlace } from '../utils/arrayUtils';
 import { PhysicsSystem } from './dod/systems/PhysicsSystem';
 import { MovementSystem } from './dod/systems/MovementSystem';
-import { TransformStore, PhysicsStore, EntityLookup } from './dod/ComponentStores';
+import { TransformStore, PhysicsStore, EntityLookup, StatsStore, StateStore, SkillStore, TattooStore, ProjectileStore } from './dod/ComponentStores';
+import { SkillSystem } from './dod/systems/SkillSystem';
+import { TattooSystem } from './dod/systems/TattooSystem';
 
 // EIDOLON-V FIX: Batch processing system to reduce function call overhead
 interface EntityBatch {
@@ -58,6 +63,9 @@ class OptimizedGameEngine {
   private spatialGrid: any;
   private batch: PersistentBatch;
   private frameCount: number = 0;
+
+  // EIDOLON-V: Shared buffer for spatial queries (Zero-GC)
+  private _queryBuffer: number[] = [];
 
   private constructor() {
     // EIDOLON-V FIX: Don't require spatial grid in constructor
@@ -124,34 +132,53 @@ class OptimizedGameEngine {
     const world = getCurrentEngine().physicsWorld;
 
     // BƯỚC 1: PUSH (Sync từ Logic game -> Physics World)
-    // Ensures DOD Entities exist and have up-to-date props (like mass/radius changes)
-    world.syncBodiesFromBatch(batch.players);
-    world.syncBodiesFromBatch(batch.bots);
-    // Projectiles? If projectiles are physics bodies, sync them too.
+    // DISABLED: Logic writes directly to DOD Stores (Phase 6)
+    // world.syncBodiesFromBatch(batch.players);
+    // world.syncBodiesFromBatch(batch.bots);
 
     // BƯỚC 2: EXECUTE (Chạy mô phỏng vật lý SoA)
     // DOD Physics update
     PhysicsSystem.update(dt);
 
     // BƯỚC 3: PULL (Sync từ Physics World -> Logic game)
-    // Required for Collision Logic (checkUnitCollisions) and Legacy Renderers
-    this.syncBatchFromDOD(batch.players);
-    this.syncBatchFromDOD(batch.bots);
+    // DISABLED: Logic reads directly from DOD Stores (Phase 6)
+    // Sync is only needed for rendering or network serialization step, 
+    // which happens later or in separate system.
+    // this.syncBatchFromDOD(batch.players);
+    // this.syncBatchFromDOD(batch.bots);
   }
 
   private syncBatchFromDOD(entities: Entity[]): void {
     const tData = TransformStore.data;
     const pData = PhysicsStore.data;
+    const sData = StatsStore.data; // EIDOLON-V: Stats Access
+    const stateFlags = StateStore.flags;
 
-    for (let i = 0; i < entities.length; i++) {
+    const count = entities.length;
+    for (let i = 0; i < count; i++) {
       const ent = entities[i];
       const idx = ent.physicsIndex;
       if (idx !== undefined) {
-        const baseIdx = idx * 8; // Stride 8
-        ent.position.x = tData[baseIdx];
-        ent.position.y = tData[baseIdx + 1];
-        ent.velocity.x = pData[baseIdx];
-        ent.velocity.y = pData[baseIdx + 1];
+        const tIdx = idx * 8;
+        const pIdx = idx * 8;
+        const sIdx = idx * 8; // Stats Stride 8
+
+        ent.position.x = tData[tIdx];
+        ent.position.y = tData[tIdx + 1];
+        ent.velocity.x = pData[pIdx];
+        ent.velocity.y = pData[pIdx + 1];
+
+        // Sync Stats
+        if ('score' in ent) {
+          const unit = ent as any;
+          unit.currentHealth = sData[sIdx];
+          // ent.maxHealth = sData[sIdx+1]; // Usually static or managed by upgrades
+          unit.score = sData[sIdx + 2];
+          unit.matchPercent = sData[sIdx + 3];
+        }
+
+        // Sync Dead Flag
+        ent.isDead = (stateFlags[idx] & EntityFlags.DEAD) !== 0;
       }
     }
   }
@@ -179,24 +206,120 @@ class OptimizedGameEngine {
     }
   }
 
-  // EIDOLON-V FIX: Batch logic updates
-  private updateLogic(batch: EntityBatch, state: GameState, dt: number): void {
-    // Update players
-    for (let i = 0; i < batch.players.length; i++) {
-      this.updatePlayer(batch.players[i], state, dt);
+  // EIDOLON-V FIX: Batch logic updates (DOD Optimized)
+  private updateLogic(state: GameState, dt: number): void {
+    // EIDOLON-V: Index-based iteration
+    const count = entityManager.count;
+    const flags = StateStore.flags;
+
+    for (let i = 0; i < count; i++) {
+      const flag = flags[i];
+      // Bitmask Check: Active & (Player or Bot)
+      if ((flag & EntityFlags.ACTIVE) && (flag & (EntityFlags.PLAYER | EntityFlags.BOT))) {
+        this.updateEntityDOD(i, state, dt);
+      }
     }
 
-    // Update bots
-    for (let i = 0; i < batch.bots.length; i++) {
-      this.updateBot(batch.bots[i], state, dt);
-    }
-
-    // Update projectiles
+    // Update projectiles (Hybrid - keep object loop for now until Projectile system is fully DOD)
     this.updateProjectiles(state, dt);
 
     // Update visual effects
-    this.updateFloatingTexts(state, dt);
     this.cleanupTransientEntities(state);
+  }
+
+  // EIDOLON-V FIX: Unified DOD Entity Update
+  private updateEntityDOD(index: number, state: GameState, dt: number): void {
+    const flag = StateStore.flags[index];
+    const isBot = (flag & EntityFlags.BOT) !== 0;
+
+    // 1. AI Logic (Hybrid Override)
+    if (isBot) {
+      const botObj = EntityLookup[index] as Bot;
+      if (botObj && !botObj.isDead) {
+        updateAI(botObj, state, dt);
+      }
+    }
+
+    // 2. Movement Logic (DOD)
+    // We need targetPosition from somewhere. For players it's on the object.
+    // For bots it's set by AI.
+    let targetPos: { x: number, y: number } | null = null;
+    let maxSpeed = 0;
+    let speedMult = 1;
+
+    // Access Object for high-level state (Target/Speed)
+    // TODO: Move MaxSpeed and TargetPosition to DOD Store later
+    const entityObj = EntityLookup[index] as Player | Bot;
+    if (entityObj) {
+      if (entityObj.isDead) return;
+      targetPos = entityObj.targetPosition;
+      maxSpeed = entityObj.maxSpeed;
+      speedMult = entityObj.statusMultipliers.speed || 1;
+
+      // EIDOLON-V: Visual Juice Decay
+      if (entityObj.aberrationIntensity && entityObj.aberrationIntensity > 0) {
+        entityObj.aberrationIntensity -= dt * 3.0; // Decay speed
+        if (entityObj.aberrationIntensity < 0) entityObj.aberrationIntensity = 0;
+      }
+    }
+
+    if (targetPos) {
+      MovementSystem.applyInputDOD(
+        index,
+        targetPos,
+        { maxSpeed, speedMultiplier: speedMult },
+        dt
+      );
+    }
+
+    // 3. Player Specifics (Input & Magnet)
+    if (!isBot && entityObj) {
+      const player = entityObj as Player;
+      // Skill Input
+      if (player.inputs?.space) {
+        SkillSystem.handleInput(index, { space: player.inputs.space, target: player.targetPosition }, state);
+      }
+      // Magnet
+      this.updateMagnetLogic(player, state, dt);
+    }
+
+    // 4. Stats Regen (DOD)
+    const sIdx = index * StatsStore.STRIDE;
+    // Stats[0] = current, Stats[1] = max
+    let hp = StatsStore.data[sIdx];
+    const maxHp = StatsStore.data[sIdx + 1];
+
+    if (hp < maxHp && entityObj) {
+      // Regen scalar from object for now
+      const regen = entityObj.statusScalars.regen || 0;
+      if (regen > 0) {
+        hp += regen * dt;
+        if (hp > maxHp) hp = maxHp;
+        StatsStore.data[sIdx] = hp;
+        entityObj.currentHealth = hp; // Sync back
+      }
+    }
+
+    // 5. Cooldowns (Timers)
+    if (entityObj) {
+      entityObj.lastEatTime += dt;
+      entityObj.lastHitTime += dt;
+
+      // Sync Skill Cooldown from Store
+      const skIdx = index * SkillStore.STRIDE;
+      entityObj.skillCooldown = SkillStore.data[skIdx];
+
+      if (entityObj.streakTimer > 0) {
+        entityObj.streakTimer -= dt;
+        if (entityObj.streakTimer <= 0) entityObj.killStreak = 0;
+      }
+    }
+
+    // 6. Collision (DOD)
+    // We pass the Object because resolving collision creates events/logic that needs the object
+    if (entityObj) {
+      this.checkUnitCollisions(entityObj, state, dt);
+    }
   }
 
   // EIDOLON-V FIX: Batch CJR system updates
@@ -223,65 +346,12 @@ class OptimizedGameEngine {
     }
   }
 
-  private updatePlayer(player: Player, state: GameState, dt: number): void {
-    if (player.isDead) return;
-
-    // Input handled externally (by useGameSession or NetworkClient)
-
-    // EIDOLON-V FIX: Read Position from Physics World (DOD)
-    // Position is already synced back in integratePhysics step 3.
-    // So player.position IS correct here.
-    const px = player.position.x;
-    const py = player.position.y;
-
-    // EIDOLON-V FIX: Unified Movement Logic (DOD)
-    // Use the same logic as Prediction/Re-simulation
-    MovementSystem.applyInput(
-      player.position,
-      player.velocity,
-      player.targetPosition,
-      {
-        maxSpeed: player.maxSpeed,
-        speedMultiplier: player.statusMultipliers.speed || 1
-      },
-      dt
-    );
-
-    // Apply skill
-    if (player.inputs?.space) {
-      applySkill(player, player.targetPosition, state);
-    }
-
-    // EIDOLON-V FIX: Ported Regen & Cooldown Logic
-    if (player.currentHealth < player.maxHealth) {
-      player.currentHealth += player.statusScalars.regen * dt;
-    }
-    player.lastEatTime += dt;
-    player.lastHitTime += dt;
-
-    if (player.skillCooldown > 0) {
-      player.skillCooldown = Math.max(0, player.skillCooldown - dt * player.skillCooldownMultiplier);
-    }
-
-    if (player.streakTimer && player.streakTimer > 0) {
-      player.streakTimer -= dt;
-      if (player.streakTimer <= 0) {
-        player.killStreak = 0;
-        // createFloatingText(player.position, 'Streak Lost', '#ccc', 16, state); // Visual only, maybe skip in engine
-      }
-    }
-
-    // EIDOLON-V FIX: Ported Magnet Logic
-    this.updateMagnetLogic(player, state, dt);
-
-    // EIDOLON-V FIX: Unit Collision (Combat)
-    this.checkUnitCollisions(player, state, dt);
-  }
-
   // EIDOLON-V FIX: Magnet Logic (Optimized)
   private updateMagnetLogic(player: Player, state: GameState, dt: number): void {
     const rawGrid = (this.spatialGrid as any).grid;
     if (!rawGrid) return;
+
+    if (player.physicsIndex === undefined) return;
 
     const catalystSense = player.tattoos.includes(TattooId.CatalystSense);
     const magnetRadius = player.magneticFieldRadius || 0;
@@ -290,71 +360,104 @@ class OptimizedGameEngine {
       const catalystRange = (player.statusScalars.catalystSenseRange || 2.0) * 130;
       const searchRadius = catalystSense ? Math.max(catalystRange, magnetRadius) : magnetRadius;
 
-      const indices: number[] = [];
-      rawGrid.queryRadiusInto(player.position.x, player.position.y, searchRadius, indices);
+      // DOD Read Player Position
+      const tIdxP = player.physicsIndex * 8;
+      const px = TransformStore.data[tIdxP];
+      const py = TransformStore.data[tIdxP + 1];
+
+
+
+      // EIDOLON-V: Reuse Buffer? No, indices is used below in loop.
+      // But updateMagnetLogic is called from updateEntityDOD.
+      // checkUnitCollisions is ALSO called in updateEntityDOD.
+      // Since they are sequential, we can reuse this._queryBuffer!
+      const indices = this._queryBuffer;
+      indices.length = 0;
+
+      rawGrid.queryRadiusInto(px, py, searchRadius, indices);
 
       const searchRadiusSq = searchRadius * searchRadius;
       const pullPower = 120 * dt;
+
       const tData = TransformStore.data;
+      const pData = PhysicsStore.data;
 
       const count = indices.length;
       for (let i = 0; i < count; i++) {
         const idx = indices[i];
         if (idx === player.physicsIndex) continue;
 
-        // Lookup Object to check if it's Food/Catalyst
-        // We can't tell just from indices if it's Food vs Projectile vs Bot efficiently without Flag bitmask?
-        // Optimization: Use StateStore.flags checking! 
-        // EntityFlags.FOOD = 1 << 4
+        // EIDOLON-V: Flag Check (Bitmask)
+        const flags = StateStore.flags[idx];
 
-        // EIDOLON-V OPT: Bitmask check
-        // We need to import StateStore and EntityFlags first? They are not imported in this file yet?
-        // Wait, OptimizedEngine imports TransformStore, PhysicsStore, EntityLookup. I should import StateStore and EntityFlags if I want to use them.
-        // For now, Lookup is safe enough.
+        // Check Active & Food
+        if ((flags & (EntityFlags.ACTIVE | EntityFlags.FOOD)) !== (EntityFlags.ACTIVE | EntityFlags.FOOD)) continue;
+        if (flags & EntityFlags.DEAD) continue;
 
-        const entity = EntityLookup[idx];
-        if (!entity) continue;
-        if (!('value' in entity)) continue; // Not food
-        const f = entity as unknown as any;
-        if (f.isDead) continue;
+        // Catalyst Check
+        if (catalystSense && magnetRadius <= 0) {
+          if ((flags & EntityFlags.FOOD_CATALYST) === 0) continue;
+        }
 
-        if (catalystSense && f.kind !== 'catalyst' && magnetRadius <= 0) continue;
+        // DOD Read Target Position
+        const tx = tData[idx * 8];
+        const ty = tData[idx * 8 + 1];
 
-        const dx = player.position.x - f.position.x; // Use object position or DOD? Object is synced.
-        const dy = player.position.y - f.position.y;
+        const dx = px - tx;
+        const dy = py - ty;
         const distSq = dx * dx + dy * dy;
 
         if (distSq < searchRadiusSq && distSq > 1) {
           const dist = Math.sqrt(distSq);
           const factor = pullPower / dist;
-          f.velocity.x += dx * factor;
-          f.velocity.y += dy * factor;
+
+          // DOD Write Target Velocity (PhysicsStore)
+          pData[idx * 8] += dx * factor;
+          pData[idx * 8 + 1] += dy * factor;
         }
       }
     }
   }
 
-  // EIDOLON-V FIX: Unit Collision (Optimized Index-Based)
+  // EIDOLON-V FIX: Unit Collision (Optimized Index-Based & Bitmask)
   private checkUnitCollisions(entity: Player | Bot, state: GameState, dt: number): void {
-    const rawGrid = (this.spatialGrid as any).grid; // Access raw SpatialHashGrid
-    if (!rawGrid) return; // Should not happen if initialized correctly
+    const rawGrid = (this.spatialGrid as any).grid;
+    if (!rawGrid) return;
 
-    const indices: number[] = [];
+    // Cache Pointers (Local Stack)
+    // EIDOLON-V: Use Shared Buffer
+    const indices = this._queryBuffer;
+    indices.length = 0; // Clear manually just in case
+
     const tData = TransformStore.data;
     const pData = PhysicsStore.data;
+    const sFlags = StateStore.flags; // <-- QUAN TRỌNG
 
-    // 1. Query Indices (Zero Alloc)
-    // Range 300 for awareness/combat
-    rawGrid.queryRadiusInto(entity.position.x, entity.position.y, 300, indices);
+    // 1. Query Indices
+    let px = entity.position.x;
+    let py = entity.position.y;
+
+    // Ưu tiên đọc từ DOD nếu có
+    if (entity.physicsIndex !== undefined) {
+      const tIdx = entity.physicsIndex * 8;
+      px = tData[tIdx];
+      py = tData[tIdx + 1];
+    }
+    rawGrid.queryRadiusInto(px, py, 300, indices);
 
     const count = indices.length;
     for (let i = 0; i < count; i++) {
       const idx = indices[i];
-
-      // Skip self
       if (idx === entity.physicsIndex) continue;
 
-      // 2. DOD Distance Check (Zero Object Access)
+      // EIDOLON-V: BITMASK CHECK (Siêu nhanh)
+      const flag = sFlags[idx];
+
+      // Bỏ qua nếu không Active hoặc đã Chết
+      if ((flag & EntityFlags.ACTIVE) === 0) continue;
+      if ((flag & EntityFlags.DEAD) !== 0) continue;
+
+      // 2. DOD Distance Check
       const tIdx = idx * 8;
       const pIdx = idx * 8;
 
@@ -362,51 +465,43 @@ class OptimizedGameEngine {
       const oy = tData[tIdx + 1];
       const or = pData[pIdx + 4]; // radius
 
-      const dx = entity.position.x - ox;
-      const dy = entity.position.y - oy;
+      const dx = px - ox;
+      const dy = py - oy;
       const distSq = dx * dx + dy * dy;
 
-      // Broad phase check (Sum of radii)
       const minDist = entity.radius + or;
 
       if (distSq < minDist * minDist) {
-        // 3. Resolve Object (Only on Collision)
-        const other = EntityLookup[idx];
-        if (!other) continue;
+        // 3. Resolve Logic (Chỉ lookup Object khi thực sự va chạm)
 
-        if (other.isDead) continue;
-
-        // Food collision
-        if ('value' in other) {
-          consumePickup(entity, other as Food, state);
+        // Case A: FOOD Collision
+        if ((flag & EntityFlags.FOOD) !== 0) {
+          // EIDOLON-V: Use DOD Consume
+          if (entity.physicsIndex !== undefined) {
+            consumePickupDOD(entity.physicsIndex, idx, state);
+          }
           continue;
         }
 
-        // Unit Collision
-        if ('score' in other) {
-          resolveCombat(entity, other as Player | Bot, dt, state, true, true);
+        // Case B: UNIT Collision (Player/Bot)
+        if ((flag & (EntityFlags.PLAYER | EntityFlags.BOT)) !== 0) {
+          const target = EntityLookup[idx];
+          if (target) resolveCombat(entity, target as Player | Bot, dt, state, true, true);
         }
       }
     }
   }
 
-  private updateBot(bot: Bot, state: GameState, dt: number): void {
-    if (bot.isDead) return;
 
-    // Bot AI update
-    updateAI(bot, state, dt);
-
-    // EIDOLON-V FIX: Bot Collisions (Combat & Food)
-    this.checkUnitCollisions(bot, state, dt);
-  }
 
   private updateProjectiles(state: GameState, dt: number): void {
     for (let i = state.projectiles.length - 1; i >= 0; i--) {
       const projectile = state.projectiles[i];
 
       // Update projectile position
-      projectile.position.x += projectile.velocity.x * dt;
-      projectile.position.y += projectile.velocity.y * dt;
+      // DISABLED: Projectiles are managed by PhysicsSystem now (Phase 6)
+      // projectile.position.x += projectile.velocity.x * dt;
+      // projectile.position.y += projectile.velocity.y * dt;
 
       // Apply projectile effect on collision
       const hit = this.checkProjectileCollision(projectile, state);
@@ -430,12 +525,25 @@ class OptimizedGameEngine {
     const rawGrid = (this.spatialGrid as any).grid;
     if (!rawGrid) return null;
 
-    const indices: number[] = [];
+    // EIDOLON-V: Use Shared Buffer
+    const indices = this._queryBuffer;
+    indices.length = 0;
+
     const tData = TransformStore.data;
     const pData = PhysicsStore.data;
 
     // Query nearby
-    rawGrid.queryRadiusInto(projectile.position.x, projectile.position.y, 50, indices); // 50 seems safe margin
+    let px = projectile.position.x;
+    let py = projectile.position.y;
+
+    // EIDOLON-V: Read from DOD Store
+    if (projectile.physicsIndex !== undefined) {
+      const tIdx = projectile.physicsIndex * 8;
+      px = TransformStore.data[tIdx];
+      py = TransformStore.data[tIdx + 1];
+    }
+
+    rawGrid.queryRadiusInto(px, py, 50, indices); // 50 seems safe margin
 
     const count = indices.length;
     for (let i = 0; i < count; i++) {
@@ -458,11 +566,20 @@ class OptimizedGameEngine {
       const collisionDist = or + projectile.radius;
 
       if (distSq < collisionDist * collisionDist) {
+        // EIDOLON-V: DOD Owner Check (Integer)
+        if (projectile.physicsIndex !== undefined) {
+          const projIdx = projectile.physicsIndex * 4; // ProjectileStore.STRIDE
+          const ownerId = ProjectileStore.data[projIdx];
+          if (ownerId === idx) continue; // Owner ignores their own bullet
+        } else {
+          // Fallback if no physics index (legacy support)
+          const entity = EntityLookup[idx];
+          if (!entity) continue;
+          if ((projectile as any).ownerId && entity.id === (projectile as any).ownerId) continue;
+        }
+
         const entity = EntityLookup[idx];
         if (!entity) continue;
-
-        // Logic Check: Owner
-        if ((projectile as any).ownerId && entity.id === (projectile as any).ownerId) continue;
 
         return entity;
       }
@@ -471,19 +588,7 @@ class OptimizedGameEngine {
     return null;
   }
 
-  private updateFloatingTexts(state: GameState, dt: number): void {
-    for (let i = state.floatingTexts.length - 1; i >= 0; i--) {
-      const text = state.floatingTexts[i];
 
-      text.position.x += text.velocity.x * dt;
-      text.position.y += text.velocity.y * dt;
-      text.life -= dt;
-
-      if (text.life <= 0) {
-        state.floatingTexts.splice(i, 1);
-      }
-    }
-  }
 
   private cleanupTransientEntities(state: GameState): void {
     const grid = this.spatialGrid;
@@ -527,10 +632,20 @@ class OptimizedGameEngine {
 
   private updateCamera(state: GameState): void {
     if (state.player) {
+      // EIDOLON-V: Read from DOD Store
+      let px = state.player.position.x;
+      let py = state.player.position.y;
+
+      if (state.player.physicsIndex !== undefined) {
+        const tIdx = state.player.physicsIndex * 8;
+        px = TransformStore.data[tIdx];
+        py = TransformStore.data[tIdx + 1];
+      }
+
       // Smooth camera follow
       const smoothing = 0.1;
-      state.camera.x += (state.player.position.x - state.camera.x) * smoothing;
-      state.camera.y += (state.player.position.y - state.camera.y) * smoothing;
+      state.camera.x += (px - state.camera.x) * smoothing;
+      state.camera.y += (py - state.camera.y) * smoothing;
     }
   }
 
@@ -566,7 +681,7 @@ class OptimizedGameEngine {
     }
 
     this.updateSpatialGrid(batch);
-    this.updateLogic(batch, state, dt);
+    this.updateLogic(state, dt);
 
     // System updates
     updateWaveSpawner(state, dt);
@@ -580,6 +695,10 @@ class OptimizedGameEngine {
     tattooSynergyManager.updateSynergies(state, dt);
 
     this.updateCamera(state);
+
+    // EIDOLON-V: System Updates (DOD)
+    SkillSystem.update(dt);
+    TattooSystem.update(dt);
 
     const shakeOffset = vfxIntegrationManager.getScreenShakeOffset();
     state.camera.x += shakeOffset.x;
@@ -596,7 +715,12 @@ class OptimizedGameEngine {
     bindEngine(state.engine);
     this.spatialGrid = getCurrentSpatialGrid();
 
-    this.updateFloatingTexts(state, dt);
+    // EIDOLON-V: Pull Sync from DOD for Rendering (Phase 6)
+    // Disabled in integratePhysics, so we sync here for the View.
+    this.syncBatchFromDOD(state.players);
+    this.syncBatchFromDOD(state.bots);
+    this.syncBatchFromDOD(state.projectiles);
+
     vfxIntegrationManager.update(state, dt);
     this.updateCamera(state);
 

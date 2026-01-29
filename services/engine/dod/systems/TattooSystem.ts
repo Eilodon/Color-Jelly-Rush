@@ -1,0 +1,48 @@
+
+import { TattooStore, StatsStore, StateStore } from '../ComponentStores';
+import { MAX_ENTITIES, EntityFlags } from '../EntityFlags';
+import { TattooFlag } from '../../statusFlags';
+
+export class TattooSystem {
+    static update(dt: number) {
+        const count = MAX_ENTITIES;
+        const flags = StateStore.flags;
+        const tFlags = TattooStore.flags;
+        const tData = TattooStore.data;
+
+        for (let id = 0; id < count; id++) {
+            if ((flags[id] & EntityFlags.ACTIVE) === 0) continue;
+
+            const tf = tFlags[id];
+            if (tf === 0) continue;
+
+            // 1. Passive Checks (e.g. Deposit Shield)
+            // if (tf & TattooFlag.CORE_SHIELD_BONUS) {
+            // Logic requires checking Ring/Match.
+            // That data is in StatsStore now!
+            // const sIdx = id * StatsStore.STRIDE;
+            // const match = StatsStore.data[sIdx + 3];
+            // if (match > 0.8) { ... }
+            // }
+
+            // 2. Timers
+            const idx = id * TattooStore.STRIDE;
+            // Example active effect timer logic
+        }
+    }
+
+    // Event Hooks (called from Engine/Combat)
+    static onHit(attackerId: number, victimId: number) {
+        // Direct Bitmask Check - FAST
+        const attFlags = TattooStore.flags[attackerId];
+        const vicFlags = TattooStore.flags[victimId];
+
+        // Pigment Bomb
+        if (vicFlags & TattooFlag.PIGMENT_BOMB_ACTIVE) {
+            // ... Logic
+        }
+
+        // Ink Leech (Attacker)
+        // Check Lifesteal in StatsStore or Flags?
+    }
+}

@@ -1,21 +1,32 @@
-
-import {
-  SKILL_COOLDOWN_BASE
-} from '../../../constants';
-import { Player, Bot, ShapeId, Vector2, GameState } from '../../../types';
-import { executeShapeSkill } from '../../cjr/shapeSkills';
+import { Player, Bot, Vector2, GameState } from '../../../types';
+import { SkillSystem } from '../dod/systems/SkillSystem';
 
 /**
- * Skill System - Now delegates to shapeSkills.ts
- * This provides a clean interface for the engine to call
+ * Legacy Wrapper for Skill System
+ * Redirects to DOD SkillSystem
  */
 export const applySkill = (
   entity: Player | Bot,
   targetPos?: Vector2,
   state?: GameState
 ): boolean => {
-  if (!state) return false;
+  if (!entity || entity.physicsIndex === undefined) return false;
 
-  // Delegate to shape-specific skill system
-  return executeShapeSkill(entity, state);
+  // Construct input object expected by SkillSystem
+  const input = {
+    space: true,
+    target: targetPos || entity.targetPosition || { x: 0, y: 0 }
+  };
+
+  // State is optional in legacy call, but required in DOD?
+  // SkillSystem.handleInput signature from OptimizedEngine usage: handleInput(entityId, input, state)
+  // Let's assume state is available or handle it. 
+  // The provided snippet has state as optional param but passes it.
+
+  if (state) {
+    SkillSystem.handleInput(entity.physicsIndex, input, state);
+    return true;
+  }
+
+  return false;
 };

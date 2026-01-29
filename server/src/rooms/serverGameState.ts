@@ -159,7 +159,7 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
     unlockedTattoos: [],
     isPaused: false,
     result: null,
-    vfxEvents: Array.from({ length: 50 }, () => ({ type: 0, x: 0, y: 0, data: 0, id: '', seq: 0 })),
+    vfxEvents: Array.from({ length: 50 }, () => ({ type: 0, x: 0, y: 0, data: 0, id: '', seq: 0, color: 0 })),
     vfxHead: 0,
     vfxTail: 0,
     inputs: { space: false, w: false },

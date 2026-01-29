@@ -9,6 +9,7 @@ import { FixedGameLoop } from './GameLoop'; // EIDOLON-V FIX: Import GameLoop
 import { optimizedEngine } from './OptimizedEngine';
 import { pooledEntityFactory } from '../pooling/ObjectPool';
 import { mathPerformanceMonitor } from '../math/FastMath';
+import { performanceMonitor } from '../performance/PerformanceMonitor';
 
 // EIDOLON-V FIX: Dependency Injection
 import { InputManager, inputManager as defaultInputManager } from '../input/InputManager';
@@ -361,8 +362,12 @@ export class GameStateManager {
     this.stopGameLoop();
 
     // Bind tick to this
-    this.gameLoop = new FixedGameLoop(fps, (dt) => this.gameLoopLogic(dt), (alpha) => this.renderCallback?.(alpha));
+    this.gameLoop = new FixedGameLoop(fps, (dt) => this.gameLoopLogic(dt), (alpha) => {
+      this.renderCallback?.(alpha);
+      performanceMonitor.updateFrame();
+    });
     this.gameLoop.start();
+    performanceMonitor.startMonitoring();
   }
 
   public setRenderCallback(callback: (alpha: number) => void): void {
@@ -373,6 +378,7 @@ export class GameStateManager {
     if (this.gameLoop) {
       this.gameLoop.stop();
       this.gameLoop = null;
+      performanceMonitor.stopMonitoring();
     }
   }
 
