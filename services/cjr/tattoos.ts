@@ -3,7 +3,7 @@ import { MutationTier, Player, Bot, Food, GameState } from '../../types';
 import { TattooId } from './cjrTypes';
 import { COLOR_BALANCE } from './balance';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
-import { mixPigment, calcMatchPercent, pigmentToHex } from './colorMath';
+import { mixPigment, calcMatchPercent, pigmentToHex, pigmentToInt } from './colorMath';
 import { createFloatingText } from '../engine/effects';
 import { createParticle, createFood } from '../engine/factories';
 import { StatusFlag, TattooFlag } from '../engine/statusFlags';
@@ -83,7 +83,7 @@ const TATTOOS: TattooDefinition[] = [
                 if (Math.random() < chance && 'pigment' in attacker) {
                     const att = attacker as Player | Bot;
                     att.pigment = mixPigment(att.pigment, victim.pigment, 0.15);
-                    att.color = pigmentToHex(att.pigment);
+                    att.color = pigmentToInt(att.pigment);
                     att.matchPercent = calcMatchPercent(att.pigment, att.targetPigment);
                     createFloatingText(att.position, 'INKED!', '#ff66cc', 18, state);
                 }

@@ -94,6 +94,7 @@ export const createInitialState = (level: number = 1): GameState => {
     food: foodArray,
     particles: [], // Không dùng nữa, để trống
     projectiles: [],
+    floatingTexts: [],
     delayedActions: [],
     engine,
     runtime,

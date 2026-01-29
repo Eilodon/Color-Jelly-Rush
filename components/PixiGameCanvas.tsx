@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Application, Geometry, Mesh, Shader, Program } from 'pixi.js';
+import { Application, Geometry, Mesh, Shader, GlProgram as Program } from 'pixi.js';
 import { GameState } from '../types';
 import { JELLY_VERTEX, JELLY_FRAGMENT } from '../services/cjr/shaders';
 
@@ -69,7 +69,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
 
             mesh.position.set(window.innerWidth / 2, window.innerHeight / 2);
             app.stage.addChild(mesh);
-            jellyRef.current = mesh;
+            jellyRef.current = mesh as any;
 
             // Render Loop
             app.ticker.add(() => {
@@ -84,6 +84,13 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
                 // For v8 strict:
                 mesh.shader.resources.uniforms.uniforms.uAberration = player.aberrationIntensity || 0;
                 mesh.shader.resources.uniforms.uniforms.uTime = state.gameTime || 0;
+
+                // EIDOLON-V: Update Color
+                const c = player.color as number; // It's integer now
+                const r = ((c >> 16) & 255) / 255;
+                const g = ((c >> 8) & 255) / 255;
+                const b = (c & 255) / 255;
+                mesh.shader.resources.uniforms.uniforms.uColor = [r, g, b];
             });
         });
 

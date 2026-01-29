@@ -40,64 +40,112 @@ export const randomPigment = (): PigmentVec3 => ({
 
 import { SynergyComponent } from '../components/SynergyComponent';
 
+import { ConfigStore } from './dod/ConfigStore';
+import { InputStore } from './dod/ComponentStores';
+import { pigmentToInt, intToHex, hexToInt } from '../cjr/colorMath'; // EIDOLON-V: Import color helper
+
 export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime: number = 0): Player | null => {
   const position = randomPosInRing(1);
   const pigment = randomPigment();
 
-  // EIDOLON-V: Allocation Phase
+  // EIDOLON-V: Allocation Phase (EMS Genesis)
+  // 1. Allocate DOD Index FIRST
   const entId = entityManager.createEntity();
   if (entId === -1) return null; // Safety Check: Pool Full
 
   const id = entId.toString(); // Integer Identity as String for backward compatibility
 
+  // 2. Initialize DOD State (Single Source of Truth)
+  // 2.1 Transform & Physics
+  TransformStore.set(entId, position.x, position.y, 0);
+  PhysicsStore.set(entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+
+  // 2.2 Stats
+  StatsStore.set(entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
+
+  // 2.3 State Flags
+  StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+
+  // 2.4 Skill & Tattoo
+  const ShapeMap: Record<string, number> = { 'circle': 1, 'square': 2, 'triangle': 3, 'hex': 4 };
+  const shapeId = ShapeMap[shape] || 1;
+  const sIdx = entId * SkillStore.STRIDE;
+  SkillStore.data[sIdx] = 0; // cooldown
+  SkillStore.data[sIdx + 1] = 8; // maxCooldown (Default)
+  SkillStore.data[sIdx + 3] = shapeId;
+  TattooStore.flags[entId] = 0;
+
+  // 2.5 Config (Hot Logic Data)
+  // [magneticRadius, damageMult, speedMult, pickupRange, visionRange]
+  ConfigStore.set(entId,
+    0,   // magneticRadius
+    1,   // damageMultiplier
+    1,   // speedMultiplier
+    50,  // pickupRange (Default)
+    1000 // visionRange (Default)
+  );
+
+  // 2.6 Input (DOD)
+  // Initialize target to current position (so they don't sprint to 0,0)
+  InputStore.setTarget(entId, position.x, position.y);
+
+  // 3. Create View Proxy (JS Object)
+  // This object is now a "View Shell" for React/Rendering compatibility.
+  // Logic should refer to `entId` (physicsIndex), not this object where possible.
   const player: Player = {
     id,
-    position,
+    physicsIndex: entId, // THE LINK
+
+    // View Cache (Synced from DOD before render)
+    position: { ...position },
     velocity: { x: 0, y: 0 },
     radius: PLAYER_START_RADIUS,
-    color: `rgb(${pigment.r * 255},${pigment.g * 255},${pigment.b * 255})`,
+
+    // Static / Cosmetic Data
+    color: pigmentToInt(pigment), // EIDOLON-V: Optimized Integer Color
     isDead: false,
-    trail: [],
-    physicsIndex: entId, // Assign DOD Index
 
     name,
+    shape,
+    pigment,
+    targetPigment: randomPigment(),
+    tier: SizeTier.Larva,
+    ring: 1,
+    emotion: 'happy',
+    tattoos: [],
+
+    // Logic specific (Keep in Object for hybrid logic transition)
     score: 0,
     kills: 0,
     maxHealth: 100,
     currentHealth: 100,
-    tier: SizeTier.Larva,
-    targetPosition: position,
+    targetPosition: position, // AI Target / Mouse Target
     spawnTime,
-
-    pigment,
-    targetPigment: randomPigment(),
-    matchPercent: 0,
-    ring: 1,
-    emotion: 'happy',
-    shape,
-    tattoos: [],
     lastHitTime: 999,
     lastEatTime: 0,
     matchStuckTime: 0,
     ring3LowMatchTime: 0,
     emotionTimer: 0,
+    matchPercent: 0,
 
+    // Movement Params (Synced to ConfigStore eventually)
     acceleration: ACCELERATION_BASE,
     maxSpeed: MAX_SPEED_BASE,
     friction: FRICTION_BASE,
 
+    // Combat Stats (Synced to ConfigStore eventually)
     isInvulnerable: true,
     skillCooldown: 0,
     maxSkillCooldown: 8,
-
     defense: 1,
-    damageMultiplier: 1,
+    damageMultiplier: 1, // VIEW ONLY (Logic uses ConfigStore)
+    reflectDamage: 0,
 
+    // Complex Stats (Still in Object for now)
     critChance: 0,
     critMultiplier: 1.5,
     lifesteal: 0,
     armorPen: 0,
-    reflectDamage: 0,
     visionMultiplier: 1,
     sizePenaltyMultiplier: 1,
     skillCooldownMultiplier: 1,
@@ -107,7 +155,7 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
     poisonOnHit: false,
     doubleCast: false,
     reviveAvailable: false,
-    magneticFieldRadius: 0,
+    magneticFieldRadius: 0, // VIEW ONLY (Logic uses ConfigStore)
 
     mutationCooldowns: {
       speedSurge: 0,
@@ -120,7 +168,7 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
     rewindHistory: [],
     stationaryTime: 0,
 
-    statusFlags: StatusFlag.INVULNERABLE, // Start with shield
+    statusFlags: StatusFlag.INVULNERABLE,
     tattooFlags: 0,
     extendedFlags: 0,
     statusTimers: createDefaultStatusTimers(),
@@ -129,41 +177,17 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
 
     killStreak: 0,
     streakTimer: 0,
-    components: new Map(),
+    // components removed
   };
 
-  // Override Defaults
-  player.statusMultipliers.speed = 1;
-  player.statusMultipliers.damage = 1;
-  player.statusMultipliers.defense = 1;
+  // Init Defaults
   player.statusTimers.invulnerable = 3;
+  // player.components!.set('SynergyComponent', new SynergyComponent(player.id)); // LEGACY REMOVED
 
-  player.components!.set('SynergyComponent', new SynergyComponent(player.id));
-
-  // Legacy Input Support
+  // Legacy Input
   player.inputs = { space: false, w: false };
 
-  // EIDOLON-V: Initialize DOD Component Stores
-  // Shape Enum Map: Circle=1, Square=2, Triangle=3, Hex=4
-  const ShapeMap: Record<string, number> = { 'circle': 1, 'square': 2, 'triangle': 3, 'hex': 4 };
-  const shapeId = ShapeMap[shape] || 1;
-
-  // Init SkillStore
-  const sIdx = entId * SkillStore.STRIDE;
-  SkillStore.data[sIdx] = 0; // cooldown
-  SkillStore.data[sIdx + 1] = player.maxSkillCooldown; // maxCooldown
-  SkillStore.data[sIdx + 3] = shapeId;
-
-  // Init TattooStore
-  TattooStore.flags[entId] = 0;
-
-
-
-  // Initialize DOD State
-  TransformStore.set(entId, position.x, position.y, 0);
-  PhysicsStore.set(entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
-  StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
-  StatsStore.set(entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
+  // Register in Global Lookup
   EntityLookup[entId] = player;
 
   return player;
@@ -265,13 +289,13 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   food.position = startPos;
   food.velocity = { x: 0, y: 0 };
   food.radius = FOOD_RADIUS;
-  food.color = pigmentToHex(pigment);
+  food.color = pigmentToInt(pigment); // INTEGER
   food.isDead = false;
   food.value = 1;
   food.isEjected = isEjected;
   food.kind = 'pigment';
   food.pigment = pigment;
-  food.trail.length = 0;
+  // food.trail.length = 0; // REMOVED
 
   // Initialize DOD State
   TransformStore.set(entId, startPos.x, startPos.y, 0);
@@ -286,6 +310,17 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
 
   StateStore.setFlag(entId, EntityFlags.ACTIVE | typeFlag);
   StatsStore.set(entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
+
+  // EIDOLON-V: ConfigStore Init for Food
+  // [magneticRadius, damageMult, speedMult, pickupRange, visionRange]
+  ConfigStore.set(entId,
+    0,   // magneticRadius
+    0,   // damageMultiplier
+    0,   // speedMultiplier
+    0,   // pickupRange
+    0    // visionRange
+  );
+
   EntityLookup[entId] = food;
 
   return food;
@@ -338,6 +373,16 @@ export const createProjectile = (
   PhysicsStore.set(entId, vx, vy, 0.5, 8, 0.5, 1.0);
   StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
   StatsStore.set(entId, 1, 1, 0, 0, 0, 1);
+
+  // EIDOLON-V: ConfigStore Init for Projectile
+  ConfigStore.set(entId,
+    0,   // magneticRadius
+    1,   // damageMultiplier
+    1,   // speedMultiplier
+    0,   // pickupRange
+    0    // visionRange
+  );
+
   EntityLookup[entId] = projectile;
 
   // EIDOLON-V: ProjectileStore

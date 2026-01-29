@@ -124,6 +124,22 @@ export class ProjectileStore {
 }
 
 
+export * from './ConfigStore';
+import { ConfigStore } from './ConfigStore';
+
+export class InputStore {
+    // [targetX, targetY, isSkillActive, _pad]
+    // Stride = 4
+    public static readonly STRIDE = 4;
+    public static readonly data = new Float32Array(MAX_ENTITIES * InputStore.STRIDE);
+
+    static setTarget(id: number, x: number, y: number) {
+        const idx = id * InputStore.STRIDE;
+        this.data[idx] = x;
+        this.data[idx + 1] = y;
+    }
+}
+
 export function resetAllStores() {
     TransformStore.data.fill(0);
     PhysicsStore.data.fill(0);
@@ -132,6 +148,8 @@ export function resetAllStores() {
     TattooStore.data.fill(0);
     TattooStore.flags.fill(0);
     ProjectileStore.data.fill(0);
+    ConfigStore.data.fill(0); // EIDOLON-V: Reset Config
+    InputStore.data.fill(0); // EIDOLON-V: Reset Input
     StateStore.flags.fill(0);
     EntityLookup.fill(null);
 }
@@ -141,3 +159,4 @@ import { Entity } from '../../../types';
 // Global Lookup for Reverse Mapping (DOD Index -> Logic Object)
 // This bridges the gap for Systems that need to access the full JS Object (Rendering, Combat Logic)
 export const EntityLookup: (Entity | null)[] = new Array(MAX_ENTITIES).fill(null);
+

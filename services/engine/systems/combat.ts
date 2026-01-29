@@ -8,7 +8,7 @@ import { applyGrowth, applyGrowthDOD } from './mechanics';
 import { TattooId } from '../../cjr/cjrTypes';
 import { StatusFlag, TattooFlag } from '../statusFlags';
 import { createDefaultStatusMultipliers, createDefaultStatusScalars, createDefaultStatusTimers } from '../../../types/status';
-import { mixPigment, calcMatchPercent, pigmentToHex, getSnapAlpha } from '../../cjr/colorMath';
+import { mixPigment, calcMatchPercent, pigmentToInt, getSnapAlpha } from '../../cjr/colorMath';
 import { triggerEmotion } from '../../cjr/emotions';
 import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../VFXRingBuffer';
 import { StatsStore, TransformStore, PhysicsStore, StateStore, TattooStore, EntityLookup } from '../dod/ComponentStores';
@@ -84,7 +84,7 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
         const ratio = Math.min(0.35, snappedRatio * boostMult);
 
         e.pigment = mixPigment(e.pigment, food.pigment, ratio);
-        e.color = pigmentToHex(e.pigment);
+        e.color = pigmentToInt(e.pigment);
         e.matchPercent = calcMatchPercent(e.pigment, e.targetPigment);
 
         // Sync MATCH back to StatsStore
@@ -119,7 +119,7 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
       // Simplified solvent logic without pigment mix for brevity if not strictly needed or could call mixPigment
       const neutral = { r: 0.5, g: 0.5, b: 0.5 };
       e.pigment = mixPigment(e.pigment, neutral, 0.15);
-      e.color = pigmentToHex(e.pigment);
+      e.color = pigmentToInt(e.pigment);
       e.matchPercent = calcMatchPercent(e.pigment, e.targetPigment);
       break;
 

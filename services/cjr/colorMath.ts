@@ -78,14 +78,36 @@ export const mixPigment = (current: PigmentVec3, added: PigmentVec3, ratio: numb
     return OkLCH_to_sRGB(resLCH);
 };
 
+// ==========================================
+// UTILS: Integer Color Math (EIDOLON-V Optimized)
+// ==========================================
+
+export const pigmentToInt = (p: PigmentVec3): number => {
+    const r = Math.max(0, Math.min(255, Math.floor(p.r * 255)));
+    const g = Math.max(0, Math.min(255, Math.floor(p.g * 255)));
+    const b = Math.max(0, Math.min(255, Math.floor(p.b * 255)));
+    return (r << 16) | (g << 8) | b;
+};
+
+export const hexToInt = (hex: string): number => {
+    if (hex.startsWith('#')) hex = hex.slice(1);
+    return parseInt(hex, 16);
+};
+
+export const intToHex = (color: number): string => {
+    const hex = color.toString(16);
+    return '#' + '0'.repeat(6 - hex.length) + hex;
+};
+
+export const intToRgbString = (color: number): string => {
+    const r = (color >> 16) & 0xFF;
+    const g = (color >> 8) & 0xFF;
+    const b = color & 0xFF;
+    return `rgb(${r},${g},${b})`;
+};
+
 export const pigmentToHex = (p: PigmentVec3): string => {
-    const toHex = (c: number) => {
-        // Clamp
-        c = Math.max(0, Math.min(1, c));
-        const hex = Math.floor(c * 255).toString(16);
-        return hex.length === 1 ? "0" + hex : hex;
-    };
-    return "#" + toHex(p.r) + toHex(p.g) + toHex(p.b);
+    return intToHex(pigmentToInt(p));
 };
 
 // Snap to closest 10% if close

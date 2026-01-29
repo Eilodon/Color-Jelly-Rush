@@ -35,12 +35,12 @@ const spawnCandyVein = (state: GameState) => {
         position: { x: Math.cos(angle) * r, y: Math.sin(angle) * r },
         velocity: { x: 0, y: 0 },
         radius: 30, // Big
-        color: '#fbbf24',
+        color: 0xFBBF24,
         value: 50, // Huge mass
         kind: 'candy_vein',
         pigment: { r: 1, g: 1, b: 0 }, // Yellow
         isDead: false,
-        trail: []
+
     };
 
     state.food.push(vein);

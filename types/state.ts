@@ -48,6 +48,7 @@ export interface GameState {
     particles: Particle[];
     projectiles: Projectile[];
     delayedActions: DelayedAction[];
+    floatingTexts: FloatingText[];
 
     // Systems
     engine: IGameEngine;

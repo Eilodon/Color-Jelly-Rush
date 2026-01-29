@@ -32,7 +32,7 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
       position: { x: serverPlayer.position.x, y: serverPlayer.position.y },
       velocity: { x: serverPlayer.velocity.x || 0, y: serverPlayer.velocity.y || 0 },
       radius: serverPlayer.radius || 15,
-      color: '#ffffff', // Default color
+      color: 0xFFFFFF, // Default color (White Integer)
       pigment: {
         r: serverPlayer.pigment.r,
         g: serverPlayer.pigment.g,
@@ -86,7 +86,7 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
       },
       rewindHistory: [],
       stationaryTime: 0,
-      trail: [], // Client-side handled (Not Synced)
+      // trail: [], // Client-side handled (Not Synced) - REMOVED
       isDead: false,
       statusFlags: (serverPlayer.statusEffects?.shielded ? StatusFlag.SHIELDED : 0) |
         (serverPlayer.statusEffects?.invulnerable ? StatusFlag.INVULNERABLE : 0),
@@ -125,8 +125,8 @@ export const createServerGameState = (serverState: GameRoomState, runtime: GameR
       pigment: serverFood.pigment,
       value: 1, // Default value
       isDead: false,
-      color: '#ffffff', // Default color
-      trail: [] // Client-side
+      color: 0xFFFFFF, // Default color (White Integer)
+      // trail: [] // Client-side - REMOVED
     };
     food.push(foodItem);
   });

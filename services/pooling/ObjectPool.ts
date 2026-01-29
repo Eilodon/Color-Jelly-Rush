@@ -202,8 +202,7 @@ export class PooledEntityFactory {
       type: 'normal',
       pigment: { r: 1, g: 1, b: 1 },
       kind: 'normal',
-      color: '#ffffff',
-      trail: [],
+      color: 0xFFFFFF,
       physicsIndex: undefined as number | undefined, // DOD Index
       reset() {
         // EIDOLON-V FIX: Release DOD Index
@@ -225,8 +224,7 @@ export class PooledEntityFactory {
         this.type = 'normal';
         this.pigment = { r: 1, g: 1, b: 1 };
         this.kind = 'normal';
-        this.color = '#ffffff';
-        this.trail.length = 0;
+        this.color = 0xFFFFFF;
       },
       dispose() {
         this.reset();
@@ -247,8 +245,7 @@ export class PooledEntityFactory {
       pigment: { r: 1, g: 1, b: 1 },
       type: 'normal',
       duration: 1000,
-      color: '#ffffff',
-      trail: [],
+      color: 0xFFFFFF,
       physicsIndex: undefined as number | undefined, // DOD Index
       reset() {
         // EIDOLON-V FIX: Release DOD Index
@@ -271,8 +268,7 @@ export class PooledEntityFactory {
         this.pigment = { r: 1, g: 1, b: 1 };
         this.type = 'normal';
         this.duration = 1000;
-        this.color = '#ffffff';
-        this.trail.length = 0;
+        this.color = 0xFFFFFF;
       },
       dispose() {
         this.reset();
@@ -292,8 +288,7 @@ export class PooledEntityFactory {
       pigment: { r: 1, g: 1, b: 1 },
       size: 2,
       maxLife: 1,
-      color: '#ffffff',
-      trail: [],
+      color: 0xFFFFFF,
       reset() {
         this.id = '';
         this.position.x = 0;
@@ -306,8 +301,7 @@ export class PooledEntityFactory {
         this.pigment = { r: 1, g: 1, b: 1 };
         this.size = 2;
         this.maxLife = 1;
-        this.color = '#ffffff';
-        this.trail.length = 0;
+        this.color = 0xFFFFFF;
       },
       dispose() {
         this.reset();

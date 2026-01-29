@@ -25,11 +25,8 @@ export interface Entity {
     position: Vector2;
     velocity: Vector2;
     radius: number; // Represents Mass/Size
-    color: string;  // CSS string for rendering (derived from pigment)
+    color: number;  // 0xRRGGBB Integer
     isDead: boolean;
-    // EIDOLON-V WARNING: Trail generates massive GC.
-    // Use a fixed circular buffer in implementation, or strictly cap length.
-    trail: Vector2[];
 
     // EIDOLON-V: The Link to God-Speed
     // If undefined, entity is purely cosmetic/logic-less
@@ -38,9 +35,6 @@ export interface Entity {
     // Spatial Hashing Cache
     isStatic?: boolean;
     lastCellHash?: number;
-
-    // Legacy Component Bag (Avoid using in Hot Loop)
-    components?: Map<string, any>;
 }
 
 import { PickupKind, PigmentVec3 } from '../services/cjr/cjrTypes';

@@ -2,6 +2,9 @@ import React, { useRef, useEffect } from 'react';
 import { GameState, Entity, Player } from '../types';
 import { MAP_RADIUS, CENTER_RADIUS, WORLD_WIDTH, WORLD_HEIGHT } from '../constants';
 import { COLOR_PALETTE_HEX as COLOR_PALETTE, RING_RADII } from '../constants';
+import type { PigmentVec3 } from '../services/cjr/cjrTypes';
+import { intToHex } from '../services/cjr/colorMath'; // EIDOLON-V: Import color helper
+
 import { Canvas2DRingRenderer } from '../services/rendering/RingRenderer';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
 // import { EntityType, PickupType } from '../services/rendering/RenderTypes';
@@ -15,6 +18,13 @@ interface GameCanvasProps {
   onMouseUp?: () => void;
   enablePointerInput?: boolean;
 }
+
+// Helper to get color string from number or string
+const getColor = (c: any, defaultColor: string = '#ffffff'): string => {
+  if (typeof c === 'number') return intToHex(c);
+  if (typeof c === 'string') return c;
+  return defaultColor;
+};
 
 // ------------------------------------------------------------------
 // RENDER STRATEGIES (Zero-GC Draw Calls)
@@ -38,7 +48,7 @@ const DrawStrategies = {
     ctx.translate(p.position.x, p.position.y);
 
     // Draw Body
-    ctx.fillStyle = p.color || '#fff';
+    ctx.fillStyle = getColor(p.color, '#ffffff');
     ctx.beginPath();
     ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -83,7 +93,7 @@ const DrawStrategies = {
       ctx.fill();
     } else {
       // Pigment or default
-      ctx.fillStyle = f.color || '#fff';
+      ctx.fillStyle = getColor(f.color, '#ffffff');
       ctx.beginPath();
       ctx.arc(0, 0, f.radius, 0, Math.PI * 2);
       ctx.fill();
@@ -92,7 +102,7 @@ const DrawStrategies = {
 
   Projectile: (ctx: CanvasRenderingContext2D, p: any) => {
     ctx.translate(p.position.x, p.position.y);
-    ctx.fillStyle = p.color || '#ff0000';
+    ctx.fillStyle = getColor(p.color, '#ff0000');
     ctx.beginPath();
     ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -102,7 +112,7 @@ const DrawStrategies = {
 const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
   if (p.isIcon && p.iconSymbol) {
     ctx.globalAlpha = Math.max(0, Math.min(1, (p.fadeOut ? p.life / p.maxLife : 1)));
-    ctx.fillStyle = p.iconColor || p.color || '#ffffff';
+    ctx.fillStyle = getColor(p.iconColor || p.color, '#ffffff');
     ctx.font = `${p.fontSize || 24}px serif`;
     ctx.textAlign = 'center';
     ctx.fillText(p.iconSymbol, p.position.x, p.position.y);
@@ -113,7 +123,9 @@ const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
   const baseAlpha = p.fadeOut ? p.life / p.maxLife : 1;
   const opacity = p.bubbleOpacity ?? p.waveOpacity ?? p.auraIntensity ?? 1;
   const alpha = Math.max(0, Math.min(1, baseAlpha * opacity));
-  const color =
+
+  // Resolve raw color first (could be number)
+  const rawColor =
     p.color ||
     p.rippleColor ||
     p.pulseColor ||
@@ -124,7 +136,9 @@ const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
     p.shieldColor ||
     p.fieldColor ||
     p.orbColor ||
-    '#ffffff';
+    0xFFFFFF;
+
+  const color = getColor(rawColor, '#ffffff');
 
   ctx.globalAlpha = alpha;
 
@@ -322,7 +336,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         const py = p.position.y;
         ctx.translate(px, py);
 
-        ctx.fillStyle = p.color || '#ff0000';
+        ctx.fillStyle = getColor(p.color, '#ff0000');
         ctx.beginPath();
         ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
         ctx.fill();

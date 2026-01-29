@@ -91,13 +91,20 @@ class ParticlePool implements IParticlePool {
   private readonly MAX_POOL_SIZE = 2000; // Increased pool for 'The Swarm'
   private static nextId = 0; // EIDOLON-V FIX: Integer ID Counter
 
-  get(x: number, y: number, color: string, speed: number): Particle {
+  get(x: number, y: number, color: number | string, speed: number): Particle {
     const p = this.pool.pop() || this.createNew();
     p.position.x = x;
     p.position.y = y;
     p.velocity.x = randomRange(-speed, speed);
     p.velocity.y = randomRange(-speed, speed);
-    p.color = color;
+    // Handle legacy string colors in pool for now by converting or keeping
+    // ideally pool uses number
+    if (typeof color === 'string') {
+      p.color = parseInt(color.replace('#', ''), 16);
+    } else {
+      p.color = color;
+    }
+
     p.life = 1.0;
     p.maxLife = 1.0;
     p.style = undefined;
@@ -123,11 +130,11 @@ class ParticlePool implements IParticlePool {
       position: { x: 0, y: 0 },
       velocity: { x: 0, y: 0 },
       radius: 0,
-      color: '',
+      color: 0xFFFFFF,
       life: 0,
       maxLife: 1.0,
       isDead: true,
-      trail: [],
+
     };
   }
 }

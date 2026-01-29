@@ -357,7 +357,7 @@ const TATTOO_SYNERGIES: TattooSynergy[] = [
         });
         if (drop) {
           drop.kind = 'neutral';
-          drop.color = '#9ca3af';
+          drop.color = 0x9CA3AF;
           drop.pigment = { r: 0.5, g: 0.5, b: 0.5 };
           state.food.push(drop);
         }

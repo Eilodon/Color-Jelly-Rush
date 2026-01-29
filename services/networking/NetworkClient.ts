@@ -544,9 +544,8 @@ export class NetworkClient {
           position: { x: sFood.x, y: sFood.y },
           velocity: { x: 0, y: 0 },
           radius: sFood.radius,
-          color: '#fff',
+          color: 0xFFFFFF,
           isDead: sFood.isDead,
-          trail: [],
           value: sFood.value,
           kind: sFood.kind as PickupKind,
           pigment: { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b }
@@ -556,9 +555,11 @@ export class NetworkClient {
       }
 
       if (sFood.isDead) localFood.isDead = true;
-      localFood.radius = sFood.radius;
-      localFood.kind = sFood.kind as PickupKind;
-      localFood.pigment = { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b };
+      if (localFood) {
+        localFood.radius = sFood.radius;
+        localFood.kind = sFood.kind as PickupKind;
+        localFood.pigment = { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b };
+      }
     });
 
     if (this.foodMap.size > activeIds.size) {

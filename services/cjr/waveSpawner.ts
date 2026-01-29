@@ -77,10 +77,9 @@ const spawnFood = (state: GameState, x: number, y: number, kind: PickupKind, pig
         position: { x, y },
         velocity: { x: 0, y: 0 },
         radius: kind === 'pigment' ? 12 : (kind === 'neutral' ? 8 : 10),
-        color: '#fff',
+        color: 0xFFFFFF,
         value: kind === 'neutral' ? 5 : 2,
         isDead: false,
-        trail: [],
         kind,
         pigment
     };
