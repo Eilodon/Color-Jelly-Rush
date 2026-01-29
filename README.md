@@ -1,6 +1,6 @@
-# Color Jelly Rush
+# COLOR-JELLY-RUSH
 
-**Color Jelly Rush** is a high-octane .io web game where you play as a Jelly striving to reach the core of the Centrifuge.
+**COLOR-JELLY-RUSH** is a high-octane .io web game where you play as a Jelly striving to reach the core of the Centrifuge.
 
 ## Features
 - **3-Ring World**: Commit to inner rings by matching your color to the core.

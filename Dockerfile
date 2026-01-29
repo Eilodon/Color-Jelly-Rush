@@ -1,4 +1,4 @@
-# EIDOLON-V PHASE3: Multi-stage Dockerfile for Color Jelly Rush
+# EIDOLON-V PHASE3: Multi-stage Dockerfile for COLOR-JELLY-RUSH
 # Optimized for production deployment
 
 # Build stage

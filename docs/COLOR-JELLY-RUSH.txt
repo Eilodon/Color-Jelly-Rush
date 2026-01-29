@@ -1,4 +1,4 @@
- **COLOR JELLY RUSH – Full Power** 
+ **COLOR-JELLY-RUSH – Full Power** 
 ---
 
 # A. Bản đồ repo hiện tại: cái gì giữ, cái gì thay
@@ -92,7 +92,7 @@ Và trong engine loop, ta gọi hệ CJR theo thứ tự:
 
 ---
 
-## PR1 — Data Model mới cho COLOR JELLY RUSH (compile pass)
+## PR1 — Data Model mới cho COLOR-JELLY-RUSH (compile pass)
 
 ### 1) Tạo types riêng (khuyến nghị)
 

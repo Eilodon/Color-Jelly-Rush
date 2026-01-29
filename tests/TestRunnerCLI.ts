@@ -22,7 +22,7 @@ interface TestCLIOptions {
  * Main CLI function
  */
 async function runTestsCLI(options: TestCLIOptions = {}): Promise<void> {
-  console.log('🧪 COLOR JELLY RUSH - AUTOMATED TESTING SUITE');
+  console.log('🧪 COLOR-JELLY-RUSH - AUTOMATED TESTING SUITE');
   console.log('=====================================');
 
   try {

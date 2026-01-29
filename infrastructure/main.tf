@@ -350,7 +350,7 @@ resource "aws_security_group" "cjr_redis_sg" {
 
 resource "aws_elasticache_replication_group" "cjr_redis" {
   replication_group_id       = "cjr-redis"
-  description               = "Redis cluster for Color Jelly Rush"
+  description               = "Redis cluster for COLOR-JELLY-RUSH"
   
   node_type                  = "cache.t3.micro"
   port                       = 6379
@@ -652,7 +652,7 @@ resource "aws_cloudfront_distribution" "cjr_cdn" {
 }
 
 resource "aws_cloudfront_origin_access_identity" "cjr_oai" {
-  comment = "OAI for Color Jelly Rush S3 bucket"
+  comment = "OAI for COLOR-JELLY-RUSH S3 bucket"
 }
 
 # Data Sources

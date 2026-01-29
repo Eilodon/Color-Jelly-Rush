@@ -34,6 +34,7 @@ import { TransformStore, PhysicsStore, EntityLookup, StatsStore, StateStore, Ski
 import { SkillSystem } from './dod/systems/SkillSystem';
 import { TattooSystem } from './dod/systems/TattooSystem';
 import { ConfigStore } from './dod/ConfigStore';
+import { networkTransformBuffer } from '../networking/NetworkTransformBuffer';
 
 // EIDOLON-V FIX: Batch processing removed in favor of Pure DOD Iteration
 // Memory overhead reduced.
@@ -433,6 +434,10 @@ class OptimizedGameEngine {
       if (state.isPaused) return state;
 
       this.frameCount++;
+
+      // EIDOLON-V FIX: Flush network transforms BEFORE physics
+      // This ensures SSOT - network queues, engine consumes at tick start
+      networkTransformBuffer.flush();
 
       // 1. PHYSICS (Pure DOD)
       PhysicsSystem.update(dt);

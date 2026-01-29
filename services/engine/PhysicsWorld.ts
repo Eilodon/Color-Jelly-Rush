@@ -2,6 +2,7 @@
 import { entityManager } from './dod/EntityManager';
 import { TransformStore, PhysicsStore, StateStore } from './dod/ComponentStores';
 import { EntityFlags } from './dod/EntityFlags';
+import { networkTransformBuffer } from '../networking/NetworkTransformBuffer';
 
 export class PhysicsWorld {
     // Adapter properties
@@ -53,21 +54,13 @@ export class PhysicsWorld {
         this.indexToId.delete(idx);
     }
 
-    // Sync from Entity object
+    // Sync from Network - EIDOLON-V: Now queues to buffer for SSOT compliance
     syncBody(id: string, x: number, y: number, vx: number, vy: number) {
         const idx = this.idToIndex.get(id);
         if (idx !== undefined) {
-            const tData = TransformStore.data;
-            const pData = PhysicsStore.data;
-
-            // Update Position?
-            // Usually we only sync Velocity from Logic -> Physics
-            // But for teleportation/initialization we might sync pos.
-            tData[idx * 8] = x;
-            tData[idx * 8 + 1] = y;
-
-            pData[idx * 8] = vx;
-            pData[idx * 8 + 1] = vy;
+            // EIDOLON-V FIX: Queue for sync at next tick (prevents mid-tick corruption)
+            // Network NEVER writes directly to DOD stores anymore
+            networkTransformBuffer.queue(idx, x, y, vx, vy);
         }
     }
 

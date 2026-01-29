@@ -313,7 +313,7 @@ export class NetworkClient {
         );
       }
 
-      // Sync Properties (O(1))
+      // Sync Properties (O(1)) - STATS ONLY, NO POSITION
       localPlayer.score = sPlayer.score;
       localPlayer.currentHealth = sPlayer.currentHealth;
       localPlayer.kills = sPlayer.kills;
@@ -323,25 +323,14 @@ export class NetworkClient {
       localPlayer.isDead = sPlayer.isDead;
       localPlayer.radius = sPlayer.radius;
 
-      // Local Player Reconciliation
+      // Local Player Reconciliation (uses server authoritative position)
       if (sessionId === this.room?.sessionId) {
         this.reconcileLocalPlayer(localPlayer, sPlayer);
         this.localState!.player = localPlayer;
-      } else {
-        localPlayer.position.x = sPlayer.position.x;
-        localPlayer.position.y = sPlayer.position.y;
-        localPlayer.velocity.x = sPlayer.velocity.x;
-        localPlayer.velocity.y = sPlayer.velocity.y;
       }
-
-      // EIDOLON-V FIX: Update PhysicsWorld
-      this.localState!.engine.physicsWorld.syncBody(
-        sessionId,
-        localPlayer.position.x,
-        localPlayer.position.y,
-        localPlayer.velocity.x,
-        localPlayer.velocity.y
-      );
+      // EIDOLON-V FIX: REMOVED position sync for remote players
+      // Position now comes ONLY via binary channel (handleBinaryUpdate)
+      // This eliminates the dual-write race condition
     });
 
     // Cleanup Dead (O(M) where M is local count)
@@ -488,25 +477,14 @@ export class NetworkClient {
         );
       }
 
-      // Sync Props
-      localBot.position.x = sBot.position.x;
-      localBot.position.y = sBot.position.y;
-      localBot.velocity.x = sBot.velocity.x;
-      localBot.velocity.y = sBot.velocity.y;
+      // EIDOLON-V FIX: STATS ONLY - NO POSITION WRITES
+      // Position now comes ONLY via binary channel (handleBinaryUpdate)
       localBot.currentHealth = sBot.currentHealth;
       localBot.isDead = sBot.isDead;
       localBot.pigment = sBot.pigment;
       localBot.emotion = sBot.emotion;
       localBot.radius = sBot.radius;
-
-      // EIDOLON-V FIX: Update PhysicsWorld
-      this.localState!.engine.physicsWorld.syncBody(
-        id,
-        localBot.position.x,
-        localBot.position.y,
-        localBot.velocity.x,
-        localBot.velocity.y
-      );
+      // REMOVED: position, velocity, syncBody (binary channel handles these)
     });
 
     // Cleanup Dead

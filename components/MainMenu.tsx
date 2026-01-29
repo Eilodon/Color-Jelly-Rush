@@ -63,7 +63,7 @@ const MainMenu: React.FC<MainMenuProps> = ({
     <div className="menu-shell">
       <div className="flex flex-col items-center justify-center">
         <h1 className="ritual-title ritual-title-gradient text-5xl sm:text-6xl mb-6">
-        COLOR JELLY RUSH
+        COLOR-JELLY-RUSH
         </h1>
         <div className="ritual-kicker text-xs sm:text-sm mb-6">
         LEVEL {level} · UNLOCKED {unlockedLevel}

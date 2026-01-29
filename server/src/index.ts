@@ -1,5 +1,5 @@
 /**
- * COLOR JELLY RUSH MULTIPLAYER SERVER - ENTRY POINT
+ * COLOR-JELLY-RUSH MULTIPLAYER SERVER - ENTRY POINT
  *
  * Production-ready Colyseus server with:
  * - Express integration for health checks
@@ -152,7 +152,7 @@ async function main() {
   console.log(`
   ╔═══════════════════════════════════════════════════╗
   ║                                                   ║
-  ║   🎨 COLOR JELLY RUSH SERVER v1.0.0              ║
+  ║   🎨 COLOR-JELLY-RUSH SERVER v1.0.0              ║
   ║                                                   ║
   ║   Server running on:                              ║
   ║   → HTTP:  http://${HOST}:${PORT}                      ║

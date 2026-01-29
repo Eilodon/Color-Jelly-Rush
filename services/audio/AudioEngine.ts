@@ -1,5 +1,5 @@
 /**
- * COLOR JELLY RUSH AUDIO ENGINE
+ * COLOR-JELLY-RUSH AUDIO ENGINE
  *
  * Professional-grade audio system with:
  * - Dynamic BGM with intensity layers

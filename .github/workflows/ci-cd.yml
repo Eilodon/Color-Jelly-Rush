@@ -1,7 +1,7 @@
 # EIDOLON-V PHASE3: GitHub Actions CI/CD Pipeline
 # Automated testing, building, and deployment
 
-name: Color Jelly Rush CI/CD
+name: COLOR-JELLY-RUSH CI/CD
 
 on:
   push:

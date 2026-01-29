@@ -1,4 +1,4 @@
-# COLOR JELLY RUSH - VISUAL BIBLE (Eastern Mysticism x Grimdark)
+# COLOR-JELLY-RUSH - VISUAL BIBLE (Eastern Mysticism x Grimdark)
 
 ## Core Identity
 - Theme: Ritual ink, sacred geometry, lacquered stone, and ember-lit brass.
