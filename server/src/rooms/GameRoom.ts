@@ -370,11 +370,15 @@ export class GameRoom extends Room<GameRoomState> {
       }
 
       // Apply validated state
-      // Apply validated state
+      // [EIDOLON-V OPTIMIZATION] DISABLE SCHEMA SYNC FOR HIGH-FREQUENCY DATA
+      // Position & Velocity sent via broadcastBinaryTransforms (UDP-like).
+      // Disabled to avoid Colyseus deep compare & JSON patch overhead.
+      /* DISABLE START
       serverPlayer.position.x = px;
       serverPlayer.position.y = py;
       serverPlayer.velocity.x = vx;
       serverPlayer.velocity.y = vy;
+      DISABLE END */
       serverPlayer.radius = player.radius;
       serverPlayer.score = player.score;
       serverPlayer.currentHealth = player.currentHealth;
@@ -403,10 +407,13 @@ export class GameRoom extends Room<GameRoomState> {
         serverBot.isBoss = !!bot.isBoss;
         this.state.bots.set(bot.id, serverBot);
       }
+      // [EIDOLON-V OPTIMIZATION] DISABLE BOT POSITION SYNC
+      /* DISABLE START
       serverBot.position.x = bot.position.x;
       serverBot.position.y = bot.position.y;
       serverBot.velocity.x = bot.velocity.x;
       serverBot.velocity.y = bot.velocity.y;
+      DISABLE END */
       serverBot.radius = bot.radius;
       serverBot.currentHealth = bot.currentHealth;
       serverBot.score = bot.score;
@@ -444,10 +451,13 @@ export class GameRoom extends Room<GameRoomState> {
         serverProj.type = proj.type;
         this.state.projectiles.set(proj.id, serverProj);
       }
+      // [EIDOLON-V OPTIMIZATION] DISABLE PROJECTILE POSITION SYNC
+      /* DISABLE START
       serverProj.x = proj.position.x;
       serverProj.y = proj.position.y;
       serverProj.vx = proj.velocity.x;
       serverProj.vy = proj.velocity.y;
+      DISABLE END */
       serverProj.damage = proj.damage;
     });
   }
