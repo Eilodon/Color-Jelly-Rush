@@ -1,6 +1,8 @@
 /**
  * PHASE 2: MILITARY GRADE SECURITY (Argon2id)
  * Replaces weak SHA-256 with memory-hard hashing to prevent GPU cracking.
+ *
+ * EIDOLON-V OPEN BETA FIX: Now uses Redis-based SessionStore for horizontal scaling
  */
 
 import jwt from 'jsonwebtoken';
@@ -9,6 +11,8 @@ import * as argon2 from 'argon2';
 import { Request } from 'express';
 
 import { logger } from '../logging/Logger';
+import { sessionStore, Session } from './SessionStore';
+import { RedisManager } from '../database/RedisManager';
 
 // Extend Express Request interface
 interface AuthenticatedRequest extends Request {
@@ -27,17 +31,7 @@ const users = new Map<string, {
   lastLogin?: number;
 }>();
 
-// Session store
-const sessions = new Map<string, {
-  userId: string;
-  username: string;
-  createdAt: number;
-  lastActivity: number;
-}>();
-
-// ... (users map)
-
-// ... (sessions map)
+// EIDOLON-V: Sessions now handled by SessionStore (Redis-backed)
 
 type JwtAlg = 'HS256' | 'HS384' | 'HS512';
 
@@ -160,12 +154,11 @@ export class AuthService {
     const token = jwt.sign(tokenPayload, JWT_SECRET, signOptions);
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
 
-    // Store session
-    sessions.set(token, {
+    // Store session in Redis-backed SessionStore
+    await sessionStore.create(token, {
       userId: user.id,
       username: user.username,
-      createdAt: Date.now(),
-      lastActivity: Date.now()
+      isGuest: false
     });
 
     return {
@@ -175,7 +168,32 @@ export class AuthService {
     };
   }
 
-  // Verify token (Sync - JWT verification is fast enough)
+  // Verify token (Now async due to Redis session lookup)
+  static async verifyTokenAsync(token: string): Promise<User | null> {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        algorithms: [JWT_ALG],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE
+      }) as any;
+
+      // Check session exists in Redis-backed store
+      const session = await sessionStore.get(token);
+      if (!session) return null;
+
+      // Update last activity (extends TTL in Redis)
+      await sessionStore.touch(token);
+
+      return {
+        id: decoded.userId,
+        username: decoded.username
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Sync version for backward compatibility (checks JWT only, not session)
   static verifyToken(token: string): User | null {
     try {
       const decoded = jwt.verify(token, JWT_SECRET, {
@@ -184,57 +202,46 @@ export class AuthService {
         audience: JWT_AUDIENCE
       }) as any;
 
-      // Check session exists and is not expired
-      const session = sessions.get(token);
-      if (!session) return null;
-
-      // Check session timeout
-      if (Date.now() - session.lastActivity > SESSION_TIMEOUT) {
-        sessions.delete(token);
-        return null;
-      }
-
-      // Update last activity
-      session.lastActivity = Date.now();
-
       return {
         id: decoded.userId,
         username: decoded.username
       };
     } catch (error) {
-      // console.warn('🔐 Invalid token');
       return null;
     }
   }
 
-  // Logout
-  static logout(token: string): boolean {
-    return sessions.delete(token);
+  // Logout (now async for Redis)
+  static async logoutAsync(token: string): Promise<boolean> {
+    return await sessionStore.delete(token);
   }
 
-  // Cleanup expired sessions
+  // Sync logout for backward compatibility
+  static logout(token: string): boolean {
+    // Fire and forget async deletion
+    sessionStore.delete(token).catch(() => {});
+    return true;
+  }
+
+  // Cleanup expired sessions (Redis handles this via TTL, but call for memory fallback)
   static cleanupSessions() {
-    const now = Date.now();
-    for (const [token, session] of sessions.entries()) {
-      if (now - session.lastActivity > SESSION_TIMEOUT) {
-        sessions.delete(token);
-      }
-    }
+    sessionStore.cleanup();
   }
 
   // Get session stats
   static getSessionStats() {
-    const createdAts = Array.from(sessions.values()).map(s => s.createdAt);
+    const storeStats = sessionStore.getStats();
     return {
-      activeUsers: sessions.size,
+      activeUsers: storeStats.activeSessions || 'N/A (Redis)',
       totalUsers: users.size,
-      oldestSession: createdAts.length ? Math.min(...createdAts) : null,
-      newestSession: createdAts.length ? Math.max(...createdAts) : null
+      sessionMode: storeStats.mode,
+      oldestSession: null,
+      newestSession: null
     };
   }
 
-  // Create guest user (for quick testing)
-  static createGuestUser(): AuthToken {
+  // Create guest user (for quick testing) - now async
+  static async createGuestUserAsync(): Promise<AuthToken> {
     const guestId = `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const guestUsername = `Guest${Math.floor(Math.random() * 10000)}`;
 
@@ -253,11 +260,11 @@ export class AuthService {
     });
     const expiresAt = Date.now() + (60 * 60 * 1000);
 
-    sessions.set(token, {
+    // Store in Redis-backed session store
+    await sessionStore.create(token, {
       userId: guestId,
       username: guestUsername,
-      createdAt: Date.now(),
-      lastActivity: Date.now()
+      isGuest: true
     });
 
     return {
@@ -265,6 +272,46 @@ export class AuthService {
       user: { id: guestId, username: guestUsername },
       expiresAt
     };
+  }
+
+  // Sync version for backward compatibility
+  static createGuestUser(): AuthToken {
+    const guestId = `guest-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const guestUsername = `Guest${Math.floor(Math.random() * 10000)}`;
+
+    const tokenPayload = {
+      userId: guestId,
+      username: guestUsername,
+      iat: Math.floor(Date.now() / 1000),
+      isGuest: true
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
+      algorithm: JWT_ALG,
+      expiresIn: '1h',
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE
+    });
+    const expiresAt = Date.now() + (60 * 60 * 1000);
+
+    // Fire and forget session creation
+    sessionStore.create(token, {
+      userId: guestId,
+      username: guestUsername,
+      isGuest: true
+    }).catch(() => {});
+
+    return {
+      token,
+      user: { id: guestId, username: guestUsername },
+      expiresAt
+    };
+  }
+
+  // Initialize session store with Redis
+  static async initSessionStore(redis: RedisManager): Promise<void> {
+    await sessionStore.init(redis);
+    logger.info('AuthService: Session store initialized');
   }
 }
 
