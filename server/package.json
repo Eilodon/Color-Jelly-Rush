@@ -1,6 +1,6 @@
 {
   "name": "color-jelly-rush-server",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
@@ -15,6 +15,7 @@
     "colyseus": "^0.15.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "helmet": "^8.1.0",
     "http-proxy-middleware": "^2.0.6",
     "jsonwebtoken": "^9.0.2",
     "msgpackr": "^1.10.0",

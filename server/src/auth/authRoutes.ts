@@ -1,11 +1,13 @@
 /**
- * PHASE 1 EMERGENCY: Authentication Routes
+ * EIDOLON-V OPEN BETA: Authentication Routes
  * Login, logout, and user management endpoints
+ * Now with Redis-backed rate limiting for brute force protection
  */
 
 import express, { Request } from 'express';
 import { AuthService, authMiddleware, optionalAuthMiddleware } from './AuthService';
 import { logger } from '../logging/Logger';
+import { authRateLimiter } from '../security/RateLimiter';
 
 // EIDOLON-V PHASE1: Extend Express Request interface
 interface AuthenticatedRequest extends Request {
@@ -17,8 +19,8 @@ interface AuthenticatedRequest extends Request {
 
 const router = express.Router();
 
-// EIDOLON-V PHASE1: Login endpoint
-router.post('/login', async (req, res) => {
+// EIDOLON-V OPEN BETA: Stricter rate limiting for auth endpoints (10 attempts per 15 min)
+router.post('/login', authRateLimiter.middleware(), async (req, res) => {
   try {
     const { username, password } = req.body;
 

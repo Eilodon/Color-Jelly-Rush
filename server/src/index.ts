@@ -1,9 +1,12 @@
 /**
  * COLOR-JELLY-RUSH MULTIPLAYER SERVER - ENTRY POINT
  *
- * Production-ready Colyseus server with:
+ * EIDOLON-V OPEN BETA: Production-ready Colyseus server with:
  * - Express integration for health checks
  * - CORS configuration
+ * - Helmet security headers
+ * - Redis-backed rate limiting (distributed)
+ * - Redis-backed sessions (distributed)
  * - Graceful shutdown
  */
 
@@ -11,13 +14,16 @@ import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import express, { Request } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { GameRoom } from './rooms/GameRoom.js';
 import authRoutes from './auth/authRoutes.js';
-import { authMiddleware, initAuthService, startAuthMaintenance } from './auth/AuthService.js';
+import { authMiddleware, initAuthService, startAuthMaintenance, AuthService } from './auth/AuthService.js';
 import monitoringRoutes from './monitoring/monitoringRoutes.js';
 import { monitoringService } from './monitoring/MonitoringService.js';
 import { logger, errorHandler } from './logging/Logger.js';
+import { rateLimiter, authRateLimiter } from './security/RateLimiter.js';
+import { cache } from './database/RedisManager.js';
 
 // EIDOLON-V PHASE1: Extend Express Request interface
 interface AuthenticatedRequest extends Request {
@@ -34,14 +40,48 @@ async function main() {
   // EIDOLON-V PHASE1: Setup global error handlers
   errorHandler.setupGlobalHandlers();
 
-  logger.info('🚀 PHASE1: Starting CJR Server...', {
+  logger.info('🚀 OPEN BETA: Starting CJR Server...', {
     nodeVersion: process.version,
     platform: process.platform,
     port: PORT,
     host: HOST
   });
 
+  // EIDOLON-V OPEN BETA: Initialize Redis for distributed rate limiting and sessions
+  let redisConnected = false;
+  try {
+    await cache.connect();
+    await rateLimiter.init(cache);
+    await authRateLimiter.init(cache);
+    await AuthService.initSessionStore(cache);
+    redisConnected = true;
+    logger.info('✅ Redis connected - using distributed rate limiting and sessions');
+  } catch (error) {
+    logger.warn('⚠️ Redis unavailable - falling back to in-memory (NOT recommended for production)', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+
   const app = express();
+
+  // EIDOLON-V OPEN BETA: Security headers via Helmet
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Required for game assets
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }));
 
   // EIDOLON-V PHASE1: Secure CORS configuration
   const allowedOrigins = process.env.CORS_ORIGIN ?
@@ -67,48 +107,29 @@ async function main() {
   }));
   app.use(express.json({ limit: '10mb' })); // EIDOLON-V PHASE1: Limit payload size
 
-  // EIDOLON-V PHASE1: Rate limiting middleware
-  const rateLimit = new Map<string, { count: number; resetTime: number }>();
-  const RATE_LIMIT_WINDOW = 60000; // 1 minute
-  const RATE_LIMIT_MAX = 100; // requests per minute
+  // EIDOLON-V OPEN BETA: Redis-backed distributed rate limiting
+  app.use(rateLimiter.middleware());
 
-  app.use((req, res, next) => {
-    const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
-    const now = Date.now();
-    const client = rateLimit.get(clientIp);
-
-    if (!client || now > client.resetTime) {
-      rateLimit.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-      return next();
-    }
-
-    if (client.count >= RATE_LIMIT_MAX) {
-      return res.status(429).json({
-        error: 'Too Many Requests',
-        retryAfter: Math.ceil((client.resetTime - now) / 1000)
-      });
-    }
-
-    client.count++;
-    next();
-  });
-
-  // EIDOLON-V PHASE1: Enhanced health check with security metrics
-  app.get('/health', (req, res) => {
-    const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
-    const rateLimitInfo = rateLimit.get(clientIp);
+  // EIDOLON-V OPEN BETA: Enhanced health check with security metrics
+  app.get('/health', async (req, res) => {
+    const redisHealth = await cache.healthCheck().catch(() => ({ connected: false }));
+    const rateLimitStats = rateLimiter.getStats();
 
     res.json({
       status: 'healthy',
       timestamp: Date.now(),
       uptime: process.uptime(),
       security: {
-        rateLimitActive: rateLimitInfo ? rateLimitInfo.count : 0,
-        rateLimitMax: RATE_LIMIT_MAX,
+        rateLimitMode: rateLimitStats.mode,
         corsEnabled: true,
-        allowedOrigins: allowedOrigins.length
+        allowedOrigins: allowedOrigins.length,
+        helmetEnabled: true
       },
-      version: '1.0.0-phase1'
+      infrastructure: {
+        redis: redisHealth.connected ? 'connected' : 'disconnected',
+        redisLatency: redisHealth.latency || null
+      },
+      version: '1.0.0-beta.1'
     });
   });
 
