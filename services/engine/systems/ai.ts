@@ -37,16 +37,12 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
 
   // DECISION TICK (Only run heavy logic occasionally)
   if (bot.aiReactionTimer <= 0) {
-    bot.aiReactionTimer = 0.2 + Math.random() * 0.3; // 0.2-0.5s
+    bot.aiReactionTimer = 0.1 + Math.random() * 0.15; // EIDOLON-V: Faster reflexes (0.1-0.25s)
 
     // 2. SENSING (THE OPTIMIZED PART)
     const grid = getCurrentSpatialGrid();
     // Raw query for INDICES (Zero Allocation inside grid usually)
-    // Use raw grid access if possible, or the method we added to OptimizedEngine
-    // Assuming context.ts/SpatialGrid exposes queryRadiusInto taking indices array
-    (grid as any).getNearbyInto(bot, null); // Legacy call helper? No.
-
-    // Let's use the raw grid form OptimizedEngine used:
+    // Use raw grid access directly - no need for legacy adapter
     const rawGrid = (grid as any).grid;
     SENSING_INDICES.length = 0;
     if (rawGrid) {

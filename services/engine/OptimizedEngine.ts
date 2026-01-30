@@ -157,28 +157,21 @@ class OptimizedGameEngine {
   }
 
   // EIDOLON-V FIX: Optimized spatial grid updates
-  // This method is replaced by updateSpatialGridDOD
-  // private updateSpatialGrid(batch: EntityBatch): void {
-  //   const grid = this.spatialGrid;
+  // This method is replaced by updateSpatialGridDOD but kept for signature compatibility
+  // @ts-ignore
+  private updateSpatialGrid(batch: any): void {
+    const grid = this.spatialGrid;
+    if (!grid) return;
 
-  //   // EIDOLON-V: Chỉ clear dynamic entities (Player, Bot, Projectile)
-  //   grid.clearDynamic();
+    // EIDOLON-V: Clean existing
+    grid.clearDynamic();
 
-  //   // Re-insert dynamic entities explicitly by type to avoid Type Pollution
-  //   const { players, bots, projectiles } = batch;
-
-  //   for (let i = 0; i < players.length; i++) {
-  //     grid.insert(players[i]);
-  //   }
-
-  //   for (let i = 0; i < bots.length; i++) {
-  //     grid.insert(bots[i]);
-  //   }
-
-  //   for (let i = 0; i < projectiles.length; i++) {
-  //     grid.insert(projectiles[i]);
-  //   }
-  // }
+    // Re-insert based on Active Flags in DOD
+    // Ideally we iterate ALL active entities and insert them.
+    // For now, relies on the updateSpatialGridDOD method which is correct.
+    // If this legacy method is called, we should warn or redirect.
+    this.updateSpatialGridDOD();
+  }
 
   // EIDOLON-V FIX: Magnet Logic (Pure DOD - No Object Lookup)
   private updateMagnetLogic(player: Player, state: GameState, dt: number): void {
@@ -191,12 +184,16 @@ class OptimizedGameEngine {
 
     // 1. Read Config from DOD (Single Source of Truth)
     const magnetRadius = ConfigStore.getMagneticRadius(pIdx);
-    const catalystSense = (player.tattoos && player.tattoos.includes(TattooId.CatalystSense)); // Keep legacy Tattoo check for now or move to Store? 
+    // Legacy support: fall back to object if 0
+    const effMagnetRadius = magnetRadius > 0 ? magnetRadius : (player.magneticFieldRadius || 0);
+
+    const catalystSense = (player.tattoos && player.tattoos.includes(TattooId.CatalystSense));
+
     // Optimization: If magnetRadius is 0 and no catalyst sense, abort.
-    if (magnetRadius <= 0 && !catalystSense) return;
+    if (effMagnetRadius <= 0 && !catalystSense) return;
 
     const catalystRange = (player.statusScalars.catalystSenseRange || 2.0) * 130;
-    const searchRadius = catalystSense ? Math.max(catalystRange, magnetRadius) : magnetRadius;
+    const searchRadius = catalystSense ? Math.max(catalystRange, effMagnetRadius) : effMagnetRadius;
 
     // 2. DOD Read Player Position
     const tIdxP = pIdx * 8;
@@ -227,8 +224,11 @@ class OptimizedGameEngine {
       if (flags & EntityFlags.DEAD) continue;
 
       // Catalyst Logic
+      // EIDOLON-V FIX: Catalyst sense should allow seeing catalyst food even if magnet is 0
       if (catalystSense && magnetRadius <= 0) {
-        if ((flags & EntityFlags.FOOD_CATALYST) === 0) continue;
+        if ((flags & EntityFlags.FOOD_CATALYST) === 0) continue; // Only skip if NOT catalyst
+      } else if (magnetRadius <= 0) {
+        continue; // No magnet, no catalyst sense -> skip
       }
 
       // 5. DOD Distance Check
@@ -437,17 +437,62 @@ class OptimizedGameEngine {
     filterInPlace(state.delayedActions, a => a.timer > 0);
   }
 
+  // EIDOLON-V FIX: Sync entity positions from DOD Stores to object state
+  private syncEntityPositions(state: GameState): void {
+    // Sync player position
+    if (state.player && state.player.physicsIndex !== undefined) {
+      const tIdx = state.player.physicsIndex * 8;
+      state.player.position.x = TransformStore.data[tIdx];
+      state.player.position.y = TransformStore.data[tIdx + 1];
+      state.player.velocity.x = PhysicsStore.data[tIdx];
+      state.player.velocity.y = PhysicsStore.data[tIdx + 1];
+
+      // EIDOLON-V FIX: Sync Stats (Radius, Score, Match)
+      state.player.radius = PhysicsStore.data[tIdx + 4];
+      state.player.score = StatsStore.data[tIdx + 2];
+      state.player.matchPercent = StatsStore.data[tIdx + 3];
+    }
+
+    // Sync bot positions
+    for (let i = 0; i < state.bots.length; i++) {
+      const bot = state.bots[i];
+      if (bot.physicsIndex !== undefined) {
+        const tIdx = bot.physicsIndex * 8;
+        bot.position.x = TransformStore.data[tIdx];
+        bot.position.y = TransformStore.data[tIdx + 1];
+        bot.velocity.x = PhysicsStore.data[tIdx];
+        bot.velocity.y = PhysicsStore.data[tIdx + 1];
+      }
+    }
+
+    // Sync food positions
+    for (let i = 0; i < state.food.length; i++) {
+      const food = state.food[i];
+      if (food.physicsIndex !== undefined) {
+        const tIdx = food.physicsIndex * 8;
+        food.position.x = TransformStore.data[tIdx];
+        food.position.y = TransformStore.data[tIdx + 1];
+      }
+    }
+
+    // Sync projectile positions
+    for (let i = 0; i < state.projectiles.length; i++) {
+      const proj = state.projectiles[i];
+      if (proj.physicsIndex !== undefined) {
+        const tIdx = proj.physicsIndex * 8;
+        proj.position.x = TransformStore.data[tIdx];
+        proj.position.y = TransformStore.data[tIdx + 1];
+        proj.velocity.x = PhysicsStore.data[tIdx];
+        proj.velocity.y = PhysicsStore.data[tIdx + 1];
+      }
+    }
+  }
+
   private updateCamera(state: GameState): void {
     if (state.player) {
-      // EIDOLON-V: Read from DOD Store
-      let px = state.player.position.x;
-      let py = state.player.position.y;
-
-      if (state.player.physicsIndex !== undefined) {
-        const tIdx = state.player.physicsIndex * 8;
-        px = TransformStore.data[tIdx];
-        py = TransformStore.data[tIdx + 1];
-      }
+      // EIDOLON-V: Read from object state (already synced from DOD Store)
+      const px = state.player.position.x;
+      const py = state.player.position.y;
 
       // Smooth camera follow
       const smoothing = 0.1;
@@ -588,6 +633,9 @@ class OptimizedGameEngine {
       this.checkTattooUnlock(state);
       vfxIntegrationManager.update(state, dt);
       tattooSynergyManager.updateSynergies(state, dt);
+
+      // EIDOLON-V FIX: Sync positions from DOD Stores back to object state for rendering
+      this.syncEntityPositions(state);
 
       this.updateCamera(state);
 

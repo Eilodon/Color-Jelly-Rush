@@ -72,6 +72,12 @@ export class SpatialGrid implements ISpatialGrid {
   // WARNING: This is now "Slow-allocation" because we must look up objects. 
   // Optimized Consumers should use `grid.queryRadiusInto` with indices directly.
   getNearbyInto(entity: Entity, outArray: Entity[], maxDistance: number = 200): number {
+    // Validate input
+    if (!outArray) {
+      console.warn('SpatialGrid.getNearbyInto: outArray is null or undefined');
+      return 0;
+    }
+    
     // Temp array for indices
     const indices: number[] = [];
     this.grid.queryRadiusInto(entity.position.x, entity.position.y, maxDistance, indices);

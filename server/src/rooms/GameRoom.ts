@@ -4,7 +4,9 @@
  * Authoritative server implementation using Colyseus
  */
 
-import { Room, Client, Delayed } from 'colyseus';
+import colyseus from 'colyseus';
+const { Room } = colyseus;
+import type { Client, Delayed } from 'colyseus';
 import { logger } from '../logging/Logger';
 import {
   GameRoomState,

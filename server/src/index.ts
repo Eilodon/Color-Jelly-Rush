@@ -10,7 +10,8 @@
  * - Graceful shutdown
  */
 
-import { Server } from 'colyseus';
+import colyseus from 'colyseus';
+const { Server } = colyseus;
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import express, { Request } from 'express';
 import cors from 'cors';
@@ -127,7 +128,7 @@ async function main() {
       },
       infrastructure: {
         redis: redisHealth.connected ? 'connected' : 'disconnected',
-        redisLatency: redisHealth.latency || null
+        redisLatency: 'latency' in redisHealth ? redisHealth.latency : null
       },
       version: '1.0.0-beta.1'
     });

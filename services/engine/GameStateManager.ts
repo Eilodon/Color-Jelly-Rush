@@ -13,9 +13,10 @@ import { performanceMonitor } from '../performance/PerformanceMonitor';
 // EIDOLON-V FIX: Dependency Injection
 import { BufferedInput } from '../input/BufferedInput';
 import { InputManager, inputManager as defaultInputManager } from '../input/InputManager';
-import { InputStore } from './dod/ComponentStores';
+import { InputStore, TransformStore, PhysicsStore } from './dod/ComponentStores';
 import { NetworkClient, networkClient as defaultNetworkClient, NetworkStatus } from '../networking/NetworkClient';
 import { AudioEngine, audioEngine as defaultAudioEngine } from '../audio/AudioEngine';
+import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { ShapeId } from '../cjr/cjrTypes';
 import { clientLogger } from '../logging/ClientLogger';
 
@@ -131,8 +132,17 @@ export class GameStateManager {
       // BƯỚC 1.3: KÍCH HOẠT "BUFFERED INPUT"
       // Thay vì inputManager.updateTargetPosition(...), gọi bufferedInput.syncToStore(localPlayerIndex)
 
-      // Sync Input directly to DOD Store (Player Index = 0)
-      this.bufferedInput.syncToStore(0);
+      // Get player position from DOD Store for input conversion
+      const pIdx = state.player.physicsIndex ?? 0;
+      const tIdx = pIdx * 8;
+      const playerWorldX = TransformStore.data[tIdx];
+      const playerWorldY = TransformStore.data[tIdx + 1];
+
+      // Sync Input directly to DOD Store (Player Index = 0) with world coordinate conversion
+      this.bufferedInput.syncToStore(0,
+        { x: playerWorldX, y: playerWorldY },
+        { x: state.camera.x, y: state.camera.y }
+      );
 
       // Update logic target position from Store for compatibility
       // Using helper:
@@ -155,11 +165,23 @@ export class GameStateManager {
 
       // Core physics/logic update
       optimizedEngine.updateGameState(state, dt);
+
+      // EIDOLON-V FIX: Sync player position from DOD Store back to object state after physics
+      if (state.player.physicsIndex !== undefined) {
+        const playerTIdx = state.player.physicsIndex * 8;
+        state.player.position.x = TransformStore.data[playerTIdx];
+        state.player.position.y = TransformStore.data[playerTIdx + 1];
+        state.player.velocity.x = PhysicsStore.data[playerTIdx];
+        state.player.velocity.y = PhysicsStore.data[playerTIdx + 1];
+      }
     }
 
     // Audio Sync
     this.audioEngine.setListenerPosition(state.player.position.x, state.player.position.y);
     this.audioEngine.setBGMIntensity(Math.floor(state.player.matchPercent * 4));
+
+    // EIDOLON-V FIX: Update VFX System (Particles, Shake, etc)
+    vfxIntegrationManager.update(state, dt);
 
     // Check Win/Loss
     if (state.result) {
@@ -315,33 +337,47 @@ export class GameStateManager {
   }
 
   public startSession(config: GameSessionConfig): void {
-    // EIDOLON-V FIX: 1. Clean up old session
-    this.stopGameLoop();
-    this.inputManager.reset(); // SAFETY CRITICAL: Reset input to prevent "ghost" movement
+    try {
+      clientLogger.info('🎮 Starting game session', { name: config.name, level: config.level });
 
-    // EIDOLON-V FIX: 2. Setup Configuration
-    this.currentConfig = config;
+      // EIDOLON-V FIX: 1. Clean up old session
+      this.stopGameLoop();
+      this.inputManager.reset(); // SAFETY CRITICAL: Reset input to prevent "ghost" movement
 
-    // EIDOLON-V FIX: 3. Create State
-    const state = this.createInitialState(config.level);
+      // EIDOLON-V FIX: 2. Setup Configuration
+      this.currentConfig = config;
 
-    // EIDOLON-V FIX: 4. Configure Player
-    if (state.player) {
-      state.player.name = config.name;
-      state.player.shape = config.shape;
-      state.player.velocity = { x: 0, y: 0 };
-    } else {
-      console.error('CRITICAL: Player not found in initial state');
+      // EIDOLON-V FIX: 3. Create State
+      const state = this.createInitialState(config.level);
+      if (!state) {
+        throw new Error('Failed to create initial state');
+      }
+      clientLogger.info('✅ Initial state created', { playerId: state.player?.id });
+
+      // EIDOLON-V FIX: 4. Configure Player
+      if (state.player) {
+        state.player.name = config.name;
+        state.player.shape = config.shape;
+        state.player.velocity = { x: 0, y: 0 };
+        clientLogger.info('✅ Player configured', { name: config.name, shape: config.shape });
+      } else {
+        console.error('CRITICAL: Player not found in initial state');
+        throw new Error('Player not found in initial state');
+      }
+
+      // EIDOLON-V FIX: 5. Connect Networking (if valid)
+      if (config.useMultiplayer) {
+        this.networkClient.connectWithRetry(config.name, config.shape);
+        this.networkClient.setLocalState(state);
+      }
+
+      // EIDOLON-V FIX: 6. Start Loop
+      this.startGameLoop();
+      clientLogger.info('✅ Game loop started');
+    } catch (error) {
+      clientLogger.error('❌ Failed to start session', undefined, error instanceof Error ? error : undefined);
+      throw error;
     }
-
-    // EIDOLON-V FIX: 5. Connect Networking (if valid)
-    if (config.useMultiplayer) {
-      this.networkClient.connectWithRetry(config.name, config.shape);
-      this.networkClient.setLocalState(state);
-    }
-
-    // EIDOLON-V FIX: 6. Start Loop
-    this.startGameLoop();
   }
 
   // EIDOLON-V FIX: Graceful Session Teardown

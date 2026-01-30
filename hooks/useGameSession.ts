@@ -98,18 +98,27 @@ export const useGameSession = () => {
     // 4. ACTIONS
     // Core Actions defined as stable callbacks to allow internal reuse
     const startGame = useCallback((name: string, shape: ShapeId, level: number, multiplayer = false) => {
-        // EIDOLON-V FIX: Delegate to GameStateManager
-        gameStateManager.startSession({
-            name,
-            shape,
-            level,
-            useMultiplayer: multiplayer,
-            usePixi: settings.usePixi // EIDOLON-V FIX: Pass usePixi
-        });
+        try {
+            // EIDOLON-V FIX: Delegate to GameStateManager
+            gameStateManager.startSession({
+                name,
+                shape,
+                level,
+                useMultiplayer: multiplayer,
+                usePixi: settings.usePixi // EIDOLON-V FIX: Pass usePixi
+            });
 
-        gameStateRef.current = gameStateManager.getCurrentState();
+            const state = gameStateManager.getCurrentState();
+            if (!state) {
+                console.error('CRITICAL: GameState is null after startSession');
+                return;
+            }
 
-        setUi(s => ({ ...clearOverlays(s), screen: 'playing' }));
+            gameStateRef.current = state;
+            setUi(s => ({ ...clearOverlays(s), screen: 'playing' }));
+        } catch (error) {
+            console.error('Failed to start game:', error);
+        }
     }, [settings.usePixi]); // Added usePixi dependency
 
     const quitGame = useCallback(() => {

@@ -289,6 +289,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.translate(-state.camera.x, -state.camera.y);
 
       // 3. Draw Background / Rings
+      // EIDOLON-V: Draw Grid
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // Simple Grid
+      const gridSize = 300;
+      const offsetX = state.camera.x % gridSize;
+      const offsetY = state.camera.y % gridSize;
+      const startX = state.camera.x - width / 2;
+      const startY = state.camera.y - height / 2;
+
+      // Vertical Lines
+      for (let x = Math.floor(startX / gridSize) * gridSize; x < startX + width; x += gridSize) {
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, startY + height);
+      }
+      // Horizontal Lines
+      for (let y = Math.floor(startY / gridSize) * gridSize; y < startY + height; y += gridSize) {
+        ctx.moveTo(startX, y);
+        ctx.lineTo(startX + width, y);
+      }
+      ctx.stroke();
+
       if (!ringRendererRef.current) ringRendererRef.current = new Canvas2DRingRenderer();
       ringRendererRef.current.drawRings(ctx, state.gameTime);
 
@@ -300,6 +323,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.stroke();
 
       // 5. Draw Entities (Zero-GC Iteration)
+
+      // Food (Draw FIRST so it is BELOW players)
+      for (let i = 0; i < state.food.length; i++) {
+        const f = state.food[i];
+        if (f.isDead) continue;
+        ctx.save();
+        DrawStrategies.Food(ctx, f);
+        ctx.restore();
+      }
 
       // Players
       if (!state.player.isDead) {
@@ -314,15 +346,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         if (b.isDead) continue;
         ctx.save();
         DrawStrategies.Player(ctx, b); // Bots use Player strategy
-        ctx.restore();
-      }
-
-      // Food
-      for (let i = 0; i < state.food.length; i++) {
-        const f = state.food[i];
-        if (f.isDead) continue;
-        ctx.save();
-        DrawStrategies.Food(ctx, f);
         ctx.restore();
       }
 

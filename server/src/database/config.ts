@@ -47,7 +47,7 @@ export const getDatabaseConfig = (): DatabaseConfig => {
       }
     },
     redis: {
-      host: process.env.REDIS_HOST || (isDevelopment ? 'localhost' : 'redis'),
+      host: process.env.REDIS_HOST || 'localhost', // Default to localhost for local dev
       port: parseInt(process.env.REDIS_PORT || '6379'),
       password: process.env.REDIS_PASSWORD,
       db: parseInt(process.env.REDIS_DB || '0'),

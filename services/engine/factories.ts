@@ -62,6 +62,8 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
   StatsStore.set(entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
 
   // 2.3 State Flags
+  // EIDOLON-V FIX: Explicitly RESET flags to remove potential DEAD status from reused IDs
+  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
 
   // 2.4 Skill & Tattoo
@@ -208,6 +210,8 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   if (bot.physicsIndex !== undefined) {
     StateStore.clearFlag(bot.physicsIndex, EntityFlags.PLAYER);
     StateStore.setFlag(bot.physicsIndex, EntityFlags.BOT);
+    // Ensure DEAD flag is gone (redundant but safe)
+    StateStore.clearFlag(bot.physicsIndex, EntityFlags.DEAD);
     EntityLookup[bot.physicsIndex] = bot; // Update lookup to point to Bot wrapper
   }
 
@@ -303,6 +307,8 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   else if (food.kind === 'solvent') typeFlag |= EntityFlags.FOOD_SOLVENT;
   else if (food.kind === 'neutral') typeFlag |= EntityFlags.FOOD_NEUTRAL;
 
+  // EIDOLON-V FIX: Reset flags first
+  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | typeFlag);
   StatsStore.set(entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
 
@@ -366,6 +372,8 @@ export const createProjectile = (
   // DOD Stores
   TransformStore.set(entId, position.x, position.y, 0);
   PhysicsStore.set(entId, vx, vy, 0.5, 8, 0.5, 1.0);
+  // EIDOLON-V FIX: Reset flags
+  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
   StatsStore.set(entId, 1, 1, 0, 0, 0, 1);
 

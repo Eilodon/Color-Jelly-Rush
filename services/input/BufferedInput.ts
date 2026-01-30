@@ -154,11 +154,25 @@ export class BufferedInput {
     }
 
     // EIDOLON-V FIX: Direct Sync to DOD Store
-    public syncToStore(entityIndex: number): void {
+    public syncToStore(entityIndex: number, playerPosition?: { x: number; y: number }, camera?: { x: number; y: number }): void {
         if (this.isDisposed) return;
 
-        // 1. Mouse Position -> Target
-        InputStore.setTarget(entityIndex, this.mouse.x, this.mouse.y);
+        // 1. Mouse Position -> Target (Convert screen to world coordinates)
+        let targetX = this.mouse.x;
+        let targetY = this.mouse.y;
+        
+        // Convert screen coordinates to world coordinates if camera is provided
+        if (camera && playerPosition) {
+            // Screen center relative coordinates
+            const screenCenterX = window.innerWidth / 2;
+            const screenCenterY = window.innerHeight / 2;
+            const worldX = camera.x + (this.mouse.x - screenCenterX);
+            const worldY = camera.y + (this.mouse.y - screenCenterY);
+            targetX = worldX;
+            targetY = worldY;
+        }
+        
+        InputStore.setTarget(entityIndex, targetX, targetY);
 
         // 2. Skill Action (Space or Mouse Down)
         const isSkill = this.keys.has('Space') || this.isMouseDown;

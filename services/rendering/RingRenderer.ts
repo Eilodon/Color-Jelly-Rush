@@ -10,19 +10,19 @@ export class Canvas2DRingRenderer {
 
   drawRings(ctx: CanvasRenderingContext2D, gameTime: number): void {
     // Ring 1 (Outer) - Safe Zone
-    ctx.fillStyle = this.colors.r1 + '20'; // 20 = ~12% alpha
+    ctx.fillStyle = this.colors.r1 + '30'; // Increased visibility
     ctx.beginPath();
     ctx.arc(0, 0, RING_RADII.R1, 0, Math.PI * 2);
     ctx.fill();
 
     // Ring 2 (Middle) - Danger Zone
-    ctx.fillStyle = this.colors.r2 + '30';
+    ctx.fillStyle = this.colors.r2 + '40';
     ctx.beginPath();
     ctx.arc(0, 0, RING_RADII.R2, 0, Math.PI * 2);
     ctx.fill();
 
     // Ring 3 (Inner) - Combat Zone
-    ctx.fillStyle = this.colors.r3 + '40';
+    ctx.fillStyle = this.colors.r3 + '50';
     ctx.beginPath();
     ctx.arc(0, 0, RING_RADII.R3, 0, Math.PI * 2);
     ctx.fill();
