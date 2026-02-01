@@ -5,7 +5,7 @@
 
 import { gameFlowTest } from './integration/GameFlowTest';
 import { visualRegressionTest } from './e2e/VisualRegressionTest';
-import { TattooId } from '../services/cjr/cjrTypes';
+import { TattooId } from '../packages/engine/src/cjr/types';
 
 export interface TestSuiteResult {
   name: string;
@@ -394,8 +394,8 @@ export class AutomatedTestRunner {
     const matchPercent =
       Math.sqrt(
         Math.pow(mixed.r - color2.r, 2) +
-          Math.pow(mixed.g - color2.g, 2) +
-          Math.pow(mixed.b - color2.b, 2)
+        Math.pow(mixed.g - color2.g, 2) +
+        Math.pow(mixed.b - color2.b, 2)
       ) / Math.sqrt(3);
 
     return matchPercent > 0.7; // Should be > 70% match
@@ -480,42 +480,41 @@ Success Rate: ${((passedTests / totalTests) * 100).toFixed(1)}%
 Duration: ${(duration / 1000).toFixed(2)}s
 
 ${testSuites
-  .map(
-    suite => `
+        .map(
+          suite => `
 ${suite.passed ? '✅' : '❌'} ${suite.name} (${suite.type})
   Tests: ${suite.passedTests}/${suite.totalTests}
   Status: ${suite.passed ? 'PASSED' : 'FAILED'}
 `
-  )
-  .join('\n')}
+        )
+        .join('\n')}
 
 RECOMMENDATIONS:
-${
-  overallPassed
-    ? [
-        '✅ All tests passed - Ready for production deployment',
-        '✅ Game is stable and functioning correctly',
-        '✅ Consider adding more edge case tests',
-      ]
-    : [
-        '❌ Some tests failed - Review and fix issues',
-        '❌ Address failed tests before deployment',
-        '❌ Review test failures and implement fixes',
-      ]
-}
-    `;
-
-    const recommendations = overallPassed
-      ? [
+${overallPassed
+        ? [
           '✅ All tests passed - Ready for production deployment',
           '✅ Game is stable and functioning correctly',
           '✅ Consider adding more edge case tests',
         ]
-      : [
+        : [
           '❌ Some tests failed - Review and fix issues',
           '❌ Address failed tests before deployment',
           '❌ Review test failures and implement fixes',
-        ];
+        ]
+      }
+    `;
+
+    const recommendations = overallPassed
+      ? [
+        '✅ All tests passed - Ready for production deployment',
+        '✅ Game is stable and functioning correctly',
+        '✅ Consider adding more edge case tests',
+      ]
+      : [
+        '❌ Some tests failed - Review and fix issues',
+        '❌ Address failed tests before deployment',
+        '❌ Review test failures and implement fixes',
+      ];
 
     return {
       overallPassed,
