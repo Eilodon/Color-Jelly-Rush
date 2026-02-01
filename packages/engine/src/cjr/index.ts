@@ -1,0 +1,83 @@
+/**
+ * @cjr/engine - CJR Module
+ * Color Jelly Rush specific game logic
+ */
+
+// Types
+export * from './types';
+
+// Color Math
+export {
+    getColorHint,
+    calcMatchPercent,
+    calcMatchPercentFast,
+    mixPigment,
+    pigmentToInt,
+    pigmentToHex,
+    hexToInt,
+    intToHex,
+    intToRgbString,
+    getSnapAlpha,
+} from './colorMath';
+
+// Ring System
+export {
+    getRingAtPosition,
+    updateRingLogic,
+    updateRingLogicLegacy,
+    checkRingTransition,
+    type IRingEntity,
+} from './ringSystem';
+
+// Tattoos System
+export {
+    getTattooById,
+    applyTattoo,
+    triggerTattooOnSkill,
+    triggerTattooOnHit,
+    triggerTattooOnConsume,
+    triggerTattooOnUpdate,
+    getTattooChoices,
+    getAllTattoos,
+    TattooFlag,
+    StatusFlag,
+    type TattooDefinition,
+    type TattooChoice,
+    type ITattooEntity,
+    type ITattooFood,
+} from './tattoos';
+
+// Win Condition
+export {
+    updateWinConditionLogic,
+    updateWinCondition,
+    type IWinEntity,
+    type IWinState,
+    type ILevelConfig,
+} from './winCondition';
+
+// Boss Logic
+export {
+    updateBossLogic,
+    resetBossState,
+    updateBossLogicLegacy,
+    resetBossStateLegacy,
+    isRushWindowActive,
+    getRushThreshold,
+    onBossDeath,
+    type IBossEntity,
+    type IPlayerEntity,
+    type IBossState,
+} from './bossCjr';
+
+// Wave Spawner
+export {
+    updateWaveSpawner,
+    resetWaveTimers,
+    updateWaveSpawnerLegacy,
+    resetWaveTimersLegacy,
+    spawnFoodAt,
+    type IFood,
+    type IWaveState,
+    type ISpawnResult,
+} from './waveSpawner';

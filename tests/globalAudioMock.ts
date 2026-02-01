@@ -7,41 +7,75 @@
 if (typeof window !== 'undefined') {
   // Mock AudioContext constructor
   const MockAudioContext = class {
-    createGainNode() { return {} as GainNode; }
-    createOscillator() { return {} as OscillatorNode; }
-    createAnalyser() { return {} as AnalyserNode; }
-    createBiquadFilter() { return {} as BiquadFilterNode; }
-    createChannelMerger() { return {} as ChannelMergerNode; }
-    createDelayNode() { return {} as DelayNode; }
-    createConvolver() { return {} as ConvolverNode; }
-    createScriptProcessorNode() { return {} as ScriptProcessorNode; }
-    createWaveShaper() { return {} as WaveShaperNode; }
-    createPanner() { return {} as PannerNode; }
-    createPeriodicWave() { return {} as PeriodicWave; }
-    createStereoPanner() { return {} as StereoPannerNode; }
-    createDynamicsCompressor() { return {} as DynamicsCompressorNode; }
-    close() { return Promise.resolve(); }
-    resume() { return Promise.resolve(); }
-    suspend() { return Promise.resolve(); }
-    createMediaStream() { return {} as MediaStream; }
+    createGainNode() {
+      return {} as GainNode;
+    }
+    createOscillator() {
+      return {} as OscillatorNode;
+    }
+    createAnalyser() {
+      return {} as AnalyserNode;
+    }
+    createBiquadFilter() {
+      return {} as BiquadFilterNode;
+    }
+    createChannelMerger() {
+      return {} as ChannelMergerNode;
+    }
+    createDelayNode() {
+      return {} as DelayNode;
+    }
+    createConvolver() {
+      return {} as ConvolverNode;
+    }
+    createScriptProcessorNode() {
+      return {} as ScriptProcessorNode;
+    }
+    createWaveShaper() {
+      return {} as WaveShaperNode;
+    }
+    createPanner() {
+      return {} as PannerNode;
+    }
+    createPeriodicWave() {
+      return {} as PeriodicWave;
+    }
+    createStereoPanner() {
+      return {} as StereoPannerNode;
+    }
+    createDynamicsCompressor() {
+      return {} as DynamicsCompressorNode;
+    }
+    close() {
+      return Promise.resolve();
+    }
+    resume() {
+      return Promise.resolve();
+    }
+    suspend() {
+      return Promise.resolve();
+    }
+    createMediaStream() {
+      return {} as MediaStream;
+    }
     currentTime = 0;
     outputTimestamp = 0;
     sampleRate = 48000;
-    state: AudioContextState = 'suspended';
+    state: 'suspended' | 'running' | 'closed' = 'suspended';
   };
 
   // Override AudioContext
   Object.defineProperty(window, 'AudioContext', {
     value: MockAudioContext,
     configurable: true,
-    writable: true
+    writable: true,
   });
 
   // Override webkitAudioContext
   Object.defineProperty(window, 'webkitAudioContext', {
     value: MockAudioContext,
     configurable: true,
-    writable: true
+    writable: true,
   });
 
   console.log('🎵 Global AudioContext mock applied');

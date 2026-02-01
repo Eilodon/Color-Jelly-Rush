@@ -12,7 +12,7 @@ test.describe('Smoke Tests', () => {
 
   test('1. Page loads without errors', async ({ page }) => {
     const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('pageerror', error => errors.push(error.message));
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -32,10 +32,17 @@ test.describe('Smoke Tests', () => {
     await page.goto('/');
     await page.waitForSelector('canvas', { timeout: 30000 });
 
-    const playButton = page.locator('button:has-text("Play"), [data-testid="play-button"], .play-button');
+    const playButton = page.locator(
+      'button:has-text("Play"), [data-testid="play-button"], .play-button'
+    );
 
     // Button should exist and be clickable
-    if (await playButton.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (
+      await playButton
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false)
+    ) {
       await playButton.first().click();
       await page.waitForTimeout(1000);
       // Should not crash
@@ -49,7 +56,12 @@ test.describe('Smoke Tests', () => {
 
     // Try clicking play
     const playButton = page.locator('button:has-text("Play"), [data-testid="play-button"]');
-    if (await playButton.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (
+      await playButton
+        .first()
+        .isVisible({ timeout: 5000 })
+        .catch(() => false)
+    ) {
       await playButton.first().click();
       await page.waitForTimeout(2000);
     }
@@ -80,7 +92,7 @@ test.describe('Smoke Tests', () => {
     const canvas = page.locator('canvas').first();
     for (let i = 0; i < 10; i++) {
       await canvas.click({
-        position: { x: Math.random() * 600 + 100, y: Math.random() * 400 + 100 }
+        position: { x: Math.random() * 600 + 100, y: Math.random() * 400 + 100 },
       });
       await page.waitForTimeout(1000);
     }
@@ -125,7 +137,7 @@ test.describe('Smoke Tests', () => {
 
   test('8. No console errors during basic interaction', async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', (msg) => {
+    page.on('console', msg => {
       if (msg.type() === 'error') {
         errors.push(msg.text());
       }
@@ -136,17 +148,20 @@ test.describe('Smoke Tests', () => {
 
     // Basic interaction
     const playButton = page.locator('button:has-text("Play")');
-    if (await playButton.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (
+      await playButton
+        .first()
+        .isVisible({ timeout: 3000 })
+        .catch(() => false)
+    ) {
       await playButton.first().click();
     }
 
     await page.waitForTimeout(3000);
 
     // Filter out known non-critical errors
-    const criticalErrors = errors.filter(e =>
-      !e.includes('ResizeObserver') &&
-      !e.includes('net::') &&
-      !e.includes('favicon')
+    const criticalErrors = errors.filter(
+      e => !e.includes('ResizeObserver') && !e.includes('net::') && !e.includes('favicon')
     );
 
     console.log('Console errors:', criticalErrors);
@@ -166,7 +181,12 @@ test('Critical Path: Load → Play → Interact', async ({ page }) => {
 
   // Step 2: Play
   const playButton = page.locator('button:has-text("Play"), [data-testid="play-button"]');
-  if (await playButton.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+  if (
+    await playButton
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false)
+  ) {
     await playButton.first().click();
   }
   await page.waitForTimeout(2000);

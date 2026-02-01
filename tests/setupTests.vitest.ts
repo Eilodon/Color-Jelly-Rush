@@ -27,28 +27,68 @@ beforeAll(() => {
   // Setup mock AudioContext
   Object.defineProperty(window, 'AudioContext', {
     value: class MockAudioContext {
-      createGainNode() { return {} as GainNode; }
-      createOscillator() { return {} as OscillatorNode; }
-      createBiquadFilter() { return {} as BiquadFilterNode; }
-      createChannelMerger() { return {} as ChannelMergerNode; }
-      createDelayNode() { return {} as DelayNode; }
-      createConvolver() { return {} as ConvolverNode; }
-      createScriptProcessorNode() { return {} as ScriptProcessorNode; }
-      createWaveShaper() { return {} as WaveShaperNode; }
-      createPanner() { return {} as PannerNode; }
-      createPeriodicWave() { return {} as PeriodicWave; }
-      createStereoPanner() { return {} as StereoPannerNode; }
-      createDynamicsCompressor() { return {} as DynamicsCompressorNode; }
-      close() { return Promise.resolve(); }
-      resume() { return Promise.resolve(); }
-      suspend() { return Promise.resolve(); }
-      createMediaStream() { return {} as MediaStream; }
-      get currentTime() { return 0; }
-      get outputTimestamp() { return 0; }
-      get sampleRate() { return 48000; }
-      get state() { return 'suspended'; }
+      createGainNode() {
+        return {} as GainNode;
+      }
+      createOscillator() {
+        return {} as OscillatorNode;
+      }
+      createBiquadFilter() {
+        return {} as BiquadFilterNode;
+      }
+      createChannelMerger() {
+        return {} as ChannelMergerNode;
+      }
+      createDelayNode() {
+        return {} as DelayNode;
+      }
+      createConvolver() {
+        return {} as ConvolverNode;
+      }
+      createScriptProcessorNode() {
+        return {} as ScriptProcessorNode;
+      }
+      createWaveShaper() {
+        return {} as WaveShaperNode;
+      }
+      createPanner() {
+        return {} as PannerNode;
+      }
+      createPeriodicWave() {
+        return {} as PeriodicWave;
+      }
+      createStereoPanner() {
+        return {} as StereoPannerNode;
+      }
+      createDynamicsCompressor() {
+        return {} as DynamicsCompressorNode;
+      }
+      close() {
+        return Promise.resolve();
+      }
+      resume() {
+        return Promise.resolve();
+      }
+      suspend() {
+        return Promise.resolve();
+      }
+      createMediaStream() {
+        return {} as MediaStream;
+      }
+      get currentTime() {
+        return 0;
+      }
+      get outputTimestamp() {
+        return 0;
+      }
+      get sampleRate() {
+        return 48000;
+      }
+      get state() {
+        return 'suspended';
+      }
     },
-    configurable: true
+    configurable: true,
   });
 
   // Mock fetch API
@@ -69,7 +109,7 @@ beforeAll(() => {
       clone: () => Promise.resolve({} as Response),
       body: null,
       bodyUsed: false,
-      bytes: () => Promise.resolve(new Uint8Array())
+      bytes: () => Promise.resolve(new Uint8Array()),
     } as unknown as Response)
   );
 
@@ -86,10 +126,10 @@ beforeAll(() => {
     navigation: {
       redirectCount: 0,
       type: 0, // TYPE_NAVIGATE
-      toJSON: () => ({})
+      toJSON: () => ({}),
     },
     onresourcetimingbufferfull: null,
-    timeOrigin: 0
+    timeOrigin: 0,
   } as any;
 
   // Mock WebSocket
@@ -112,14 +152,14 @@ beforeAll(() => {
     onerror: null,
     onmessage: null,
     onopen: null,
-    dispatchEvent: vi.fn()
+    dispatchEvent: vi.fn(),
   }));
 
   Object.assign(MockWebSocket, {
     CONNECTING: 0,
     OPEN: 1,
     CLOSING: 2,
-    CLOSED: 3
+    CLOSED: 3,
   });
 
   global.WebSocket = MockWebSocket as any;
@@ -131,12 +171,12 @@ beforeAll(() => {
     removeItem: vi.fn(),
     clear: vi.fn(),
     length: 0,
-    key: vi.fn()
+    key: vi.fn(),
   };
 
   Object.defineProperty(window, 'localStorage', {
     value: localStorage,
-    configurable: true
+    configurable: true,
   });
 
   // Mock matchMedia
@@ -148,7 +188,7 @@ beforeAll(() => {
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
     addEventListener: vi.fn(),
-    removeEventListener: vi.fn()
+    removeEventListener: vi.fn(),
   }));
 
   // Mock performance.memory
@@ -156,9 +196,9 @@ beforeAll(() => {
     value: {
       usedJSHeapSize: 1000000,
       totalJSHeapSize: 10000,
-      jsHeapSizeLimit: 50000
+      jsHeapSizeLimit: 50000,
     },
-    configurable: true
+    configurable: true,
   });
 
   console.log('✅ Vitest test environment setup complete');
@@ -189,10 +229,10 @@ export const testUtils = {
   simulateTouch: (element: HTMLElement) => {
     const touch = new TouchEvent('touch', {
       bubbles: true,
-      cancelable: true
+      cancelable: true,
     });
     element.dispatchEvent(touch);
-  }
+  },
 };
 
 export default testUtils;

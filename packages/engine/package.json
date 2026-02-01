@@ -1,0 +1,26 @@
+{
+    "name": "@cjr/engine",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts",
+        "./events": "./src/events/index.ts",
+        "./dod": "./src/dod/index.ts",
+        "./systems": "./src/systems/index.ts",
+        "./cjr": "./src/cjr/index.ts",
+        "./config": "./src/config/index.ts",
+        "./math": "./src/math/index.ts"
+    },
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.0",
+        "vitest": "^4.0.18"
+    }
+}

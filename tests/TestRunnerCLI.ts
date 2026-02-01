@@ -118,7 +118,11 @@ async function runContinuousTests(options: TestCLIOptions = {}): Promise<void> {
 /**
  * Output test results in specified format
  */
-function outputResults(result: any, format: string | undefined, verbose: boolean | undefined): void {
+function outputResults(
+  result: any,
+  format: string | undefined,
+  verbose: boolean | undefined
+): void {
   switch (format) {
     case 'json':
       console.log(JSON.stringify(result, null, 2));
@@ -133,7 +137,9 @@ function outputResults(result: any, format: string | undefined, verbose: boolean
 
           if (suite.results) {
             suite.results.forEach((test: any) => {
-              console.log(`    <testcase name="${test.name}" classname="${test.passed ? 'passed' : 'failed'}">`);
+              console.log(
+                `    <testcase name="${test.name}" classname="${test.passed ? 'passed' : 'failed'}">`
+              );
               console.log(`      <failure message="${test.details}"/>`);
               console.log('    </testcase>');
             });

@@ -96,7 +96,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
       passedTests,
       failedTests,
       results: this.testResults,
-      summary
+      summary,
     };
   }
 
@@ -181,12 +181,13 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             }
 
             // Check if player moved
-            const moved = Math.abs(this.gameState!.player.position.x - initialPos.x) > 0.1 ||
+            const moved =
+              Math.abs(this.gameState!.player.position.x - initialPos.x) > 0.1 ||
               Math.abs(this.gameState!.player.position.y - initialPos.y) > 0.1;
 
             return moved;
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Food Consumption',
@@ -218,11 +219,12 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             // Check if score increased and pigment changed
             const scoreIncreased = this.gameState!.player.score > initialScore;
             // Pigment change is vector equality check
-            const pigmentChanged = JSON.stringify(this.gameState!.player.pigment) !== JSON.stringify(initialPigment);
+            const pigmentChanged =
+              JSON.stringify(this.gameState!.player.pigment) !== JSON.stringify(initialPigment);
 
             return scoreIncreased && pigmentChanged;
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Color Matching',
@@ -234,10 +236,13 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             updateGameState(this.gameState!, 1 / 60);
             updateClientVisuals(this.gameState!, 1 / 60);
 
-            const matchPercent = calcMatchPercent(this.gameState!.player.pigment, this.gameState!.player.targetPigment);
+            const matchPercent = calcMatchPercent(
+              this.gameState!.player.pigment,
+              this.gameState!.player.targetPigment
+            );
             return matchPercent > 0.8; // Should be > 80% match
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Ring Entry Validation',
@@ -250,9 +255,16 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
               0.8
             );
 
-            return result.canEnter === (calcMatchPercent(this.gameState!.player.pigment, this.gameState!.player.targetPigment) >= 0.8);
+            return (
+              result.canEnter ===
+              calcMatchPercent(
+                this.gameState!.player.pigment,
+                this.gameState!.player.targetPigment
+              ) >=
+                0.8
+            );
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Tattoo Application',
@@ -265,7 +277,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             // Check if tattoo was applied
             return this.gameState!.player.tattoos.includes(tattoo.id);
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Skill Cooldown',
@@ -286,9 +298,9 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
 
             return cooldownSet && skillReady;
           },
-          timeout: 2000
-        }
-      ]
+          timeout: 2000,
+        },
+      ],
     };
   }
 
@@ -321,7 +333,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             document.body.removeChild(button);
             return clicked;
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Touch Gesture Recognition',
@@ -332,16 +344,17 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
 
             return hasTouchSupport || hasPointerSupport;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Screen Orientation',
           test: async () => {
             // Test screen orientation detection
-            const orientation = screen.orientation || (screen as any).mozOrientation || (screen as any).msOrientation;
+            const orientation =
+              screen.orientation || (screen as any).mozOrientation || (screen as any).msOrientation;
             return orientation !== undefined;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Responsive Layout',
@@ -353,9 +366,9 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             // Check if reasonable dimensions
             return width > 300 && height > 400;
           },
-          timeout: 500
-        }
-      ]
+          timeout: 500,
+        },
+      ],
     };
   }
 
@@ -373,7 +386,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
             return AudioContext !== undefined;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Audio Context Creation',
@@ -388,16 +401,16 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
               return false;
             }
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Haptic Feedback Support',
           test: async () => {
             return 'vibrate' in navigator;
           },
-          timeout: 500
-        }
-      ]
+          timeout: 500,
+        },
+      ],
     };
   }
 
@@ -414,14 +427,14 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
           test: async () => {
             return 'WebSocket' in window;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Fetch API Support',
           test: async () => {
             return 'fetch' in window;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Local Storage Support',
@@ -434,9 +447,9 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
               return false;
             }
           },
-          timeout: 500
-        }
-      ]
+          timeout: 500,
+        },
+      ],
     };
   }
 
@@ -453,14 +466,14 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
           test: async () => {
             return 'requestAnimationFrame' in window;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Performance API Support',
           test: async () => {
             return 'performance' in window && 'now' in performance;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Canvas Performance',
@@ -483,9 +496,9 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
 
             return duration < 100; // Should complete in < 100ms
           },
-          timeout: 2000
-        }
-      ]
+          timeout: 2000,
+        },
+      ],
     };
   }
 
@@ -505,31 +518,36 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             const hasRoleSupport = 'role' in document.createElement('div');
             return hasAriaSupport && hasRoleSupport;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Keyboard Navigation',
           test: async () => {
             return 'addEventListener' in window && 'keydown' in window;
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'High Contrast Mode',
           test: async () => {
             // Check for high contrast mode support
-            return window.matchMedia && window.matchMedia('(prefers-contrast: high)').media !== undefined;
+            return (
+              window.matchMedia && window.matchMedia('(prefers-contrast: high)').media !== undefined
+            );
           },
-          timeout: 500
+          timeout: 500,
         },
         {
           name: 'Reduced Motion',
           test: async () => {
-            return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').media !== undefined;
+            return (
+              window.matchMedia &&
+              window.matchMedia('(prefers-reduced-motion: reduce)').media !== undefined
+            );
           },
-          timeout: 500
-        }
-      ]
+          timeout: 500,
+        },
+      ],
     };
   }
 
@@ -553,7 +571,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
               return false;
             }
           },
-          timeout: 1000
+          timeout: 1000,
         },
         {
           name: 'Currency Validation',
@@ -561,15 +579,15 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
             // Test currency formatting
             const formatter = new Intl.NumberFormat('en-US', {
               style: 'currency',
-              currency: 'USD'
+              currency: 'USD',
             });
 
             const formatted = formatter.format(9.99);
             return formatted.includes('$') && formatted.includes('9.99');
           },
-          timeout: 500
-        }
-      ]
+          timeout: 500,
+        },
+      ],
     };
   }
 
@@ -589,7 +607,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
         testFunction(),
         new Promise<boolean>((_, reject) =>
           setTimeout(() => reject(new Error('Test timeout')), timeout)
-        )
+        ),
       ]);
 
       const duration = performance.now() - startTime;
@@ -599,7 +617,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
         passed: result,
         duration,
         details: result ? 'Test passed successfully' : 'Test assertion failed',
-        errors
+        errors,
       };
     } catch (error) {
       const duration = performance.now() - startTime;
@@ -610,7 +628,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
         passed: false,
         duration,
         details: 'Test failed with error',
-        errors: [errorMessage]
+        errors: [errorMessage],
       };
     }
   }
@@ -627,7 +645,7 @@ ${passed ? '🎉 ALL TESTS PASSED!' : '⚠️  Some tests failed - review detail
       return {
         summary: 'No tests run',
         details: 'Please run test suite first',
-        recommendations: ['Run complete test suite to generate report']
+        recommendations: ['Run complete test suite to generate report'],
       };
     }
 
@@ -646,10 +664,13 @@ Success Rate: ${((passedTests.length / this.testResults.length) * 100).toFixed(1
     const details = `
 DETAILED RESULTS:
 ====================
-${this.testResults.map(result =>
+${this.testResults
+  .map(
+    result =>
       `${result.passed ? '✅' : '❌'} ${result.testName} (${result.duration.toFixed(2)}ms)
    ${result.details}`
-    ).join('\n')}
+  )
+  .join('\n')}
     `;
 
     const recommendations: string[] = [];
@@ -672,7 +693,7 @@ ${this.testResults.map(result =>
     return {
       summary,
       details,
-      recommendations
+      recommendations,
     };
   }
 }

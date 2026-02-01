@@ -19,10 +19,13 @@ async function waitForGameReady(page: Page, timeout = 30000): Promise<void> {
   await page.waitForSelector('canvas', { timeout });
 
   // Wait for game to be interactive (no loading overlay)
-  await page.waitForFunction(() => {
-    const loadingOverlay = document.querySelector('[data-testid="loading-overlay"]');
-    return !loadingOverlay || loadingOverlay.getAttribute('data-visible') === 'false';
-  }, { timeout });
+  await page.waitForFunction(
+    () => {
+      const loadingOverlay = document.querySelector('[data-testid="loading-overlay"]');
+      return !loadingOverlay || loadingOverlay.getAttribute('data-visible') === 'false';
+    },
+    { timeout }
+  );
 }
 
 /**
@@ -128,7 +131,9 @@ test.describe('Authentication Flow', () => {
     await waitForGameReady(page);
 
     // Look for play button or main menu
-    const playButton = page.locator('[data-testid="play-button"], .play-button, button:has-text("Play")');
+    const playButton = page.locator(
+      '[data-testid="play-button"], .play-button, button:has-text("Play")'
+    );
     await expect(playButton.first()).toBeVisible({ timeout: 10000 });
   });
 
@@ -137,11 +142,15 @@ test.describe('Authentication Flow', () => {
     await waitForGameReady(page);
 
     // Find and click guest/play button
-    const guestButton = page.locator('[data-testid="guest-button"], .guest-login, button:has-text("Play"), button:has-text("Guest")');
+    const guestButton = page.locator(
+      '[data-testid="guest-button"], .guest-login, button:has-text("Play"), button:has-text("Guest")'
+    );
     await guestButton.first().click();
 
     // Should proceed to character select or game
-    await expect(page.locator('[data-testid="character-select"], .shape-picker, canvas')).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator('[data-testid="character-select"], .shape-picker, canvas')
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('should persist session across page refresh', async ({ page }) => {
@@ -184,7 +193,9 @@ test.describe('Character Selection Flow', () => {
 
   test('should display shape selection options', async ({ page }) => {
     // Look for shape selection UI
-    const shapeOptions = page.locator('[data-testid="shape-option"], .shape-button, .character-option');
+    const shapeOptions = page.locator(
+      '[data-testid="shape-option"], .shape-button, .character-option'
+    );
 
     // Should have at least one shape option OR already in game
     const count = await shapeOptions.count();
@@ -194,9 +205,14 @@ test.describe('Character Selection Flow', () => {
   });
 
   test('should allow player name input', async ({ page }) => {
-    const nameInput = page.locator('[data-testid="player-name"], input[placeholder*="name" i], .name-input');
+    const nameInput = page.locator(
+      '[data-testid="player-name"], input[placeholder*="name" i], .name-input'
+    );
 
-    const isVisible = await nameInput.first().isVisible().catch(() => false);
+    const isVisible = await nameInput
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (isVisible) {
       await nameInput.first().fill('TestPlayer123');
       await expect(nameInput.first()).toHaveValue('TestPlayer123');
@@ -206,7 +222,10 @@ test.describe('Character Selection Flow', () => {
   test('should validate player name length', async ({ page }) => {
     const nameInput = page.locator('[data-testid="player-name"], input[placeholder*="name" i]');
 
-    const isVisible = await nameInput.first().isVisible().catch(() => false);
+    const isVisible = await nameInput
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (isVisible) {
       // Try to enter too long name
       await nameInput.first().fill('A'.repeat(50));
@@ -220,7 +239,10 @@ test.describe('Character Selection Flow', () => {
   test('should show shape abilities/stats preview', async ({ page }) => {
     const shapeInfo = page.locator('[data-testid="shape-info"], .shape-stats, .ability-preview');
 
-    const isVisible = await shapeInfo.first().isVisible().catch(() => false);
+    const isVisible = await shapeInfo
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (isVisible) {
       await expect(shapeInfo.first()).toBeVisible();
     }
@@ -284,13 +306,18 @@ test.describe('Gameplay Mechanics', () => {
 
   test('should display HUD elements', async ({ page }) => {
     // Look for common HUD elements
-    const hudElements = page.locator('[data-testid="hud"], .hud, .game-ui, .score-display, .health-bar');
+    const hudElements = page.locator(
+      '[data-testid="hud"], .hud, .game-ui, .score-display, .health-bar'
+    );
 
     // Wait a bit for HUD to render
     await page.waitForTimeout(2000);
 
     // At least some HUD element should be visible (or game is fullscreen canvas-only)
-    const hudVisible = await hudElements.first().isVisible().catch(() => false);
+    const hudVisible = await hudElements
+      .first()
+      .isVisible()
+      .catch(() => false);
     const canvasVisible = await page.locator('canvas').isVisible();
 
     expect(hudVisible || canvasVisible).toBe(true);
@@ -318,9 +345,11 @@ test.describe('Gameplay Mechanics', () => {
 
     for (let i = 0; i < 5; i++) {
       const fps = await page.evaluate(() => {
-        return (window as any).__GAME_FPS__ ||
+        return (
+          (window as any).__GAME_FPS__ ||
           (window as any).performanceMonitor?.getMetrics?.()?.fps ||
-          60; // Default if not exposed
+          60
+        ); // Default if not exposed
       });
       fpsSamples.push(fps);
       await page.waitForTimeout(1000);
@@ -374,9 +403,14 @@ test.describe('Multiplayer Features', () => {
   test('should display other players', async ({ page }) => {
     // This would require multiple browser contexts
     // Simplified version: check if multiplayer UI exists
-    const multiplayerUI = page.locator('[data-testid="player-count"], .leaderboard, .other-players');
+    const multiplayerUI = page.locator(
+      '[data-testid="player-count"], .leaderboard, .other-players'
+    );
 
-    const isVisible = await multiplayerUI.first().isVisible().catch(() => false);
+    const isVisible = await multiplayerUI
+      .first()
+      .isVisible()
+      .catch(() => false);
     // Just check it doesn't crash when looking for multiplayer elements
     expect(true).toBe(true);
   });
@@ -390,8 +424,13 @@ test.describe('Multiplayer Features', () => {
     await page.waitForTimeout(2000);
 
     // Check for reconnection UI or graceful degradation
-    const reconnectUI = page.locator('[data-testid="reconnecting"], .connection-lost, .offline-mode');
-    const isVisible = await reconnectUI.first().isVisible().catch(() => false);
+    const reconnectUI = page.locator(
+      '[data-testid="reconnecting"], .connection-lost, .offline-mode'
+    );
+    const isVisible = await reconnectUI
+      .first()
+      .isVisible()
+      .catch(() => false);
 
     // Restore online
     await page.context().setOffline(false);
@@ -432,7 +471,10 @@ test.describe('Game End Flow', () => {
     await page.waitForTimeout(2000);
 
     const gameOverUI = page.locator('[data-testid="game-over"], .game-over, .death-screen');
-    const isVisible = await gameOverUI.first().isVisible().catch(() => false);
+    const isVisible = await gameOverUI
+      .first()
+      .isVisible()
+      .catch(() => false);
 
     // Either game over shows or game is still running (no crash)
     expect(true).toBe(true);
@@ -442,15 +484,23 @@ test.describe('Game End Flow', () => {
     // Similar to above - check for score display
     const scoreDisplay = page.locator('[data-testid="final-score"], .score, .result-score');
 
-    const isVisible = await scoreDisplay.first().isVisible().catch(() => false);
+    const isVisible = await scoreDisplay
+      .first()
+      .isVisible()
+      .catch(() => false);
     // Just verify no crash
     expect(true).toBe(true);
   });
 
   test('should allow replay after game over', async ({ page }) => {
-    const replayButton = page.locator('[data-testid="replay-button"], button:has-text("Play Again"), button:has-text("Retry")');
+    const replayButton = page.locator(
+      '[data-testid="replay-button"], button:has-text("Play Again"), button:has-text("Retry")'
+    );
 
-    const isVisible = await replayButton.first().isVisible().catch(() => false);
+    const isVisible = await replayButton
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (isVisible) {
       await replayButton.first().click();
       await page.waitForTimeout(2000);
@@ -509,9 +559,9 @@ test.describe('Performance & Stability', () => {
       await canvas.click({
         position: {
           x: Math.random() * 800,
-          y: Math.random() * 600
+          y: Math.random() * 600,
         },
-        delay: 10
+        delay: 10,
       });
     }
 
@@ -535,7 +585,10 @@ test.describe('Performance & Stability', () => {
 
     // Look for pause menu
     const pauseMenu = page.locator('[data-testid="pause-menu"], .pause-overlay, .paused');
-    const isPaused = await pauseMenu.first().isVisible().catch(() => false);
+    const isPaused = await pauseMenu
+      .first()
+      .isVisible()
+      .catch(() => false);
 
     // Resume
     await page.keyboard.press('Escape');
@@ -567,10 +620,15 @@ test.describe('Mobile Experience', () => {
     await page.waitForTimeout(2000);
 
     // Look for mobile controls (joystick, buttons)
-    const mobileControls = page.locator('[data-testid="mobile-controls"], .mobile-joystick, .touch-controls');
+    const mobileControls = page.locator(
+      '[data-testid="mobile-controls"], .mobile-joystick, .touch-controls'
+    );
 
     // Either mobile controls exist or game uses touch-on-canvas
-    const hasControls = await mobileControls.first().isVisible().catch(() => false);
+    const hasControls = await mobileControls
+      .first()
+      .isVisible()
+      .catch(() => false);
     const hasCanvas = await page.locator('canvas').isVisible();
 
     expect(hasControls || hasCanvas).toBe(true);
@@ -588,11 +646,11 @@ test.describe('Mobile Experience', () => {
 
     // Touch drag
     await canvas.dispatchEvent('touchstart', {
-      touches: [{ clientX: 200, clientY: 300 }]
+      touches: [{ clientX: 200, clientY: 300 }],
     });
     await page.waitForTimeout(100);
     await canvas.dispatchEvent('touchmove', {
-      touches: [{ clientX: 400, clientY: 400 }]
+      touches: [{ clientX: 400, clientY: 400 }],
     });
     await page.waitForTimeout(100);
     await canvas.dispatchEvent('touchend', {});

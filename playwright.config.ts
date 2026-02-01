@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: [
     ['html', { outputFolder: 'playwright-report' }],
     ['json', { outputFile: 'test-results/e2e-results.json' }],
-    ['list']
+    ['list'],
   ],
 
   use: {

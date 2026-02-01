@@ -3,12 +3,9 @@
     "target": "ES2022",
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
+    "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -16,9 +13,9 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "@services/*": ["./services/*"],
+      "@components/*": ["./components/*"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true,
@@ -33,11 +30,5 @@
     "types/**/*",
     "tests/**/*"
   ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "server",
-    "infrastructure",
-    "k8s"
-  ]
+  "exclude": ["node_modules", "dist", "server", "infrastructure", "k8s", "eslint.config.js"]
 }

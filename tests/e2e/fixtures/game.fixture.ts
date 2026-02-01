@@ -112,7 +112,12 @@ export const test = base.extend<{
     // Auto-login if enabled
     if (gameOptions.autoLogin) {
       const playButton = page.locator('button:has-text("Play"), [data-testid="play-button"]');
-      if (await playButton.first().isVisible({ timeout: 5000 }).catch(() => false)) {
+      if (
+        await playButton
+          .first()
+          .isVisible({ timeout: 5000 })
+          .catch(() => false)
+      ) {
         await playButton.first().click();
         await page.waitForTimeout(2000);
       }
@@ -139,7 +144,10 @@ export async function waitForGameEvent(
   return await page.evaluate(
     ({ eventName, timeout }) => {
       return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`Timeout waiting for ${eventName}`)), timeout);
+        const timer = setTimeout(
+          () => reject(new Error(`Timeout waiting for ${eventName}`)),
+          timeout
+        );
 
         const handler = (event: any) => {
           clearTimeout(timer);
@@ -168,7 +176,10 @@ export async function captureGameState(page: Page, name: string): Promise<void> 
         health: gameState.player?.currentHealth,
         score: gameState.player?.score,
       },
-      entityCount: (gameState.players?.length || 0) + (gameState.bots?.length || 0) + (gameState.food?.length || 0),
+      entityCount:
+        (gameState.players?.length || 0) +
+        (gameState.bots?.length || 0) +
+        (gameState.food?.length || 0),
       gameTime: gameState.gameTime,
     };
   });
@@ -208,13 +219,13 @@ export async function simulatePlayerSession(page: Page, durationMs: number): Pro
 export async function collectConsoleErrors(page: Page): Promise<string[]> {
   const errors: string[] = [];
 
-  page.on('console', (msg) => {
+  page.on('console', msg => {
     if (msg.type() === 'error') {
       errors.push(msg.text());
     }
   });
 
-  page.on('pageerror', (error) => {
+  page.on('pageerror', error => {
     errors.push(error.message);
   });
 

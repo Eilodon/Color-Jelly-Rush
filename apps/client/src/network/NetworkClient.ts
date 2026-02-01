@@ -1,0 +1,776 @@
+/// <reference types="vite/client" />
+import * as Colyseus from 'colyseus.js';
+import type { Room } from 'colyseus.js';
+import type { GameState, Player, Bot, Food, Projectile, Vector2 } from '../../types';
+import type { PigmentVec3, ShapeId, Emotion, PickupKind, TattooId } from '../cjr/cjrTypes';
+import {
+  createDefaultStatusTimers,
+  createDefaultStatusMultipliers,
+  createDefaultStatusScalars,
+} from '../../types/status';
+import { StatusFlag } from '../engine/statusFlags';
+// EIDOLON-V PHASE3: Import BinaryPacker from @cjr/engine
+import { BinaryPacker } from '@cjr/engine/networking';
+import { MovementSystem } from '@cjr/engine/systems';
+import { PhysicsSystem } from '@cjr/engine/systems';
+import { TransformStore, PhysicsStore } from '@cjr/engine';
+import { InputRingBuffer } from './InputRingBuffer';
+import { clientLogger } from '../logging/ClientLogger';
+
+// EIDOLON-V P4: Module-level reusable vectors (zero allocation after init)
+const _serverPos = { x: 0, y: 0 };
+const _resimVel = { x: 0, y: 0 };
+const _replayTarget = { x: 0, y: 0 };
+const _replayInput = { seq: 0, targetX: 0, targetY: 0, space: false, w: false, dt: 0 };
+
+interface NetworkConfig {
+  serverUrl: string;
+  reconnectAttempts: number;
+}
+
+const DEFAULT_CONFIG: NetworkConfig = {
+  serverUrl: import.meta.env.VITE_GAME_SERVER_URL || 'ws://localhost:2567',
+  reconnectAttempts: 5,
+};
+
+export type NetworkStatus = 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error';
+
+type EntitySnapshot = {
+  x: number;
+  y: number;
+  vx?: number;
+  vy?: number;
+  radius?: number;
+};
+
+type NetworkSnapshot = {
+  time: number;
+  players: Map<string, EntitySnapshot>;
+  bots: Map<string, EntitySnapshot>;
+  food: Map<string, EntitySnapshot>;
+};
+
+export class NetworkClient {
+  private config: NetworkConfig;
+  private room: Room | null = null;
+  private client: Colyseus.Client;
+
+  // Local GameState reference to sync into
+  private localState?: GameState;
+  private playerMap: Map<string, Player> = new Map();
+  private botMap: Map<string, Bot> = new Map();
+  private foodMap: Map<string, Food> = new Map();
+
+  // EIDOLON-V P4: Zero-Allocation Input Buffer
+  private pendingInputs = new InputRingBuffer(256);
+  private inputSeq: number = 0;
+
+  private reconcileThreshold = 20; // 20px allowance
+  private statusListener?: (status: NetworkStatus) => void;
+  private lastCredentials?: { name: string; shape: ShapeId };
+  private isConnecting = false;
+  private autoReconnect = true;
+  // EIDOLON ARCHITECT: Ring Buffer for Zero-Allocation Snapshot Management
+  private static readonly SNAPSHOT_BUFFER_SIZE = 20;
+  private snapshotBuffer: NetworkSnapshot[];
+  private snapshotHead = 0; // Circular write index
+  private snapshotCount = 0; // Number of valid snapshots (0 to SNAPSHOT_BUFFER_SIZE)
+  private interpolationDelayMs = 100;
+
+  constructor(config: Partial<NetworkConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.client = new Colyseus.Client(this.config.serverUrl);
+
+    // EIDOLON ARCHITECT: Pre-allocate ring buffer with pooled objects
+    this.snapshotBuffer = Array.from({ length: NetworkClient.SNAPSHOT_BUFFER_SIZE }, () => ({
+      time: 0,
+      players: new Map<string, EntitySnapshot>(),
+      bots: new Map<string, EntitySnapshot>(),
+      food: new Map<string, EntitySnapshot>(),
+    }));
+  }
+
+  setLocalState(state: GameState) {
+    this.localState = state;
+  }
+
+  setStatusListener(listener?: (status: NetworkStatus) => void) {
+    this.statusListener = listener;
+  }
+
+  enableAutoReconnect(enabled: boolean) {
+    this.autoReconnect = enabled;
+  }
+
+  private emitStatus(status: NetworkStatus) {
+    if (this.statusListener) this.statusListener(status);
+  }
+
+  private nowMs() {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  async connectWithRetry(playerName: string, shape: ShapeId): Promise<boolean> {
+    if (this.isConnecting) return false;
+    this.isConnecting = true;
+    this.lastCredentials = { name: playerName, shape };
+    this.emitStatus('connecting');
+
+    for (let attempt = 0; attempt < this.config.reconnectAttempts; attempt++) {
+      const ok = await this.connect(playerName, shape);
+      if (ok) {
+        this.emitStatus('online');
+        this.isConnecting = false;
+        return true;
+      }
+      this.emitStatus('reconnecting');
+      await new Promise(resolve => setTimeout(resolve, 800 + attempt * 400));
+    }
+
+    this.emitStatus('error');
+    this.isConnecting = false;
+    return false;
+  }
+
+  async connect(playerName: string, shape: ShapeId): Promise<boolean> {
+    try {
+      this.room = await this.client.joinOrCreate('game', {
+        name: playerName,
+        shape: shape,
+      });
+      // Reset ring buffer on new connection
+      this.snapshotHead = 0;
+      this.snapshotCount = 0;
+      clientLogger.info('Connected to CJR Server', { sessionId: this.room.sessionId });
+
+      this.setupRoomListeners();
+      return true;
+    } catch (e) {
+      clientLogger.error('Connection failed', undefined, e as Error);
+      return false;
+    }
+  }
+
+  private handleBinaryUpdate(buffer: any) {
+    // EIDOLON-V Phase 2: SSOT - Write ONLY to PhysicsWorld (DOD stores via buffer)
+    // Objects are synced via syncBatchFromDOD at render time
+    const data = typeof buffer === 'object' && buffer.buffer ? buffer.buffer : buffer;
+
+    const timestamp = BinaryPacker.unpackAndApply(data, (id, x, y, vx, vy) => {
+      // SSOT: Queue to PhysicsWorld ONLY (no direct object writes)
+      if (this.localState?.engine.physicsWorld) {
+        this.localState.engine.physicsWorld.syncBody(id, x, y, vx, vy);
+      }
+    });
+
+    // Invalid packet - abort
+    if (timestamp === null) return;
+  }
+
+  async disconnect() {
+    if (this.room) {
+      await this.room.leave();
+      this.room = null;
+    }
+    // Reset ring buffer on disconnect
+    this.snapshotHead = 0;
+    this.snapshotCount = 0;
+    this.emitStatus('offline');
+  }
+
+  private setupRoomListeners() {
+    if (!this.room) return;
+
+    this.room.onLeave(() => {
+      if (this.autoReconnect && this.lastCredentials) {
+        this.connectWithRetry(this.lastCredentials.name, this.lastCredentials.shape);
+      } else {
+        this.emitStatus('offline');
+      }
+    });
+
+    this.room.onError(() => {
+      if (this.autoReconnect && this.lastCredentials) {
+        this.emitStatus('reconnecting');
+        this.connectWithRetry(this.lastCredentials.name, this.lastCredentials.shape);
+      } else {
+        this.emitStatus('error');
+      }
+    });
+
+    this.room.onStateChange((state: any) => {
+      if (!this.localState) return;
+
+      this.syncPlayers(state.players);
+
+      // Sync Bots as array
+      // We need to map MapSchema to our Array
+      this.syncBots(state.bots); // Bots
+      this.syncFood(state.food); // Food
+      this.localState.gameTime = state.gameTime ?? this.localState.gameTime;
+      this.pushSnapshot(state);
+    });
+
+    this.room.onMessage('bin', (message: any) => {
+      this.handleBinaryUpdate(message);
+    });
+  }
+
+  private syncPlayers(serverPlayers: any) {
+    if (!this.localState || !this.room) return;
+
+    const activeIds = new Set<string>();
+
+    // O(N) Iteration over server state
+    serverPlayers.forEach((sPlayer: any, sessionId: string) => {
+      activeIds.add(sessionId);
+      let localPlayer = this.playerMap.get(sessionId);
+
+      if (!localPlayer) {
+        // Create new player (Once)
+        localPlayer = {
+          id: sessionId,
+          // ... (Initialize with server values)
+          position: { x: sPlayer.position.x, y: sPlayer.position.y },
+          velocity: { x: sPlayer.velocity.x, y: sPlayer.velocity.y },
+          radius: sPlayer.radius,
+          color: '#ffffff',
+          isDead: sPlayer.isDead,
+          name: sPlayer.name,
+          score: sPlayer.score,
+          kills: sPlayer.kills,
+          maxHealth: sPlayer.maxHealth,
+          currentHealth: sPlayer.currentHealth,
+          tier: 0 as any,
+          targetPosition: { x: sPlayer.position.x, y: sPlayer.position.y },
+          spawnTime: 0,
+          pigment: { r: sPlayer.pigment.r, g: sPlayer.pigment.g, b: sPlayer.pigment.b },
+          targetPigment: {
+            r: sPlayer.targetPigment.r,
+            g: sPlayer.targetPigment.g,
+            b: sPlayer.targetPigment.b,
+          },
+          matchPercent: sPlayer.matchPercent,
+          ring: sPlayer.ring,
+          emotion: sPlayer.emotion,
+          shape: sPlayer.shape,
+          tattoos: [...(sPlayer.tattoos ?? [])],
+          statusFlags: sPlayer.statusFlags || 0,
+          tattooFlags: 0, // Sync if available
+          extendedFlags: 0,
+          statusTimers: createDefaultStatusTimers(),
+          statusMultipliers: createDefaultStatusMultipliers(),
+          statusScalars: createDefaultStatusScalars(),
+
+          // Defaults to avoid nulls
+          lastHitTime: 0,
+          lastEatTime: 0,
+          matchStuckTime: 0,
+          ring3LowMatchTime: 0,
+          emotionTimer: 0,
+          acceleration: 1,
+          maxSpeed: 1,
+          friction: 1,
+          isInvulnerable: false,
+          skillCooldown: 0,
+          maxSkillCooldown: 5,
+          defense: 1,
+          damageMultiplier: 1,
+          critChance: 0,
+          critMultiplier: 1,
+          lifesteal: 0,
+          armorPen: 0,
+          reflectDamage: 0,
+          visionMultiplier: 1,
+          sizePenaltyMultiplier: 1,
+          skillCooldownMultiplier: 1,
+          skillPowerMultiplier: 1,
+          skillDashMultiplier: 1,
+          killGrowthMultiplier: 1,
+          poisonOnHit: false,
+          doubleCast: false,
+          reviveAvailable: false,
+          magneticFieldRadius: 0,
+          mutationCooldowns: {
+            speedSurge: 0,
+            invulnerable: 0,
+            rewind: 0,
+            lightning: 0,
+            chaos: 0,
+            kingForm: 0,
+          },
+          rewindHistory: [],
+          stationaryTime: 0,
+        } as unknown as Player; // Cast for now
+
+        this.playerMap.set(sessionId, localPlayer);
+        this.localState!.players.push(localPlayer);
+
+        // EIDOLON-V FIX: Sync to PhysicsWorld
+        localPlayer.physicsIndex = this.localState!.engine.physicsWorld.addBody(
+          sessionId,
+          localPlayer.position.x,
+          localPlayer.position.y,
+          localPlayer.radius,
+          1, // Mass (calculated later or defaulting) - TODO: Calculate mass properly
+          true
+        );
+      }
+
+      // Sync Properties (O(1)) - STATS ONLY, NO POSITION
+      localPlayer.score = sPlayer.score;
+      localPlayer.currentHealth = sPlayer.currentHealth;
+      localPlayer.kills = sPlayer.kills;
+      localPlayer.matchPercent = sPlayer.matchPercent;
+      localPlayer.ring = sPlayer.ring;
+      localPlayer.emotion = sPlayer.emotion as Emotion;
+      localPlayer.isDead = sPlayer.isDead;
+      localPlayer.radius = sPlayer.radius;
+
+      // Local Player Reconciliation (uses server authoritative position)
+      if (sessionId === this.room?.sessionId) {
+        this.reconcileLocalPlayer(localPlayer, sPlayer);
+        this.localState!.player = localPlayer;
+      }
+      // EIDOLON-V FIX: REMOVED position sync for remote players
+      // Position now comes ONLY via binary channel (handleBinaryUpdate)
+      // This eliminates the dual-write race condition
+    });
+
+    // Cleanup Dead (O(M) where M is local count)
+    if (this.playerMap.size > activeIds.size) {
+      for (const [id, p] of this.playerMap) {
+        if (!activeIds.has(id)) {
+          p.isDead = true;
+          this.localState!.engine.physicsWorld.removeBody(id); // EIDOLON-V FIX: Remove from PhysicsWorld
+          this.playerMap.delete(id);
+        }
+      }
+      // Rebuild array only when size mismatches
+      this.localState.players = Array.from(this.playerMap.values());
+    }
+  }
+
+  private reconcileLocalPlayer(localPlayer: Player, sPlayer: any) {
+    const lastProcessed = sPlayer.lastProcessedInput || 0;
+
+    // EIDOLON-V P4: In-place filtering (zero allocation)
+    this.pendingInputs.filterProcessed(lastProcessed);
+
+    // EIDOLON-V P4: Reuse module-level vectors instead of creating new objects
+    _serverPos.x = sPlayer.position.x;
+    _serverPos.y = sPlayer.position.y;
+    _resimVel.x = sPlayer.velocity.x;
+    _resimVel.y = sPlayer.velocity.y;
+
+    // 2. Re-simulate Pending Inputs
+    // We need access to PhysicsWorld for map constraints, but simplistic re-sim is okay if map is simple.
+    // However, we enabled 'integrateEntity' in PhysicsSystem for this.
+    // But PhysicsSystem writes to Stores. We shouldn't mess up global stores if possible,
+    // OR we accept that Local Player IS in the store and we update it.
+
+    const world = this.localState?.engine.physicsWorld;
+    if (world && localPlayer.physicsIndex !== undefined) {
+      // Sync Server State to DOD
+      TransformStore.set(
+        localPlayer.physicsIndex,
+        _serverPos.x,
+        _serverPos.y,
+        0,
+        localPlayer.radius
+      );
+      PhysicsStore.set(localPlayer.physicsIndex, _resimVel.x, _resimVel.y, 1, localPlayer.radius);
+
+      // EIDOLON-V P4: Zero-allocation replay loop
+      this.pendingInputs.forEach((seq, targetX, targetY, space, w, dt) => {
+        _replayTarget.x = targetX;
+        _replayTarget.y = targetY;
+
+        MovementSystem.applyInputDOD(
+          localPlayer.physicsIndex!,
+          _replayTarget,
+          {
+            maxSpeed: localPlayer.maxSpeed,
+            speedMultiplier: localPlayer.statusMultipliers.speed || 1,
+          },
+          dt
+        );
+        PhysicsSystem.integrateEntity(localPlayer.physicsIndex!, dt, 0.9);
+      });
+
+      // Read final Re-simulated state
+      const finalX = TransformStore.data[localPlayer.physicsIndex * 8];
+      const finalY = TransformStore.data[localPlayer.physicsIndex * 8 + 1];
+      const finalVx = PhysicsStore.data[localPlayer.physicsIndex * 8];
+      const finalVy = PhysicsStore.data[localPlayer.physicsIndex * 8 + 1];
+
+      // Check divergence
+      const dx = localPlayer.position.x - finalX;
+      const dy = localPlayer.position.y - finalY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq > this.reconcileThreshold * this.reconcileThreshold) {
+        // Error too large, Snap to Re-simulated
+        // Todo: Implement Smooth correction via visual offset
+        localPlayer.position.x = finalX;
+        localPlayer.position.y = finalY;
+        localPlayer.velocity.x = finalVx;
+        localPlayer.velocity.y = finalVy;
+      } else {
+        // Smoothly converge (Lerp)
+        // localPlayer.position.x += (finalX - localPlayer.position.x) * 0.1;
+        // localPlayer.position.y += (finalY - localPlayer.position.y) * 0.1;
+        // Actually, if error is small, just keep local (it's smoother).
+        // But we should drift towards correct.
+        localPlayer.position.x = finalX; // For now snap if prediction verified (it prevents drift)
+        localPlayer.position.y = finalY;
+        localPlayer.velocity.x = finalVx;
+        localPlayer.velocity.y = finalVy;
+      }
+    } else {
+      // Fallback if no physics world (shouldn't happen)
+      localPlayer.position.x = sPlayer.position.x;
+      localPlayer.position.y = sPlayer.position.y;
+    }
+  }
+
+  private syncBots(serverBots: any) {
+    if (!this.localState) return;
+
+    const activeIds = new Set<string>();
+
+    serverBots.forEach((sBot: any, id: string) => {
+      activeIds.add(id);
+      let localBot = this.botMap.get(id);
+
+      if (!localBot) {
+        // Create new
+        localBot = {
+          id: sBot.id,
+          position: { x: sBot.position.x, y: sBot.position.y },
+          velocity: { x: sBot.velocity.x, y: sBot.velocity.y },
+          radius: sBot.radius,
+          color: '#fff',
+          isDead: sBot.isDead,
+          name: sBot.name,
+          score: sBot.score,
+          kills: sBot.kills,
+          maxHealth: sBot.maxHealth,
+          currentHealth: sBot.currentHealth,
+          pigment: { r: sBot.pigment.r, g: sBot.pigment.g, b: sBot.pigment.b },
+          targetPigment: {
+            r: sBot.targetPigment.r,
+            g: sBot.targetPigment.g,
+            b: sBot.targetPigment.b,
+          },
+          matchPercent: sBot.matchPercent,
+          ring: sBot.ring,
+          emotion: sBot.emotion,
+          shape: sBot.shape,
+          statusEffects: { ...sBot.statusEffects },
+          aiState: 'wander',
+          personality: 'farmer',
+          targetEntityId: null,
+          aiReactionTimer: 0,
+          tattoos: [],
+          tier: 0 as any,
+          isInvulnerable: false,
+        } as unknown as Bot;
+
+        this.botMap.set(id, localBot);
+        this.localState!.bots.push(localBot);
+
+        // EIDOLON-V FIX: Sync to PhysicsWorld
+        localBot.physicsIndex = this.localState!.engine.physicsWorld.addBody(
+          id,
+          localBot.position.x,
+          localBot.position.y,
+          localBot.radius,
+          1, // Mass
+          true
+        );
+      }
+
+      // EIDOLON-V FIX: STATS ONLY - NO POSITION WRITES
+      // Position now comes ONLY via binary channel (handleBinaryUpdate)
+      localBot.currentHealth = sBot.currentHealth;
+      localBot.isDead = sBot.isDead;
+      localBot.pigment = sBot.pigment;
+      localBot.emotion = sBot.emotion;
+      localBot.radius = sBot.radius;
+      // REMOVED: position, velocity, syncBody (binary channel handles these)
+    });
+
+    // Cleanup Dead
+    if (this.botMap.size > activeIds.size) {
+      for (const [id, b] of this.botMap) {
+        if (!activeIds.has(id)) {
+          b.isDead = true;
+          this.localState!.engine.physicsWorld.removeBody(id); // EIDOLON-V FIX: Remove from PhysicsWorld
+          this.botMap.delete(id);
+        }
+      }
+      this.localState.bots = Array.from(this.botMap.values());
+    }
+  }
+
+  private syncFood(serverFood: any) {
+    if (!this.localState) return;
+
+    const activeIds = new Set<string>();
+
+    serverFood.forEach((sFood: any, id: string) => {
+      activeIds.add(id);
+      let localFood = this.foodMap.get(id);
+
+      if (!localFood) {
+        localFood = {
+          id: sFood.id,
+          position: { x: sFood.x, y: sFood.y },
+          velocity: { x: 0, y: 0 },
+          radius: sFood.radius,
+          color: 0xffffff,
+          isDead: sFood.isDead,
+          value: sFood.value,
+          kind: sFood.kind as PickupKind,
+          pigment: { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b },
+        };
+        this.foodMap.set(id, localFood);
+        this.localState!.food.push(localFood);
+      }
+
+      if (sFood.isDead) localFood.isDead = true;
+      if (localFood) {
+        localFood.radius = sFood.radius;
+        localFood.kind = sFood.kind as PickupKind;
+        localFood.pigment = { r: sFood.pigment.r, g: sFood.pigment.g, b: sFood.pigment.b };
+      }
+    });
+
+    if (this.foodMap.size > activeIds.size) {
+      for (const [id, f] of this.foodMap) {
+        if (!activeIds.has(id)) {
+          f.isDead = true;
+          this.foodMap.delete(id);
+        }
+      }
+      this.localState.food = Array.from(this.foodMap.values());
+    }
+  }
+
+  // EIDOLON ARCHITECT: Zero-Allocation Ring Buffer Write
+  private pushSnapshot(state: any) {
+    // Reuse existing snapshot object from ring buffer
+    const snapshot = this.snapshotBuffer[this.snapshotHead];
+    snapshot.time = this.nowMs();
+
+    // Clear Maps (reusing Map objects - no allocation)
+    snapshot.players.clear();
+    snapshot.bots.clear();
+    snapshot.food.clear();
+
+    // Populate Maps with entity data (Map.set reuses internal structure)
+    state.players.forEach((p: any, id: string) => {
+      snapshot.players.set(id, {
+        x: p.position.x,
+        y: p.position.y,
+        vx: p.velocity.x,
+        vy: p.velocity.y,
+        radius: p.radius,
+      });
+    });
+
+    state.bots.forEach((b: any, id: string) => {
+      snapshot.bots.set(id, {
+        x: b.position.x,
+        y: b.position.y,
+        vx: b.velocity.x,
+        vy: b.velocity.y,
+        radius: b.radius,
+      });
+    });
+
+    state.food.forEach((f: any, id: string) => {
+      snapshot.food.set(id, {
+        x: f.x,
+        y: f.y,
+        radius: f.radius,
+      });
+    });
+
+    // Advance circular index (no array operations)
+    this.snapshotHead = (this.snapshotHead + 1) % NetworkClient.SNAPSHOT_BUFFER_SIZE;
+    this.snapshotCount = Math.min(this.snapshotCount + 1, NetworkClient.SNAPSHOT_BUFFER_SIZE);
+  }
+
+  // EIDOLON ARCHITECT: Ring Buffer Interpolation (Zero Allocation)
+  interpolateState(state: GameState, now: number = this.nowMs()) {
+    if (this.snapshotCount === 0) return;
+
+    const renderTime = now - this.interpolationDelayMs;
+    const localId = this.room?.sessionId;
+
+    // Find two snapshots that bracket renderTime
+    // Traverse ring buffer backwards from most recent (head - 1)
+    let olderIdx = -1;
+    let newerIdx = -1;
+
+    for (let i = 0; i < this.snapshotCount; i++) {
+      // Calculate index: walk backwards from head
+      const idx =
+        (this.snapshotHead - 1 - i + NetworkClient.SNAPSHOT_BUFFER_SIZE) %
+        NetworkClient.SNAPSHOT_BUFFER_SIZE;
+      const snap = this.snapshotBuffer[idx];
+
+      if (snap.time <= renderTime) {
+        newerIdx = idx;
+        // Look one step further back for older snapshot
+        if (i + 1 < this.snapshotCount) {
+          olderIdx =
+            (this.snapshotHead - 2 - i + NetworkClient.SNAPSHOT_BUFFER_SIZE) %
+            NetworkClient.SNAPSHOT_BUFFER_SIZE;
+        }
+        break;
+      }
+    }
+
+    // No suitable snapshot found
+    if (newerIdx === -1) {
+      // Use most recent snapshot as fallback
+      const mostRecentIdx =
+        (this.snapshotHead - 1 + NetworkClient.SNAPSHOT_BUFFER_SIZE) %
+        NetworkClient.SNAPSHOT_BUFFER_SIZE;
+      this.applySnapshot(state, this.snapshotBuffer[mostRecentIdx], localId);
+      return;
+    }
+
+    if (olderIdx === -1) {
+      // Only one snapshot available, apply directly
+      this.applySnapshot(state, this.snapshotBuffer[newerIdx], localId);
+    } else {
+      // Interpolate between two snapshots
+      const older = this.snapshotBuffer[olderIdx];
+      const newer = this.snapshotBuffer[newerIdx];
+      const span = newer.time - older.time;
+      const t = span > 0 ? Math.min(1, Math.max(0, (renderTime - older.time) / span)) : 1;
+      this.applyInterpolatedSnapshot(state, older, newer, t, localId);
+    }
+  }
+
+  private applyInterpolatedSnapshot(
+    state: GameState,
+    older: NetworkSnapshot,
+    newer: NetworkSnapshot,
+    t: number,
+    excludeId?: string
+  ) {
+    this.applyEntityInterpolation(state.players, older.players, newer.players, t, excludeId);
+    this.applyEntityInterpolation(state.bots, older.bots, newer.bots, t, excludeId);
+    this.applyFoodInterpolation(state.food, older.food, newer.food, t);
+  }
+
+  private applySnapshot(state: GameState, snapshot: NetworkSnapshot, excludeId?: string) {
+    this.applyEntitySnapshot(state.players, snapshot.players, excludeId);
+    this.applyEntitySnapshot(state.bots, snapshot.bots, excludeId);
+    this.applyFoodSnapshot(state.food, snapshot.food);
+  }
+
+  private applyEntitySnapshot(
+    entities: Array<Player | Bot>,
+    snapshot: Map<string, EntitySnapshot>,
+    excludeId?: string
+  ) {
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n) if not found
+    snapshot.forEach((data, id) => {
+      if (id === excludeId) return; // SKIP LOCAL
+      let entity = this.playerMap.get(id) || this.botMap.get(id);
+      // Fallback: O(n) search for testing/edge cases
+      if (!entity) entity = entities.find(e => e.id === id);
+      if (!entity) return;
+      entity.position.x = data.x;
+      entity.position.y = data.y;
+      if (data.vx !== undefined) entity.velocity.x = data.vx;
+      if (data.vy !== undefined) entity.velocity.y = data.vy;
+    });
+  }
+
+  private applyFoodSnapshot(foods: Food[], snapshot: Map<string, EntitySnapshot>) {
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
+    snapshot.forEach((data, id) => {
+      let food = this.foodMap.get(id);
+      if (!food) food = foods.find(f => f.id === id);
+      if (!food) return;
+      food.position.x = data.x;
+      food.position.y = data.y;
+    });
+  }
+
+  private applyEntityInterpolation(
+    entities: Array<Player | Bot>,
+    older: Map<string, EntitySnapshot>,
+    newer: Map<string, EntitySnapshot>,
+    t: number,
+    excludeId?: string
+  ) {
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n)
+    newer.forEach((next, id) => {
+      if (id === excludeId) return; // SKIP LOCAL
+      let entity = this.playerMap.get(id) || this.botMap.get(id);
+      if (!entity) entity = entities.find(e => e.id === id);
+      if (!entity) return;
+      const prev = older.get(id) || next;
+      entity.position.x = prev.x + (next.x - prev.x) * t;
+      entity.position.y = prev.y + (next.y - prev.y) * t;
+      if (next.vx !== undefined && prev.vx !== undefined) {
+        entity.velocity.x = prev.vx + (next.vx - prev.vx) * t;
+      }
+      if (next.vy !== undefined && prev.vy !== undefined) {
+        entity.velocity.y = prev.vy + (next.vy - prev.vy) * t;
+      }
+    });
+  }
+
+  private applyFoodInterpolation(
+    foods: Food[],
+    older: Map<string, EntitySnapshot>,
+    newer: Map<string, EntitySnapshot>,
+    t: number
+  ) {
+    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
+    newer.forEach((next, id) => {
+      let food = this.foodMap.get(id);
+      if (!food) food = foods.find(f => f.id === id);
+      if (!food) return;
+      const prev = older.get(id) || next;
+      food.position.x = prev.x + (next.x - prev.x) * t;
+      food.position.y = prev.y + (next.y - prev.y) * t;
+    });
+  }
+
+  sendInput(
+    target: Vector2,
+    inputs: { space: boolean; w: boolean },
+    dt: number,
+    events: any[] = []
+  ) {
+    if (!this.room) return;
+    const seq = ++this.inputSeq;
+
+    // EIDOLON-V P4: Zero-allocation input buffering
+    this.pendingInputs.push(seq, target.x, target.y, inputs.space, inputs.w, dt);
+
+    this.room.send('input', {
+      seq,
+      targetX: target.x,
+      targetY: target.y,
+      skill: inputs.space,
+      eject: inputs.w,
+    });
+  }
+
+  getRoomId() {
+    return this.room?.roomId;
+  }
+}
+
+export const networkClient = new NetworkClient();

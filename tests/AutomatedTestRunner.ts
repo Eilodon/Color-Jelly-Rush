@@ -56,7 +56,7 @@ export class AutomatedTestRunner {
       passedTests: integrationResult.passedTests,
       failedTests: integrationResult.failedTests,
       duration: 0,
-      results: integrationResult.results
+      results: integrationResult.results,
     });
 
     // Run visual regression tests
@@ -70,7 +70,7 @@ export class AutomatedTestRunner {
       passedTests: visualResult.passedTests,
       failedTests: visualResult.failedTests,
       duration: 0,
-      results: visualResult.results
+      results: visualResult.results,
     });
 
     // Run performance tests
@@ -84,7 +84,7 @@ export class AutomatedTestRunner {
       passedTests: performanceResult.passedTests,
       failedTests: performanceResult.failedTests,
       duration: performanceResult.duration,
-      results: performanceResult.results
+      results: performanceResult.results,
     });
 
     // Run unit tests
@@ -98,7 +98,7 @@ export class AutomatedTestRunner {
       passedTests: unitResult.passedTests,
       failedTests: unitResult.failedTests,
       duration: unitResult.duration,
-      results: unitResult.results
+      results: unitResult.results,
     });
 
     this.endTime = performance.now();
@@ -129,28 +129,28 @@ export class AutomatedTestRunner {
       {
         name: 'FPS Performance',
         test: () => this.testFPSPerformance(),
-        timeout: 5000
+        timeout: 5000,
       },
       {
         name: 'Memory Usage',
         test: () => this.testMemoryUsage(),
-        timeout: 3000
+        timeout: 3000,
       },
       {
         name: 'Network Latency',
         test: () => this.testNetworkLatency(),
-        timeout: 2000
+        timeout: 2000,
       },
       {
         name: 'Render Performance',
         test: () => this.testRenderPerformance(),
-        timeout: 3000
+        timeout: 3000,
       },
       {
         name: 'Input Responsiveness',
         test: () => this.testInputResponsiveness(),
-        timeout: 2000
-      }
+        timeout: 2000,
+      },
     ];
 
     for (const test of performanceTests) {
@@ -160,21 +160,21 @@ export class AutomatedTestRunner {
           test.test(),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Test timeout')), test.timeout)
-          )
+          ),
         ]);
 
         results.push({
           name: test.name,
           passed: result,
           duration: 0,
-          details: result ? 'Performance test passed' : 'Performance test failed'
+          details: result ? 'Performance test passed' : 'Performance test failed',
         });
       } catch (error) {
         results.push({
           name: test.name,
           passed: false,
           duration: 0,
-          details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         });
       }
     }
@@ -190,7 +190,7 @@ export class AutomatedTestRunner {
       passedTests,
       failedTests,
       duration,
-      results
+      results,
     };
   }
 
@@ -212,28 +212,28 @@ export class AutomatedTestRunner {
       {
         name: 'Color Math Functions',
         test: () => this.testColorMathFunctions(),
-        timeout: 1000
+        timeout: 1000,
       },
       {
         name: 'Tattoo System',
         test: () => this.testTattooSystem(),
-        timeout: 1000
+        timeout: 1000,
       },
       {
         name: 'Physics Calculations',
         test: () => this.testPhysicsCalculations(),
-        timeout: 1000
+        timeout: 1000,
       },
       {
         name: 'Ring System Logic',
         test: () => this.testRingSystemLogic(),
-        timeout: 1000
+        timeout: 1000,
       },
       {
         name: 'Combat Rules',
         test: () => this.testCombatRules(),
-        timeout: 1000
-      }
+        timeout: 1000,
+      },
     ];
 
     for (const test of unitTests) {
@@ -243,21 +243,21 @@ export class AutomatedTestRunner {
           test.test(),
           new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Test timeout')), test.timeout)
-          )
+          ),
         ]);
 
         results.push({
           name: test.name,
           passed: result,
           duration: 0,
-          details: result ? 'Unit test passed' : 'Unit test failed'
+          details: result ? 'Unit test passed' : 'Unit test failed',
         });
       } catch (error) {
         results.push({
           name: test.name,
           passed: false,
           duration: 0,
-          details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         });
       }
     }
@@ -273,7 +273,7 @@ export class AutomatedTestRunner {
       passedTests,
       failedTests,
       duration,
-      results
+      results,
     };
   }
 
@@ -282,9 +282,9 @@ export class AutomatedTestRunner {
    */
   private static async testFPSPerformance(): Promise<boolean> {
     let frames = 0;
-    let lastTime = performance.now();
+    const lastTime = performance.now();
 
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const measureFrame = () => {
         frames++;
         const currentTime = performance.now();
@@ -318,7 +318,7 @@ export class AutomatedTestRunner {
       const startTime = performance.now();
       const response = await fetch('https://httpbin.org/delay/1', {
         method: 'GET',
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(5000),
       });
       const endTime = performance.now();
 
@@ -387,15 +387,16 @@ export class AutomatedTestRunner {
     const mixed = {
       r: color1.r * 0.5 + color2.r * 0.5,
       g: color1.g * 0.5 + color2.g * 0.5,
-      b: color1.b * 0.5 + color2.b * 0.5
+      b: color1.b * 0.5 + color2.b * 0.5,
     };
 
     // Test calcMatchPercent
-    const matchPercent = Math.sqrt(
-      Math.pow(mixed.r - color2.r, 2) +
-      Math.pow(mixed.g - color2.g, 2) +
-      Math.pow(mixed.b - color2.b, 2)
-    ) / Math.sqrt(3);
+    const matchPercent =
+      Math.sqrt(
+        Math.pow(mixed.r - color2.r, 2) +
+          Math.pow(mixed.g - color2.g, 2) +
+          Math.pow(mixed.b - color2.b, 2)
+      ) / Math.sqrt(3);
 
     return matchPercent > 0.7; // Should be > 70% match
   }
@@ -404,7 +405,7 @@ export class AutomatedTestRunner {
     // Test tattoo application
     const testPlayer = {
       id: 'test',
-      tattoos: [] as TattooId[]
+      tattoos: [] as TattooId[],
     };
 
     // Simulate applying tattoo
@@ -422,7 +423,7 @@ export class AutomatedTestRunner {
     // Simple physics update
     const newPosition = {
       x: position.x + velocity.x * deltaTime,
-      y: position.y + velocity.y * deltaTime
+      y: position.y + velocity.y * deltaTime,
     };
 
     return newPosition.x === 1 / 60 && newPosition.y === 1 / 60;
@@ -478,33 +479,43 @@ Failed Tests: ${failedTests}
 Success Rate: ${((passedTests / totalTests) * 100).toFixed(1)}%
 Duration: ${(duration / 1000).toFixed(2)}s
 
-${testSuites.map(suite => `
+${testSuites
+  .map(
+    suite => `
 ${suite.passed ? '✅' : '❌'} ${suite.name} (${suite.type})
   Tests: ${suite.passedTests}/${suite.totalTests}
   Status: ${suite.passed ? 'PASSED' : 'FAILED'}
-`).join('\n')}
+`
+  )
+  .join('\n')}
 
 RECOMMENDATIONS:
-${overallPassed ? [
+${
+  overallPassed
+    ? [
         '✅ All tests passed - Ready for production deployment',
         '✅ Game is stable and functioning correctly',
-        '✅ Consider adding more edge case tests'
-      ] : [
+        '✅ Consider adding more edge case tests',
+      ]
+    : [
         '❌ Some tests failed - Review and fix issues',
         '❌ Address failed tests before deployment',
-        '❌ Review test failures and implement fixes'
-      ]}
+        '❌ Review test failures and implement fixes',
+      ]
+}
     `;
 
-    const recommendations = overallPassed ? [
-      '✅ All tests passed - Ready for production deployment',
-      '✅ Game is stable and functioning correctly',
-      '✅ Consider adding more edge case tests'
-    ] : [
-      '❌ Some tests failed - Review and fix issues',
-      '❌ Address failed tests before deployment',
-      '❌ Review test failures and implement fixes'
-    ];
+    const recommendations = overallPassed
+      ? [
+          '✅ All tests passed - Ready for production deployment',
+          '✅ Game is stable and functioning correctly',
+          '✅ Consider adding more edge case tests',
+        ]
+      : [
+          '❌ Some tests failed - Review and fix issues',
+          '❌ Address failed tests before deployment',
+          '❌ Review test failures and implement fixes',
+        ];
 
     return {
       overallPassed,
@@ -517,7 +528,7 @@ ${overallPassed ? [
       duration,
       suites: testSuites,
       summary,
-      recommendations
+      recommendations,
     };
   }
 
@@ -609,7 +620,7 @@ ${issues.length > 0 ? '\nIssues:\n' + issues.map(issue => `❌ ${issue}`).join('
     return {
       status,
       checks: checks,
-      details
+      details,
     };
   }
 }

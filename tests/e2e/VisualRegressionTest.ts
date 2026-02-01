@@ -84,7 +84,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       passedTests,
       failedTests,
       results: this.testResults,
-      summary
+      summary,
     };
   }
 
@@ -97,7 +97,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'main-menu'
+      screenshotPath: 'main-menu',
     };
 
     try {
@@ -120,14 +120,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Main Menu Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -141,7 +143,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 3000,
       tolerance: 0.1,
-      screenshotPath: 'game-canvas'
+      screenshotPath: 'game-canvas',
     };
 
     try {
@@ -164,14 +166,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Game canvas visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Game canvas visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Game Canvas Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -185,7 +189,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'hud'
+      screenshotPath: 'hud',
     };
 
     try {
@@ -206,14 +210,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'HUD visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'HUD visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'HUD Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -227,7 +233,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'colorblind-mode'
+      screenshotPath: 'colorblind-mode',
     };
 
     try {
@@ -250,14 +256,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Colorblind mode visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Colorblind mode visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Colorblind Mode Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -271,7 +279,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 2,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'mobile-controls'
+      screenshotPath: 'mobile-controls',
     };
 
     try {
@@ -295,14 +303,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Mobile controls visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Mobile controls visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Mobile Controls Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -316,7 +326,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'tattoo-picker'
+      screenshotPath: 'tattoo-picker',
     };
 
     try {
@@ -339,14 +349,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Tattoo picker visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Tattoo picker visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Tattoo Picker Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -360,7 +372,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'game-over'
+      screenshotPath: 'game-over',
     };
 
     try {
@@ -383,14 +395,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Game over screen visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Game over screen visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Game Over Screen Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -404,7 +418,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       pixelRatio: 1,
       waitTime: 2000,
       tolerance: 0.05,
-      screenshotPath: 'pause-overlay'
+      screenshotPath: 'pause-overlay',
     };
 
     try {
@@ -429,14 +443,16 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
         baselinePath: result.baselinePath,
         diffPath: result.diffPath,
         difference: result.difference,
-        details: result.passed ? 'Pause overlay visual test passed' : `Visual difference: ${(result.difference * 100).toFixed(2)}%`
+        details: result.passed
+          ? 'Pause overlay visual test passed'
+          : `Visual difference: ${(result.difference * 100).toFixed(2)}%`,
       };
     } catch (error) {
       return {
         testName: 'Pause Overlay Visual',
         passed: false,
         difference: 1,
-        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        details: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -493,7 +509,9 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
   /**
    * Take screenshot
    */
-  private static async takeScreenshot(config: VisualTestConfig): Promise<{ path: string; data: string }> {
+  private static async takeScreenshot(
+    config: VisualTestConfig
+  ): Promise<{ path: string; data: string }> {
     // In a real implementation, this would use a headless browser
     // For demo purposes, we'll simulate screenshot capture
 
@@ -518,7 +536,10 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
   /**
    * Compare with baseline
    */
-  private static async compareWithBaseline(config: VisualTestConfig, screenshot: { path: string; data: string }): Promise<{
+  private static async compareWithBaseline(
+    config: VisualTestConfig,
+    screenshot: { path: string; data: string }
+  ): Promise<{
     passed: boolean;
     baselinePath?: string;
     diffPath?: string;
@@ -538,7 +559,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       passed,
       baselinePath,
       diffPath,
-      difference
+      difference,
     };
   }
 
@@ -555,7 +576,9 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
   private static async ensureDirectories(): Promise<void> {
     // In a real implementation, this would create directories
     // For demo purposes, we'll just log
-    console.log(`📁 Ensuring directories exist: ${this.baselineDir}, ${this.currentDir}, ${this.diffDir}`);
+    console.log(
+      `📁 Ensuring directories exist: ${this.baselineDir}, ${this.currentDir}, ${this.diffDir}`
+    );
   }
 
   /**
@@ -566,7 +589,7 @@ ${passed ? '🎉 ALL VISUAL TESTS PASSED!' : '⚠️  Visual differences detecte
       return {
         summary: 'No visual tests run',
         details: 'Please run visual test suite first',
-        recommendations: ['Run complete visual test suite to generate report']
+        recommendations: ['Run complete visual test suite to generate report'],
       };
     }
 
@@ -585,13 +608,16 @@ Success Rate: ${((passedTests.length / this.testResults.length) * 100).toFixed(1
     const details = `
 VISUAL TEST RESULTS:
 ====================
-${this.testResults.map(result =>
+${this.testResults
+  .map(
+    result =>
       `${result.passed ? '✅' : '❌'} ${result.testName}
    ${result.details}
    ${result.screenshotPath ? `Screenshot: ${result.screenshotPath}` : ''}
    ${result.diffPath ? `Diff: ${result.diffPath}` : ''}
    Difference: ${(result.difference * 100).toFixed(2)}%`
-    ).join('\n')}
+  )
+  .join('\n')}
     `;
 
     const recommendations: string[] = [];
@@ -609,7 +635,7 @@ ${this.testResults.map(result =>
     return {
       summary,
       details,
-      recommendations
+      recommendations,
     };
   }
 }
