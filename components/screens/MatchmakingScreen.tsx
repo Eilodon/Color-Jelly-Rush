@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import type { ShapeId } from '../../services/cjr/cjrTypes';
 import type { MatchmakingStatus } from '../../services/meta/matchmaking';
 
@@ -31,13 +31,26 @@ const MatchmakingScreen: React.FC<Props> = ({
   onBack,
   onEnterMatch,
 }) => {
-  const [now, setNow] = useState(() => Date.now());
+  // EIDOLON-V: Zero-render timer using useRef + direct DOM manipulation
+  const timerRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (status !== 'queuing') return;
-    const id = window.setInterval(() => setNow(Date.now()), 500);
+    if (status !== 'queuing' || !queuedAt) return;
+
+    const updateTimer = () => {
+      if (timerRef.current) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - queuedAt) / 1000));
+        timerRef.current.textContent = `${elapsed}s`;
+      }
+    };
+
+    // Initial update
+    updateTimer();
+
+    // Update every 500ms without causing re-render
+    const id = window.setInterval(updateTimer, 500);
     return () => window.clearInterval(id);
-  }, [status]);
+  }, [status, queuedAt]);
 
   const statusText = useMemo(() => {
     if (status === 'matched') return 'MATCH FOUND';
@@ -59,11 +72,6 @@ const MatchmakingScreen: React.FC<Props> = ({
     if (networkStatus === 'error') return 'text-rose-300';
     return 'text-slate-400';
   }, [networkStatus]);
-
-  const queuedSeconds = useMemo(() => {
-    if (status !== 'queuing' || !queuedAt) return 0;
-    return Math.max(0, Math.floor((now - queuedAt) / 1000));
-  }, [now, queuedAt, status]);
 
   const canQueue = Boolean(name.trim());
 
@@ -110,7 +118,7 @@ const MatchmakingScreen: React.FC<Props> = ({
         </div>
 
         <div className="mt-6 rounded-xl border border-[color:rgba(225,214,200,0.16)] bg-[rgba(24,20,30,0.7)] p-4 text-sm text-[color:var(--bone-200)]">
-          {status === 'queuing' && <div>Searching in {region}… {queuedSeconds}s elapsed</div>}
+          {status === 'queuing' && <div>Searching in {region}… <span ref={timerRef}>0s</span> elapsed</div>}
           {status === 'matched' && <div className="text-emerald-200 font-bold">Match found. Ready to deploy.</div>}
           {status === 'failed' && <div className="text-rose-200 font-bold">Matchmaking failed. Try again.</div>}
           {status === 'idle' && <div>Queue up to enter competitive arena.</div>}

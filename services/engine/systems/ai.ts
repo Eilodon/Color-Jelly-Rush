@@ -4,7 +4,7 @@ import { GameState } from '../../../types/state';
 import { Food } from '../../../types/entity';
 import { getCurrentSpatialGrid } from '../context';
 import { Entity } from '../../../types';
-import { TransformStore, PhysicsStore, StateStore, EntityLookup, StatsStore } from '../dod/ComponentStores';
+import { TransformStore, PhysicsStore, StateStore, EntityLookup, StatsStore, InputStore } from '../dod/ComponentStores';
 import { EntityFlags } from '../dod/EntityFlags';
 import { applySkill } from './skills';
 import { updateBotPersonality } from '../../cjr/botPersonalities';
@@ -139,9 +139,9 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
       bot.targetEntityId = targetObj ? targetObj.id : null;
     } else if (targetFoodIndex !== -1) {
       bot.aiState = 'forage';
-      // Store target position to move towards
+      // EIDOLON-V: Write target directly to InputStore (ZERO allocation)
       const fTIdx = targetFoodIndex * 8;
-      bot.targetFoodPos = { x: tData[fTIdx], y: tData[fTIdx + 1] };
+      InputStore.setTarget(botId, tData[fTIdx], tData[fTIdx + 1]);
     } else {
       bot.aiState = 'wander';
     }
@@ -168,10 +168,13 @@ export const updateAI = (bot: Bot, state: GameState, dt: number) => {
         tx = (dx / dist) * speed;
         ty = (dy / dist) * speed;
       }
-    } else if (bot.aiState === 'forage' && bot.targetFoodPos) {
-      const tPos = bot.targetFoodPos;
-      const dx = tPos.x - botX;
-      const dy = tPos.y - botY;
+    } else if (bot.aiState === 'forage') {
+      // EIDOLON-V: Read target directly from InputStore (ZERO allocation)
+      const iIdx = botId * InputStore.STRIDE;
+      const targetX = InputStore.data[iIdx];
+      const targetY = InputStore.data[iIdx + 1];
+      const dx = targetX - botX;
+      const dy = targetY - botY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > 0.001) {
         tx = (dx / dist) * speed;
