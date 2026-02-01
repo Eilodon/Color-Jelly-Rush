@@ -47,6 +47,8 @@ const drawPolygon = (ctx: CanvasRenderingContext2D, x: number, y: number, radius
   ctx.fill();
 };
 
+// EIDOLON-V: Manual Transform Pattern - eliminates save/restore stack overhead
+// Each strategy: translate → draw → reverse translate (immediate reset)
 const DrawStrategies = {
   Player: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
     ctx.translate(x, y);
@@ -68,12 +70,14 @@ const DrawStrategies = {
       ctx.textAlign = 'center';
       ctx.fillText(p.name, 0, -p.radius - 5);
     }
+
+    // CRITICAL: Reverse translate - no save/restore needed
+    ctx.translate(-x, -y);
   },
 
   Food: (ctx: CanvasRenderingContext2D, f: any, x: number, y: number) => {
     ctx.translate(x, y);
 
-    // Check kind (legacy string or new enum)
     const kind = f.kind;
 
     if (kind === 'shield') {
@@ -96,12 +100,14 @@ const DrawStrategies = {
       ctx.arc(0, 0, f.radius * 0.9, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // Pigment or default
       ctx.fillStyle = getColor(f.color, '#ffffff');
       ctx.beginPath();
       ctx.arc(0, 0, f.radius, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // CRITICAL: Reverse translate
+    ctx.translate(-x, -y);
   },
 
   Projectile: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
@@ -110,6 +116,8 @@ const DrawStrategies = {
     ctx.beginPath();
     ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
     ctx.fill();
+    // CRITICAL: Reverse translate
+    ctx.translate(-x, -y);
   }
 };
 
@@ -217,25 +225,57 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   // EIDOLON ARCHITECT: Cache canvas bounds to avoid getBoundingClientRect in mousemove
   const canvasRectRef = useRef<DOMRect | null>(null);
 
-  // Update cached rect on resize
+  // EIDOLON-V: Track pixel ratio for HiDPI displays
+  const dprRef = useRef<number>(Math.min(window.devicePixelRatio || 1, 2));
+
+  // EIDOLON-V: Unified ResizeObserver - handles rect cache + pixel ratio + canvas sizing
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Initial cache
-    canvasRectRef.current = canvas.getBoundingClientRect();
+    const ctx = canvas.getContext('2d', { alpha: false });
 
-    // CRITICAL: ResizeObserver to update cache only when canvas resizes
-    const resizeObserver = new ResizeObserver(() => {
-      if (canvas) {
-        canvasRectRef.current = canvas.getBoundingClientRect();
+    const applyPixelRatio = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for perf
+      dprRef.current = dpr;
+
+      // Set actual buffer size (scaled by DPR)
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+
+      // Set display size via CSS
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+
+      // Scale context to match DPR
+      if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
+
+      // Update cached rect
+      canvasRectRef.current = canvas.getBoundingClientRect();
+    };
+
+    // Initial setup
+    applyPixelRatio();
+
+    // ResizeObserver for responsive handling
+    const resizeObserver = new ResizeObserver(() => {
+      applyPixelRatio();
     });
 
     resizeObserver.observe(canvas);
 
-    return () => resizeObserver.disconnect();
-  }, []);
+    // Handle DPR changes (e.g., window moved between monitors)
+    const mediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const handleDprChange = () => applyPixelRatio();
+    mediaQuery.addEventListener('change', handleDprChange);
+
+    return () => {
+      resizeObserver.disconnect();
+      mediaQuery.removeEventListener('change', handleDprChange);
+    };
+  }, [width, height]);
 
   // Input Handling: Use Ref to avoid re-binding listeners on prop change
   useEffect(() => {
@@ -327,53 +367,40 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
       ctx.stroke();
 
-      // 5. Draw Entities (Zero-GC Iteration)
+      // 5. Draw Entities (Zero-GC Iteration + Manual Transform)
+      // EIDOLON-V: DrawStrategies now include reverse translate - no save/restore needed
 
       // Food (Draw FIRST so it is BELOW players)
       for (let i = 0; i < state.food.length; i++) {
         const f = state.food[i];
         if (f.isDead) continue;
-        const alpha = alphaRef.current;
-        const pos = getInterpolatedPosition(f.id, alpha, _renderPoint);
-        const fx = pos ? pos.x : f.position.x;
-        const fy = pos ? pos.y : f.position.y;
-        ctx.save();
-        DrawStrategies.Food(ctx, f, fx, fy);
-        ctx.restore();
+        const interpAlpha = alphaRef.current;
+        const pos = getInterpolatedPosition(f.id, interpAlpha, _renderPoint);
+        DrawStrategies.Food(ctx, f, pos ? pos.x : f.position.x, pos ? pos.y : f.position.y);
       }
 
-      // Players
+      // Player
       if (!state.player.isDead) {
-        const alpha = alphaRef.current;
-        const pos = getInterpolatedPosition(state.player.id, alpha, _renderPoint);
+        const interpAlpha = alphaRef.current;
+        const pos = getInterpolatedPosition(state.player.id, interpAlpha, _renderPoint);
         const baseX = pos ? pos.x : state.player.position.x;
         const baseY = pos ? pos.y : state.player.position.y;
-
         const intensity = state.player.aberrationIntensity || 0;
         const shake = intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
-        const drawX = baseX + shake;
-        const drawY = baseY + shake;
-        ctx.save();
-        DrawStrategies.Player(ctx, state.player, drawX, drawY);
-        ctx.restore();
+        DrawStrategies.Player(ctx, state.player, baseX + shake, baseY + shake);
       }
 
       // Bots
       for (let i = 0; i < state.bots.length; i++) {
         const b = state.bots[i];
         if (b.isDead) continue;
-        const alpha = alphaRef.current;
-        const pos = getInterpolatedPosition(b.id, alpha, _renderPoint);
+        const interpAlpha = alphaRef.current;
+        const pos = getInterpolatedPosition(b.id, interpAlpha, _renderPoint);
         const baseX = pos ? pos.x : b.position.x;
         const baseY = pos ? pos.y : b.position.y;
-
         const intensity = b.aberrationIntensity || 0;
         const shake = intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
-        const drawX = baseX + shake;
-        const drawY = baseY + shake;
-        ctx.save();
-        DrawStrategies.Player(ctx, b, drawX, drawY); // Bots use Player strategy
-        ctx.restore();
+        DrawStrategies.Player(ctx, b, baseX + shake, baseY + shake);
       }
 
       // Projectiles (EIDOLON ARCHITECT: Manual transforms - no save/restore)
