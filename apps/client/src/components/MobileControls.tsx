@@ -1,11 +1,12 @@
 import React, { useRef, memo } from 'react';
-import { inputManager } from '../game/input/InputManager';
+import { BufferedInput } from '../game/input/BufferedInput';
 import { triggerHaptic } from '../game/haptics';
 
 const MobileControls: React.FC = memo(() => {
   const stickRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLDivElement>(null);
   const touchIdRef = useRef<number | null>(null);
+  const inputRef = useRef(BufferedInput.getInstance());
 
   // Cache layout to avoid thrashing
   const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
@@ -30,7 +31,7 @@ const MobileControls: React.FC = memo(() => {
 
     stickRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
     const scale = Math.min(window.innerWidth, window.innerHeight) / 2;
-    inputManager.setJoystick(dx / scale, dy / scale);
+    inputRef.current.setJoystick(dx / scale, dy / scale);
   };
 
   const handleStart = (e: React.TouchEvent) => {
@@ -73,7 +74,7 @@ const MobileControls: React.FC = memo(() => {
       if (touch.identifier === touchIdRef.current) {
         touchIdRef.current = null;
         if (stickRef.current) stickRef.current.style.transform = `translate(0px, 0px)`;
-        inputManager.setJoystick(0, 0);
+        inputRef.current.setJoystick(0, 0);
         break;
       }
     }
@@ -101,11 +102,11 @@ const MobileControls: React.FC = memo(() => {
           onTouchStart={e => {
             e.preventDefault();
             triggerHaptic('medium');
-            inputManager.setButton('eject', true);
+            inputRef.current.setButton('eject', true);
           }}
           onTouchEnd={e => {
             e.preventDefault();
-            inputManager.setButton('eject', false);
+            inputRef.current.setButton('eject', false);
           }}
         >
           <span className="text-xs">EJECT</span>
@@ -115,11 +116,11 @@ const MobileControls: React.FC = memo(() => {
           onTouchStart={e => {
             e.preventDefault();
             triggerHaptic('medium');
-            inputManager.setButton('skill', true);
+            inputRef.current.setButton('skill', true);
           }}
           onTouchEnd={e => {
             e.preventDefault();
-            inputManager.setButton('skill', false);
+            inputRef.current.setButton('skill', false);
           }}
         >
           SKILL

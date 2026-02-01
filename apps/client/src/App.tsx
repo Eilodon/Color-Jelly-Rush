@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useGameSession } from './hooks/useGameSession';
-import { inputManager } from './game/input/InputManager';
+import { BufferedInput } from './game/input/BufferedInput';
 import { ScreenManager } from './components/ScreenManager';
 import { AssetLoader } from './game/AssetLoader';
 import { clientLogger } from './core/logging/ClientLogger';
@@ -24,7 +24,7 @@ const App: React.FC = () => {
     const boot = async () => {
       try {
         clientLogger.info('🚀 SYSTEM BOOT INITIATED');
-        inputManager.init();
+        BufferedInput.init();
         mobileOptimizer.optimizeForMobile();
 
         // EIDOLON-V FIX: REAL LOADING (Parallel)
@@ -48,7 +48,7 @@ const App: React.FC = () => {
     // EIDOLON ARCHITECT: Cleanup for HMR (Hot Module Reload)
     return () => {
       gameStateManager.dispose(); // EIDOLON-V FIX: Stop game loop to prevent undead loop
-      inputManager.dispose();
+      BufferedInput.getInstance().dispose();
       mobileOptimizer.cleanup();
       clientLogger.info('App component unmounting');
     };

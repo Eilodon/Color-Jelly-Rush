@@ -12,7 +12,6 @@ import { performanceMonitor } from '../core/performance/PerformanceMonitor';
 
 // EIDOLON-V FIX: Dependency Injection
 import { BufferedInput } from '../input/BufferedInput';
-import { InputManager, inputManager as defaultInputManager } from '../input/InputManager';
 import { InputStore, TransformStore, PhysicsStore, resetAllStores } from './dod/ComponentStores';
 import {
   NetworkClient,
@@ -51,9 +50,8 @@ export class GameStateManager {
   private renderCallback: ((alpha: number) => void) | null = null;
   private currentConfig: GameSessionConfig | null = null;
 
-  // EIDOLON-V FIX: Injected Dependencies
+  // EIDOLON-V FIX: Injected Dependencies (BufferedInput only - InputManager removed)
   private bufferedInput: BufferedInput;
-  private inputManager: InputManager;
   private networkClient: NetworkClient;
   private audioEngine: AudioEngine;
 
@@ -72,14 +70,12 @@ export class GameStateManager {
   private constructor() {
     // Default to singletons
     this.bufferedInput = BufferedInput.getInstance();
-    this.inputManager = defaultInputManager;
     this.networkClient = defaultNetworkClient;
     this.audioEngine = defaultAudioEngine;
   }
 
-  // EIDOLON-V FIX: DI Setter for testing
-  public injectDependencies(input: InputManager, network: NetworkClient, audio: AudioEngine): void {
-    this.inputManager = input;
+  // EIDOLON-V FIX: DI Setter for testing (InputManager removed)
+  public injectDependencies(network: NetworkClient, audio: AudioEngine): void {
     this.networkClient = network;
     this.audioEngine = audio;
   }
@@ -117,13 +113,11 @@ export class GameStateManager {
       // Multiplayer Logic
       optimizedEngine.updateClientVisuals(state, dt);
 
-      // Send Inputs
-      const events = this.inputManager.popEvents();
+      // EIDOLON-V: Use BufferedInput for both SP and MP (unified API)
+      const events = this.bufferedInput.popEvents();
+      this.bufferedInput.updateTargetPosition(state.player.position, this.tempMoveTarget);
 
-      // EIDOLON-V FIX: Zero Allocation Input polling
-      this.inputManager.updateTargetPosition(state.player.position, this.tempMoveTarget);
-
-      const actions = this.inputManager.state.actions;
+      const actions = this.bufferedInput.state.actions;
       const networkInputs = {
         space: actions.space,
         w: actions.w,
@@ -352,7 +346,7 @@ export class GameStateManager {
 
       // EIDOLON-V FIX: 1. Clean up old session
       this.stopGameLoop();
-      this.inputManager.reset(); // SAFETY CRITICAL: Reset input to prevent "ghost" movement
+      this.bufferedInput.reset(); // SAFETY CRITICAL: Reset input to prevent "ghost" movement
 
       // EIDOLON-V FIX: 2. Setup Configuration
       this.currentConfig = config;
@@ -398,11 +392,11 @@ export class GameStateManager {
   public endSession(): void {
     this.stopGameLoop();
     this.networkClient.disconnect();
-    
+
     // EIDOLON-V FIX: Reset DOD stores and pools to prevent memory leaks
     resetAllStores();
     pooledEntityFactory.clear();
-    
+
     this.currentState = null;
     // We don't clear subscribers here as UI might persist
   }

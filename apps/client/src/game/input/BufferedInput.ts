@@ -219,6 +219,9 @@ export class BufferedInput {
   public reset(): void {
     this.keys.clear();
     this.isMouseDown = false;
+    this.joystickVector.x = 0;
+    this.joystickVector.y = 0;
+    this.eventQueue = [];
   }
 
   // EIDOLON-V P3: Getters for debugging
@@ -228,5 +231,96 @@ export class BufferedInput {
 
   public isKeyPressed(code: string): boolean {
     return this.keys.has(code);
+  }
+
+  // ============================================
+  // EIDOLON-V: InputManager Compatibility Layer
+  // Merged from InputManager.ts for unified input
+  // ============================================
+
+  private joystickVector = { x: 0, y: 0 };
+  private eventQueue: { type: string; timestamp: number }[] = [];
+  private sharedInputBuffer = new Float32Array(2);
+
+  // Static init for legacy compatibility
+  public static init(): void {
+    BufferedInput.getInstance();
+  }
+
+  // Virtual joystick support (MobileControls, ScreenManager)
+  public setJoystick(x: number, y: number): void {
+    if (this.isDisposed) return;
+    this.joystickVector.x = x;
+    this.joystickVector.y = y;
+    this.updateMoveVector();
+  }
+
+  // Button support (skill, eject)
+  public setButton(btn: 'skill' | 'eject', isDown: boolean): void {
+    if (this.isDisposed) return;
+    if (btn === 'skill') {
+      if (isDown) this.keys.add('Space');
+      else this.keys.delete('Space');
+      if (isDown) this.pushEvent('skill');
+    }
+    if (btn === 'eject') {
+      if (isDown) this.keys.add('KeyQ');
+      else this.keys.delete('KeyQ');
+      if (isDown) this.pushEvent('eject');
+    }
+  }
+
+  // Event queue for legacy GameStateManager
+  private pushEvent(type: string): void {
+    this.eventQueue.push({ type, timestamp: Date.now() });
+  }
+
+  public popEvents(): { type: string; timestamp: number }[] {
+    const events = this.eventQueue;
+    this.eventQueue = [];
+    return events;
+  }
+
+  // Move vector calculation (keyboard + joystick hybrid)
+  private updateMoveVector(): void {
+    let jx = 0, jy = 0;
+
+    // Priority: Joystick if active
+    if (Math.abs(this.joystickVector.x) > 0.01 || Math.abs(this.joystickVector.y) > 0.01) {
+      jx = this.joystickVector.x;
+      jy = this.joystickVector.y;
+      const len = Math.sqrt(jx * jx + jy * jy);
+      if (len > 1) { jx /= len; jy /= len; }
+    } else {
+      // Fallback: Keyboard WASD
+      if (this.keys.has('ArrowUp') || this.keys.has('KeyW')) jy -= 1;
+      if (this.keys.has('ArrowDown') || this.keys.has('KeyS')) jy += 1;
+      if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) jx -= 1;
+      if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) jx += 1;
+      const len = Math.sqrt(jx * jx + jy * jy);
+      if (len > 0) { jx /= len; jy /= len; }
+    }
+
+    this.sharedInputBuffer[0] = jx;
+    this.sharedInputBuffer[1] = jy;
+  }
+
+  // Legacy target position update (zero-allocation)
+  public updateTargetPosition(currentPos: { x: number; y: number }, outTarget: { x: number; y: number }): void {
+    const OFFSET = 250;
+    this.updateMoveVector();
+    outTarget.x = currentPos.x + this.sharedInputBuffer[0] * OFFSET;
+    outTarget.y = currentPos.y + this.sharedInputBuffer[1] * OFFSET;
+  }
+
+  // Actions state for legacy compatibility
+  public get state() {
+    return {
+      actions: {
+        space: this.keys.has('Space') || this.isMouseDown,
+        w: this.keys.has('KeyQ') || this.keys.has('KeyE'),
+      },
+      events: this.eventQueue,
+    };
   }
 }

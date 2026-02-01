@@ -12,7 +12,7 @@ import GameCanvas from './GameCanvas';
 import { UiOverlayManager } from './UiOverlayManager';
 import { useGameSession } from '../hooks/useGameSession';
 import { isWebGLSupported } from '../game/renderer/WebGLCheck';
-import { inputManager } from '../game/input/InputManager';
+import { BufferedInput } from '../game/input/BufferedInput';
 
 // Lazy load Pixi Canvas for performance
 const PixiGameCanvas = React.lazy(() => import('./PixiGameCanvas'));
@@ -113,10 +113,10 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
           enablePointerInput={!!inputEnabled}
           onMouseMove={(x, y) => {
             // EIDOLON-V: Use cached scale (updated on resize, not per mousemove)
-            inputManager.setJoystick(x / inputScaleRef.current, y / inputScaleRef.current);
+            BufferedInput.getInstance().setJoystick(x / inputScaleRef.current, y / inputScaleRef.current);
           }}
-          onMouseDown={() => inputManager.setButton('skill', true)}
-          onMouseUp={() => inputManager.setButton('skill', false)}
+          onMouseDown={() => BufferedInput.getInstance().setButton('skill', true)}
+          onMouseUp={() => BufferedInput.getInstance().setButton('skill', false)}
         />
       )}
     </React.Suspense>
