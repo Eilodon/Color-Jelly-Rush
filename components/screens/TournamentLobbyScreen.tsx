@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import type { TournamentQueueState, TournamentParticipant } from '../../services/meta/tournaments';
 
 type TournamentInfo = {
   id: string;
   name: string;
   format: 'elimination' | 'round_robin' | 'swiss';
-  startsIn: string;
+  startTime: number; // EIDOLON-V: Absolute timestamp instead of static string
 };
 
 type Props = {
@@ -15,13 +15,53 @@ type Props = {
   onBack: () => void;
 };
 
-const TOURNAMENTS: TournamentInfo[] = [
-  { id: 'tourney_mystic', name: 'Mystic Trials', format: 'elimination', startsIn: '12m' },
-  { id: 'tourney_vortex', name: 'Vortex Clash', format: 'swiss', startsIn: '28m' },
-  { id: 'tourney_ember', name: 'Ember Cup', format: 'round_robin', startsIn: '45m' },
-];
+// EIDOLON-V: Generate tournaments with real start times
+const createTournaments = (): TournamentInfo[] => {
+  const now = Date.now();
+  return [
+    { id: 'tourney_mystic', name: 'Mystic Trials', format: 'elimination', startTime: now + 12 * 60 * 1000 },
+    { id: 'tourney_vortex', name: 'Vortex Clash', format: 'swiss', startTime: now + 28 * 60 * 1000 },
+    { id: 'tourney_ember', name: 'Ember Cup', format: 'round_robin', startTime: now + 45 * 60 * 1000 },
+  ];
+};
+
+// EIDOLON-V: Format remaining time as mm:ss
+const formatCountdown = (ms: number): string => {
+  if (ms <= 0) return 'STARTING';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
 
 const TournamentLobbyScreen: React.FC<Props> = ({ queue, onQueue, onCancel, onBack }) => {
+  // EIDOLON-V: Initialize tournaments once on mount
+  const tournamentsRef = useRef<TournamentInfo[]>(createTournaments());
+
+  // EIDOLON-V: Map tournament IDs to DOM elements for zero-render updates
+  const countdownRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
+
+  // EIDOLON-V: Single interval updates all countdowns without re-render
+  useEffect(() => {
+    const updateCountdowns = () => {
+      const now = Date.now();
+      for (const tourney of tournamentsRef.current) {
+        const el = countdownRefs.current.get(tourney.id);
+        if (el) {
+          const remaining = tourney.startTime - now;
+          el.textContent = formatCountdown(remaining);
+        }
+      }
+    };
+
+    // Initial update
+    updateCountdowns();
+
+    // Update every second
+    const id = window.setInterval(updateCountdowns, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const statusLabel = useMemo(() => {
     if (queue.status === 'queued') return 'QUEUED';
     if (queue.status === 'ready') return 'READY';
@@ -56,11 +96,19 @@ const TournamentLobbyScreen: React.FC<Props> = ({ queue, onQueue, onCancel, onBa
         </div>
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {TOURNAMENTS.map((tourney) => (
+          {tournamentsRef.current.map((tourney) => (
             <div key={tourney.id} className="ritual-card">
               <div className="text-xs text-[color:var(--mist-400)] uppercase tracking-widest">{tourney.format}</div>
               <div className="text-lg font-bold mt-2">{tourney.name}</div>
-              <div className="text-xs text-[color:var(--mist-400)] mt-1">Starts in {tourney.startsIn}</div>
+              <div className="text-xs text-[color:var(--mist-400)] mt-1">
+                Starts in{' '}
+                <span
+                  ref={(el) => { if (el) countdownRefs.current.set(tourney.id, el); }}
+                  className="font-mono text-amber-300"
+                >
+                  --:--
+                </span>
+              </div>
               <div className="mt-4">
                 <button
                   onClick={() => onQueue(tourney.id)}
