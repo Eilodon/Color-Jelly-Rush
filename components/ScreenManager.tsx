@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ErrorBoundary from './ErrorBoundary';
 import MainMenu from './MainMenu';
 import HUD from './HUD';
@@ -17,6 +17,38 @@ import { inputManager } from '../services/input/InputManager';
 // Lazy load Pixi Canvas for performance
 const PixiGameCanvas = React.lazy(() => import('./PixiGameCanvas'));
 
+// EIDOLON-V: Preload PixiGameCanvas module immediately (before render)
+// This eliminates the "Summoning..." flash when switching to Pixi renderer
+const pixiPreloadPromise = import('./PixiGameCanvas');
+
+// EIDOLON-V: Custom hook for reactive window dimensions
+const useWindowDimensions = () => {
+  const [dimensions, setDimensions] = useState({
+    w: window.innerWidth,
+    h: window.innerHeight
+  });
+
+  useEffect(() => {
+    // Throttled resize handler to prevent excessive re-renders
+    let rafId: number | null = null;
+    const handleResize = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        setDimensions({ w: window.innerWidth, h: window.innerHeight });
+        rafId = null;
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  return dimensions;
+};
+
 interface ScreenManagerProps {
   session: ReturnType<typeof useGameSession>;
 }
@@ -26,14 +58,23 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
   const isPlaying = ui.screen === 'playing' && refs.gameState.current;
   const inputEnabled = isPlaying && ui.overlays.length === 0;
 
+  // EIDOLON-V: Reactive window dimensions
+  const dimensions = useWindowDimensions();
+
   // EIDOLON-V FIX: Auto-fallback if WebGL is missing
   const isWebGL = React.useMemo(() => isWebGLSupported(), []);
   const usePixi = settings.usePixi && isWebGL;
 
+  // EIDOLON-V: Cache input scale to avoid recalculation per mousemove
+  const inputScaleRef = useRef(Math.min(dimensions.w, dimensions.h) / 2);
+  useEffect(() => {
+    inputScaleRef.current = Math.min(dimensions.w, dimensions.h) / 2;
+  }, [dimensions.w, dimensions.h]);
+
   if (!isPlaying) return null;
 
   return (
-    <React.Suspense fallback={<div className="absolute center text-gold-400">Summoning...</div>}>
+    <React.Suspense fallback={<div className="absolute inset-0 flex items-center justify-center bg-ink-950 text-gold-400">Summoning...</div>}>
       {usePixi ? (
         <ErrorBoundary
           fallback={
@@ -61,14 +102,12 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
         <GameCanvas
           gameStateRef={refs.gameState}
           alphaRef={refs.alpha}
-          width={window.innerWidth}
-          height={window.innerHeight}
+          width={dimensions.w}
+          height={dimensions.h}
           enablePointerInput={!!inputEnabled}
           onMouseMove={(x, y) => {
-            // Normalize inputs for InputManager (Screen center relative -> -1..1)
-            const scale = Math.min(window.innerWidth, window.innerHeight) / 2;
-            // x, y from GameCanvas are already centered offsets
-            inputManager.setJoystick(x / scale, y / scale);
+            // EIDOLON-V: Use cached scale (updated on resize, not per mousemove)
+            inputManager.setJoystick(x / inputScaleRef.current, y / inputScaleRef.current);
           }}
           onMouseDown={() => inputManager.setButton('skill', true)}
           onMouseUp={() => inputManager.setButton('skill', false)}
