@@ -23,31 +23,34 @@ import {
   GRID_CELL_SIZE,
   FOOD_COUNT,
   FOOD_RADIUS,
+  PLAYER_START_RADIUS,
 } from '../constants';
+
 // Import shared game logic
-// EIDOLON-V PHASE3: Use @cjr/engine only (headless)
 import { BinaryPacker } from '@cjr/engine/networking';
 import type { NetworkInput } from '@cjr/engine/networking';
 import { createPlayerData } from '@cjr/engine/factories';
 import { getLevelConfig } from '@cjr/engine/config';
+import {
+  PhysicsSystem,
+  MovementSystem,
+  SkillSystem,
+  TransformStore,
+  PhysicsStore,
+  StateStore,
+  InputStore,
+  StatsStore,
+  ConfigStore,
+  updateRingLogic,
+  checkRingTransition,
+  calcMatchPercentFast,
+  mixPigment,
+  type PigmentVec3 as EnginePigmentVec3,
+} from '@cjr/engine';
+import { EntityFlags, MAX_ENTITIES } from '@cjr/engine/dod/EntityFlags';
 
-// Server-side types (not from client)
-interface ServerPlayerData {
-  id: string;
-  name: string;
-  shape: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-  score: number;
-  health: number;
-  _lastProcessedSeq?: number;
-}
 // Import security validation
 import { serverValidator } from '../security/ServerValidator';
-// EIDOLON-V PHASE1: Import enhanced input validation
 import { InputValidator } from '../validation/InputValidator';
 
 // Server Engine Bridge
@@ -62,10 +65,17 @@ export class GameRoom extends Room<GameRoomState> {
     { seq: number; targetX: number; targetY: number; space: boolean; w: boolean }
   > = new Map();
 
+  // EIDOLON-V: DOD Entity mapping (sessionId -> entityIndex)
+  private entityIndices: Map<string, number> = new Map();
+  private nextEntityIndex: number = 0;
+
+  // Security & Physics constants
   private static readonly SECURITY_MAX_DT_SEC = 0.2;
+  private static readonly MAX_SPEED_BASE = 150;
+  private static readonly SPEED_VALIDATION_TOLERANCE = 1.15; // 15% tolerance
   private lastUpdateDtSec = 1 / 60;
 
-  // EIDOLON-V PHASE1: WebSocket Rate Limiting
+  // EIDOLON-V: WebSocket Rate Limiting
   private clientRates: Map<string, { count: number; resetTime: number }> = new Map();
   private readonly RATE_LIMIT_WINDOW = 1000;
   private readonly RATE_LIMIT_MAX = 60;
