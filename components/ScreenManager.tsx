@@ -60,15 +60,15 @@ const GameWorldLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ 
       ) : (
         <GameCanvas
           gameStateRef={refs.gameState}
+          alphaRef={refs.alpha}
           width={window.innerWidth}
           height={window.innerHeight}
           enablePointerInput={!!inputEnabled}
           onMouseMove={(x, y) => {
             // Normalize inputs for InputManager (Screen center relative -> -1..1)
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
+            const scale = Math.min(window.innerWidth, window.innerHeight) / 2;
             // x, y from GameCanvas are already centered offsets
-            inputManager.setJoystick(x / centerX, y / centerY);
+            inputManager.setJoystick(x / scale, y / scale);
           }}
           onMouseDown={() => inputManager.setButton('skill', true)}
           onMouseUp={() => inputManager.setButton('skill', false)}

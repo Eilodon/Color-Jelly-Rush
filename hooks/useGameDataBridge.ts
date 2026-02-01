@@ -27,11 +27,19 @@ export const useGameDataBridge = (gameStateRef: MutableRefObject<GameState | nul
 
         // "The Blind Fix": Read directly from memory if available
         if (idx !== undefined) {
-            const base = idx * 4; // StatsStore.STRIDE
-            statsRef.current.currentHealth = StatsStore.data[base];
-            statsRef.current.maxHealth = StatsStore.data[base + 1];
-            statsRef.current.score = StatsStore.data[base + 2];
-            statsRef.current.matchPercent = StatsStore.data[base + 3];
+            const base = idx * StatsStore.STRIDE;
+            if (base + 3 < StatsStore.data.length) {
+                statsRef.current.currentHealth = StatsStore.data[base];
+                statsRef.current.maxHealth = StatsStore.data[base + 1];
+                statsRef.current.score = StatsStore.data[base + 2];
+                statsRef.current.matchPercent = StatsStore.data[base + 3];
+            } else {
+                // Fallback to Object (Legacy/Sync issues)
+                statsRef.current.currentHealth = player.currentHealth;
+                statsRef.current.maxHealth = player.maxHealth;
+                statsRef.current.score = player.score;
+                statsRef.current.matchPercent = player.matchPercent;
+            }
         } else {
             // Fallback to Object (Legacy/Sync issues)
             statsRef.current.currentHealth = player.currentHealth;

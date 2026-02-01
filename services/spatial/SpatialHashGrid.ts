@@ -26,6 +26,9 @@ export class SpatialHashGrid {
   private entityCell: Int32Array;    // Track which cell an entity is currently in (-1 if none)
   private staticEntityIndices: Set<number> = new Set();
 
+  private visitMark: Uint32Array;
+  private visitEpoch: number = 1;
+
   private config: SpatialHashConfig;
   private cellCount: number;
   private totalCells: number;
@@ -33,6 +36,7 @@ export class SpatialHashGrid {
 
   // Reusable temp arrays (pre-allocated)
   private tempCellArray: number[] = [];
+  private staticIndexScratch: number[] = [];
 
   // Debug stats
   private queryCount: number = 0;
@@ -59,6 +63,7 @@ export class SpatialHashGrid {
     this.cellHead = new Int32Array(this.totalCells);
     this.nextEntity = new Int32Array(this.config.maxEntities);
     this.entityCell = new Int32Array(this.config.maxEntities); // Track current cell
+    this.visitMark = new Uint32Array(this.config.maxEntities);
 
     // Initialize to -1 (empty/end-of-list sentinel)
     this.cellHead.fill(-1);
@@ -155,9 +160,10 @@ export class SpatialHashGrid {
     // 1. Clear all cells
     this.cellHead.fill(-1);
 
-    // 2. Clear entityCell tracking for all entities (will be repopulated)
-    // But we need to preserve static entity tracking
-    const staticIndices = Array.from(this.staticEntityIndices);
+    this.staticIndexScratch.length = 0;
+    for (const idx of this.staticEntityIndices) {
+      this.staticIndexScratch.push(idx);
+    }
     
     // Clear all entityCell entries
     this.entityCell.fill(-1);
@@ -168,7 +174,8 @@ export class SpatialHashGrid {
 
     // 4. Re-insert Static Entities
     // We must iterate the Set of static entities.
-    for (const entityIndex of staticIndices) {
+    for (let i = 0; i < this.staticIndexScratch.length; i++) {
+      const entityIndex = this.staticIndexScratch[i];
       // Validate entity index before re-adding
       if (entityIndex >= 0 && entityIndex < this.config.maxEntities) {
         // Since clearDynamic is called per frame, valid static entities usually don't move.
@@ -215,15 +222,20 @@ export class SpatialHashGrid {
       // CRITICAL: Traverse linked list (zero allocation)
       let currentEntityIndex = this.cellHead[cellIndex];
       let iterationCount = 0;
-      const visited = new Set<number>(); // Track visited entities to prevent cycles
+      let epoch = (this.visitEpoch + 1) >>> 0;
+      if (epoch === 0 || epoch === 0xFFFFFFFF) {
+        this.visitMark.fill(0);
+        epoch = 1;
+      }
+      this.visitEpoch = epoch;
 
       while (currentEntityIndex !== -1 && iterationCount < MAX_ITERATIONS && outResults.length < MAX_RESULTS) {
         // Safety check: prevent infinite loops from corrupted linked lists
-        if (visited.has(currentEntityIndex)) {
+        if (this.visitMark[currentEntityIndex] === epoch) {
           console.warn('SpatialHashGrid: Detected cycle in linked list at entity', currentEntityIndex);
           break;
         }
-        visited.add(currentEntityIndex);
+        this.visitMark[currentEntityIndex] = epoch;
 
         // Validate entity index
         if (currentEntityIndex < 0 || currentEntityIndex >= this.config.maxEntities) {

@@ -116,7 +116,7 @@ export const createInitialState = (level: number = 1): GameState => {
     result: null,
     // EIDOLON-V: Pre-allocated event objects for zero-GC VFX consumption.
     // (vfxBuffer is the producer; this array is the UI-consumable staging pool.)
-    vfxEvents: createVFXEventPool(50),
+    vfxEvents: createVFXEventPool(500),
     vfxHead: 0,
     vfxTail: 0,
   };

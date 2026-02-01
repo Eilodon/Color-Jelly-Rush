@@ -50,6 +50,9 @@ export class GameRoom extends Room<GameRoomState> {
   private simState!: ReturnType<typeof createInitialState>;
   private inputsBySession: Map<string, { seq: number; targetX: number; targetY: number; space: boolean; w: boolean }> = new Map();
 
+  private static readonly SECURITY_MAX_DT_SEC = 0.2;
+  private lastUpdateDtSec = 1 / 60;
+
   // EIDOLON-V PHASE1: WebSocket Rate Limiting
   private clientRates: Map<string, { count: number; resetTime: number }> = new Map();
   private readonly RATE_LIMIT_WINDOW = 1000;
@@ -221,6 +224,7 @@ export class GameRoom extends Room<GameRoomState> {
 
   update(dt: number) {
     const dtSec = dt / 1000;
+    this.lastUpdateDtSec = dtSec;
     this.state.gameTime += dtSec;
 
     this.applyInputsToSimState();
@@ -336,11 +340,12 @@ export class GameRoom extends Room<GameRoomState> {
 
       // Validate position changes to prevent teleportation
       // EIDOLON-V: Use real physics position (px, py)
+      const validationDtSec = Math.min(GameRoom.SECURITY_MAX_DT_SEC, Math.max(0, this.lastUpdateDtSec));
       const positionValidation = serverValidator.validatePosition(
         player.id,
         { x: px, y: py },
         { x: serverPlayer.position.x, y: serverPlayer.position.y },
-        1 / 60 // Assuming 60 FPS
+        validationDtSec
       );
 
       if (!positionValidation.isValid) {
@@ -362,7 +367,7 @@ export class GameRoom extends Room<GameRoomState> {
           pigment: player.pigment
         } as PlayerState,
         serverPlayer,
-        1 / 60
+        validationDtSec
       );
 
       if (!statsValidation.isValid) {

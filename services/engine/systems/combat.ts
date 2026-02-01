@@ -65,6 +65,14 @@ export const consumePickupDOD = (entityId: number, foodId: number, state: GameSt
 const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) => {
   triggerEmotion(e, 'yum');
 
+  let ex = e.position.x;
+  let ey = e.position.y;
+  if (e.physicsIndex !== undefined) {
+    const tIdx = e.physicsIndex * 8;
+    ex = TransformStore.data[tIdx];
+    ey = TransformStore.data[tIdx + 1];
+  }
+
   switch (food.kind) {
     case 'pigment':
       if (food.pigment) {
@@ -103,7 +111,7 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
       // Legacy: pity multiplier logic was here, assuming handled logic side
 
       // createFloatingText call replaced by Zero-GC VFX
-      vfxBuffer.push(e.position.x, e.position.y, packHex('#ff00ff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.CATALYST);
+      vfxBuffer.push(ex, ey, packHex('#ff00ff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.CATALYST);
       break;
 
     case 'shield':
@@ -111,11 +119,11 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
       if (!e.statusScalars) e.statusScalars = createDefaultStatusScalars();
       e.statusScalars.commitShield = 3.0;
       e.statusScalars.commitShield = 3.0;
-      vfxBuffer.push(e.position.x, e.position.y, packHex('#00ffff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.SHIELD);
+      vfxBuffer.push(ex, ey, packHex('#00ffff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.SHIELD);
       break;
 
     case 'solvent':
-      vfxBuffer.push(e.position.x, e.position.y, packHex('#aaaaff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.CLEANSE);
+      vfxBuffer.push(ex, ey, packHex('#aaaaff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.CLEANSE);
       // Simplified solvent logic without pigment mix for brevity if not strictly needed or could call mixPigment
       const neutral = { r: 0.5, g: 0.5, b: 0.5 };
       e.pigment = mixPigment(e.pigment, neutral, 0.15);
@@ -124,7 +132,7 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
       break;
 
     case 'neutral':
-      vfxBuffer.push(e.position.x, e.position.y, packHex('#888888'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.MASS);
+      vfxBuffer.push(ex, ey, packHex('#888888'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.MASS);
       break;
   }
 };

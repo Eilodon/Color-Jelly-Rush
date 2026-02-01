@@ -27,9 +27,11 @@ export interface PositionValidation {
 
 export class ProductionSecurityManager {
   private static instance: ProductionSecurityManager;
+  private static readonly SECURITY_MAX_DT_SEC = 0.2;
   private config: SecurityConfig;
   private lastUpdateTime: Map<string, number> = new Map();
-  private suspiciousActivity: Map<string, number> = new Map();
+  private suspiciousCount: Map<string, number> = new Map();
+  private lastSuspiciousAt: Map<string, number> = new Map();
   private bannedPlayers: Set<string> = new Set();
   private securityLog: Array<{
     timestamp: number;
@@ -76,7 +78,8 @@ export class ProductionSecurityManager {
       Math.pow(newPosition.y - oldPosition.y, 2)
     );
 
-    const maxDistance = this.config.maxPositionChange * deltaTime;
+    const dtSec = Math.min(ProductionSecurityManager.SECURITY_MAX_DT_SEC, Math.max(0, deltaTime));
+    const maxDistance = this.config.maxPositionChange * dtSec;
     
     if (distance > maxDistance) {
       this.logSecurityEvent(sessionId, 'position_hack', 'high', 
@@ -274,7 +277,7 @@ export class ProductionSecurityManager {
     }
 
     // Check for suspicious patterns
-    const suspiciousCount = this.suspiciousActivity.get(sessionId) || 0;
+    const suspiciousCount = this.suspiciousCount.get(sessionId) || 0;
     if (suspiciousCount > 10) {
       issues.push(`High suspicious activity count: ${suspiciousCount}`);
       severity = 'critical';
@@ -312,10 +315,16 @@ export class ProductionSecurityManager {
     return {
       timestamp: Date.now(),
       bannedPlayers: this.bannedPlayers.size,
-      suspiciousActivity: this.suspiciousActivity.size,
+      suspiciousActivity: this.suspiciousCount.size,
       recentEvents,
       recommendations: this.generateRecommendations()
     };
+  }
+
+  public resetViolations(sessionId: string): void {
+    this.lastUpdateTime.delete(sessionId);
+    this.suspiciousCount.delete(sessionId);
+    this.lastSuspiciousAt.delete(sessionId);
   }
 
   // EIDOLON-V FIX: Clear old security data
@@ -329,9 +338,10 @@ export class ProductionSecurityManager {
     );
 
     // Clear old suspicious activity
-    for (const [sessionId, timestamp] of this.suspiciousActivity) {
-      if (now - timestamp > oneHour) {
-        this.suspiciousActivity.delete(sessionId);
+    for (const [sessionId, lastAt] of this.lastSuspiciousAt) {
+      if (now - lastAt > oneHour) {
+        this.lastSuspiciousAt.delete(sessionId);
+        this.suspiciousCount.delete(sessionId);
       }
     }
   }
@@ -353,8 +363,9 @@ export class ProductionSecurityManager {
     this.securityLog.push(event);
 
     // Track suspicious activity
-    const currentCount = this.suspiciousActivity.get(sessionId) || 0;
-    this.suspiciousActivity.set(sessionId, currentCount + 1);
+    const currentCount = this.suspiciousCount.get(sessionId) || 0;
+    this.suspiciousCount.set(sessionId, currentCount + 1);
+    this.lastSuspiciousAt.set(sessionId, Date.now());
   }
 
   private generateRecommendations(): string[] {
@@ -364,7 +375,7 @@ export class ProductionSecurityManager {
       recommendations.push('High number of banned players - consider strengthening security measures');
     }
     
-    if (this.suspiciousActivity.size > 50) {
+    if (this.suspiciousCount.size > 50) {
       recommendations.push('High suspicious activity detected - consider implementing rate limiting');
     }
     

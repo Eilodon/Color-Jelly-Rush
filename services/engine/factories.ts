@@ -51,7 +51,15 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
   const entId = entityManager.createEntity();
   if (entId === -1) return null; // Safety Check: Pool Full
 
+  // EIDOLON-V FIX: Immediately RESET flags to remove potential DEAD status from reused IDs
+  StateStore.flags[entId] = 0;
+
   const id = entId.toString(); // Integer Identity as String for backward compatibility
+
+  // Ensure RenderBridge can resolve entityId -> DOD index
+  const engine = getCurrentEngine();
+  engine.physicsWorld.idToIndex.set(id, entId);
+  engine.physicsWorld.indexToId.set(entId, id);
 
   // 2. Initialize DOD State (Single Source of Truth)
   // 2.1 Transform & Physics
@@ -62,8 +70,6 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
   StatsStore.set(entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
 
   // 2.3 State Flags
-  // EIDOLON-V FIX: Explicitly RESET flags to remove potential DEAD status from reused IDs
-  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
 
   // 2.4 Skill & Tattoo
@@ -193,27 +199,138 @@ export const createPlayer = (name: string, shape: ShapeId = 'circle', spawnTime:
 export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   // TODO: Refactor Bot Creation to be less reliant on createPlayer
   // But for now, we wrap it.
-  const player = createPlayer(`Bot ${id.substr(0, 4)}`, 'circle', spawnTime);
+  const position = randomPosInRing(1);
+  const pigment = randomPigment();
 
-  if (!player) return null; // Handle allocation failure
+  // EIDOLON-V: Allocation Phase (EMS Genesis)
+  // 1. Allocate DOD Index FIRST
+  const entId = entityManager.createEntity();
+  if (entId === -1) return null; // Safety Check: Pool Full
 
+  // EIDOLON-V FIX: Immediately RESET flags to remove potential DEAD status from reused IDs
+  StateStore.flags[entId] = 0;
+
+  // Maintain legacy string identity
+  const name = `Bot ${id.substr(0, 4)}`;
+
+  // Ensure RenderBridge can resolve entityId -> DOD index
+  const engine = getCurrentEngine();
+  engine.physicsWorld.idToIndex.set(id, entId);
+  engine.physicsWorld.indexToId.set(entId, id);
+
+  // 2. Initialize DOD State (Single Source of Truth)
+  TransformStore.set(entId, position.x, position.y, 0);
+  PhysicsStore.set(entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  StatsStore.set(entId, 100, 100, 0, 0, 1, 1);
+  StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.BOT);
+
+  // 2.4 Skill & Tattoo
+  const sIdx = entId * SkillStore.STRIDE;
+  SkillStore.data[sIdx] = 0; // cooldown
+  SkillStore.data[sIdx + 1] = 8; // maxCooldown (Default)
+  SkillStore.data[sIdx + 3] = 1; // circle
+  TattooStore.flags[entId] = 0;
+
+  // 2.5 Config (Hot Logic Data)
+  ConfigStore.set(entId,
+    0,   // magneticRadius
+    1,   // damageMultiplier
+    1,   // speedMultiplier
+    50,  // pickupRange
+    1000 // visionRange
+  );
+
+  // 2.6 Input (DOD)
+  InputStore.setTarget(entId, position.x, position.y);
+
+  // 3. Create View Proxy (JS Object)
   const bot: Bot = {
-    ...player,
-    id, // Override with Bot ID
+    id,
+    physicsIndex: entId,
+
+    position: { ...position },
+    velocity: { x: 0, y: 0 },
+    radius: PLAYER_START_RADIUS,
+    color: pigmentToInt(pigment),
+    isDead: false,
+
+    name,
+    shape: 'circle',
+    pigment,
+    targetPigment: randomPigment(),
+    tier: SizeTier.Larva,
+    ring: 1,
+    emotion: 'happy',
+    tattoos: [],
+
+    score: 0,
+    kills: 0,
+    maxHealth: 100,
+    currentHealth: 100,
+    targetPosition: position,
+    spawnTime,
+    lastHitTime: 999,
+    lastEatTime: 0,
+    matchStuckTime: 0,
+    ring3LowMatchTime: 0,
+    emotionTimer: 0,
+    matchPercent: 0,
+
+    acceleration: ACCELERATION_BASE,
+    maxSpeed: MAX_SPEED_BASE,
+    friction: FRICTION_BASE,
+
+    isInvulnerable: true,
+    skillCooldown: 0,
+    maxSkillCooldown: 8,
+    defense: 1,
+    damageMultiplier: 1,
+    reflectDamage: 0,
+
+    critChance: 0,
+    critMultiplier: 1.5,
+    lifesteal: 0,
+    armorPen: 0,
+    visionMultiplier: 1,
+    sizePenaltyMultiplier: 1,
+    skillCooldownMultiplier: 1,
+    skillPowerMultiplier: 1,
+    skillDashMultiplier: 1,
+    killGrowthMultiplier: 1,
+    poisonOnHit: false,
+    doubleCast: false,
+    reviveAvailable: false,
+    magneticFieldRadius: 0,
+
+    mutationCooldowns: {
+      speedSurge: 0,
+      invulnerable: 0,
+      rewind: 0,
+      lightning: 0,
+      chaos: 0,
+      kingForm: 0,
+    },
+    rewindHistory: [],
+    stationaryTime: 0,
+
+    statusFlags: StatusFlag.INVULNERABLE,
+    tattooFlags: 0,
+    extendedFlags: 0,
+    statusTimers: createDefaultStatusTimers(),
+    statusMultipliers: createDefaultStatusMultipliers(),
+    statusScalars: createDefaultStatusScalars(),
+
+    killStreak: 0,
+    streakTimer: 0,
+
     aiState: 'wander',
     targetEntityId: null,
     aiReactionTimer: 0,
     personality: 'farmer',
   };
 
-  // Update DOD flags
-  if (bot.physicsIndex !== undefined) {
-    StateStore.clearFlag(bot.physicsIndex, EntityFlags.PLAYER);
-    StateStore.setFlag(bot.physicsIndex, EntityFlags.BOT);
-    // Ensure DEAD flag is gone (redundant but safe)
-    StateStore.clearFlag(bot.physicsIndex, EntityFlags.DEAD);
-    EntityLookup[bot.physicsIndex] = bot; // Update lookup to point to Bot wrapper
-  }
+  bot.statusTimers.invulnerable = 3;
+  EntityLookup[entId] = bot;
 
   return bot;
 };
@@ -278,6 +395,9 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
     return null;
   }
 
+  // EIDOLON-V FIX: Reset flags immediately after acquiring ID
+  StateStore.flags[entId] = 0;
+
   food.physicsIndex = entId; // Note: Need to add physicsIndex to Food type if missing (it IS in Entity interface)
 
   const pigment = randomPigment();
@@ -296,6 +416,13 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   food.pigment = pigment;
   // food.trail.length = 0; // REMOVED
 
+  // Ensure RenderBridge can resolve entityId -> DOD index
+  {
+    const engine = getCurrentEngine();
+    engine.physicsWorld.idToIndex.set(food.id, entId);
+    engine.physicsWorld.indexToId.set(entId, food.id);
+  }
+
   // Initialize DOD State
   TransformStore.set(entId, startPos.x, startPos.y, 0);
   PhysicsStore.set(entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
@@ -307,8 +434,6 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   else if (food.kind === 'solvent') typeFlag |= EntityFlags.FOOD_SOLVENT;
   else if (food.kind === 'neutral') typeFlag |= EntityFlags.FOOD_NEUTRAL;
 
-  // EIDOLON-V FIX: Reset flags first
-  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | typeFlag);
   StatsStore.set(entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
 
@@ -353,6 +478,9 @@ export const createProjectile = (
     projectilePool.release(projectile);
     return null;
   }
+
+  // EIDOLON-V FIX: Reset flags immediately after acquiring ID
+  StateStore.flags[entId] = 0;
   projectile.physicsIndex = entId;
 
   // Calculate velocity toward target
@@ -364,6 +492,13 @@ export const createProjectile = (
   const vy = dist > 0 ? (dy / dist) * speed : 0;
 
   projectile.id = entId.toString(); // or ownerId + timestamp?
+
+  // Ensure RenderBridge can resolve entityId -> DOD index
+  {
+    const engine = getCurrentEngine();
+    engine.physicsWorld.idToIndex.set(projectile.id, entId);
+    engine.physicsWorld.indexToId.set(entId, projectile.id);
+  }
   // ... setup object ...
   projectile.ownerId = ownerId;
   projectile.position = { ...position };
@@ -372,8 +507,6 @@ export const createProjectile = (
   // DOD Stores
   TransformStore.set(entId, position.x, position.y, 0);
   PhysicsStore.set(entId, vx, vy, 0.5, 8, 0.5, 1.0);
-  // EIDOLON-V FIX: Reset flags
-  StateStore.flags[entId] = 0;
   StateStore.setFlag(entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
   StatsStore.set(entId, 1, 1, 0, 0, 0, 1);
 

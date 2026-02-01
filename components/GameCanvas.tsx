@@ -6,11 +6,13 @@ import type { PigmentVec3 } from '../services/cjr/cjrTypes';
 import { intToHex } from '../services/cjr/colorMath'; // EIDOLON-V: Import color helper
 
 import { Canvas2DRingRenderer } from '../services/rendering/RingRenderer';
+import { getInterpolatedPosition } from '../services/engine/RenderBridge';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
 // import { EntityType, PickupType } from '../services/rendering/RenderTypes';
 
 interface GameCanvasProps {
   gameStateRef: React.MutableRefObject<GameState | null>;
+  alphaRef: React.MutableRefObject<number>;
   width: number;
   height: number;
   onMouseMove?: (x: number, y: number) => void;
@@ -25,6 +27,8 @@ const getColor = (c: any, defaultColor: string = '#ffffff'): string => {
   if (typeof c === 'string') return c;
   return defaultColor;
 };
+
+const _renderPoint = { x: 0, y: 0 };
 
 // ------------------------------------------------------------------
 // RENDER STRATEGIES (Zero-GC Draw Calls)
@@ -44,8 +48,8 @@ const drawPolygon = (ctx: CanvasRenderingContext2D, x: number, y: number, radius
 };
 
 const DrawStrategies = {
-  Player: (ctx: CanvasRenderingContext2D, p: any) => {
-    ctx.translate(p.position.x, p.position.y);
+  Player: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
+    ctx.translate(x, y);
 
     // Draw Body
     ctx.fillStyle = getColor(p.color, '#ffffff');
@@ -66,8 +70,8 @@ const DrawStrategies = {
     }
   },
 
-  Food: (ctx: CanvasRenderingContext2D, f: any) => {
-    ctx.translate(f.position.x, f.position.y);
+  Food: (ctx: CanvasRenderingContext2D, f: any, x: number, y: number) => {
+    ctx.translate(x, y);
 
     // Check kind (legacy string or new enum)
     const kind = f.kind;
@@ -100,8 +104,8 @@ const DrawStrategies = {
     }
   },
 
-  Projectile: (ctx: CanvasRenderingContext2D, p: any) => {
-    ctx.translate(p.position.x, p.position.y);
+  Projectile: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
+    ctx.translate(x, y);
     ctx.fillStyle = getColor(p.color, '#ff0000');
     ctx.beginPath();
     ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
@@ -199,6 +203,7 @@ const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
 
 const GameCanvas: React.FC<GameCanvasProps> = ({
   gameStateRef,
+  alphaRef,
   width,
   height,
   onMouseMove,
@@ -328,15 +333,28 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       for (let i = 0; i < state.food.length; i++) {
         const f = state.food[i];
         if (f.isDead) continue;
+        const alpha = alphaRef.current;
+        const pos = getInterpolatedPosition(f.id, alpha, _renderPoint);
+        const fx = pos ? pos.x : f.position.x;
+        const fy = pos ? pos.y : f.position.y;
         ctx.save();
-        DrawStrategies.Food(ctx, f);
+        DrawStrategies.Food(ctx, f, fx, fy);
         ctx.restore();
       }
 
       // Players
       if (!state.player.isDead) {
+        const alpha = alphaRef.current;
+        const pos = getInterpolatedPosition(state.player.id, alpha, _renderPoint);
+        const baseX = pos ? pos.x : state.player.position.x;
+        const baseY = pos ? pos.y : state.player.position.y;
+
+        const intensity = state.player.aberrationIntensity || 0;
+        const shake = intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
+        const drawX = baseX + shake;
+        const drawY = baseY + shake;
         ctx.save();
-        DrawStrategies.Player(ctx, state.player);
+        DrawStrategies.Player(ctx, state.player, drawX, drawY);
         ctx.restore();
       }
 
@@ -344,8 +362,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       for (let i = 0; i < state.bots.length; i++) {
         const b = state.bots[i];
         if (b.isDead) continue;
+        const alpha = alphaRef.current;
+        const pos = getInterpolatedPosition(b.id, alpha, _renderPoint);
+        const baseX = pos ? pos.x : b.position.x;
+        const baseY = pos ? pos.y : b.position.y;
+
+        const intensity = b.aberrationIntensity || 0;
+        const shake = intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
+        const drawX = baseX + shake;
+        const drawY = baseY + shake;
         ctx.save();
-        DrawStrategies.Player(ctx, b); // Bots use Player strategy
+        DrawStrategies.Player(ctx, b, drawX, drawY); // Bots use Player strategy
         ctx.restore();
       }
 
@@ -354,10 +381,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         const p = state.projectiles[i];
         if (p.isDead) continue;
 
+        const alpha = alphaRef.current;
+        const pos = getInterpolatedPosition(p.id, alpha, _renderPoint);
+        const px = pos ? pos.x : p.position.x;
+        const py = pos ? pos.y : p.position.y;
+
+        const intensity = (p as any).aberrationIntensity || 0;
+        const shake = intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
+        const drawX = px + shake;
+        const drawY = py + shake;
+
         // CRITICAL: Manual transform + reset (eliminates canvas stack overhead)
-        const px = p.position.x;
-        const py = p.position.y;
-        ctx.translate(px, py);
+        ctx.translate(drawX, drawY);
 
         ctx.fillStyle = getColor(p.color, '#ff0000');
         ctx.beginPath();
@@ -365,7 +400,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fill();
 
         // CRITICAL: Manual reset instead of restore()
-        ctx.translate(-px, -py);
+        ctx.translate(-drawX, -drawY);
       }
 
       // Particles (EIDOLON ARCHITECT: Already optimized - no transform needed)

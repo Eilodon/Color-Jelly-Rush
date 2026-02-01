@@ -102,7 +102,8 @@ const TATTOOS: TattooDefinition[] = [
         },
         onUpdate: (player: Player, dt: number, state: GameState) => {
             if (player.matchPercent >= 0.85) {
-                EntityStateBridge.setSpeedMultiplier(player, Math.max(player.statusMultipliers.speed || 1, 1.2));
+                const curr = EntityStateBridge.getSpeedMultiplier(player);
+                EntityStateBridge.setSpeedMultiplier(player, Math.max(curr, 1.2));
             }
         }
     },
@@ -182,7 +183,8 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Passive 15% speed boost. Dash is cheaper.',
         apply: (player: Player) => {
             player.statusScalars.speedSurge = 1;
-            EntityStateBridge.setSpeedMultiplier(player, Math.max(player.statusMultipliers.speed, 1.15));
+            const curr = EntityStateBridge.getSpeedMultiplier(player);
+            EntityStateBridge.setSpeedMultiplier(player, Math.max(curr, 1.15));
             player.skillCooldownMultiplier = 1.5; // Faster recharge
         }
     },
@@ -193,7 +195,8 @@ const TATTOOS: TattooDefinition[] = [
         description: 'Start with 3s invulnerability. Gain 50% defense.',
         apply: (player: Player) => {
             player.statusTimers.invulnerable = 3.0; // Start invuln
-            EntityStateBridge.setDefense(player, player.defense * 1.5);
+            const def = EntityStateBridge.getDefense(player);
+            EntityStateBridge.setDefense(player, def * 1.5);
         }
     },
     {

@@ -10,7 +10,7 @@ export interface ISpatialGrid {
     insertStatic(entity: Entity): void;
     removeStatic(entity: Entity): void;
     getNearby(entity: Entity, maxDistance?: number): Entity[];
-    getNearbyInto(entity: Entity, outArray: Entity[], maxDistance?: number): number;
+    getNearbyInto(entity: Entity, outArray: Entity[], indices: number[], maxDistance?: number): number;
 }
 
 // Define interface for ParticlePool used in context.ts

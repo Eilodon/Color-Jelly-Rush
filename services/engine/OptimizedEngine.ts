@@ -36,6 +36,7 @@ import { TattooSystem } from './dod/systems/TattooSystem';
 import { ConfigStore } from './dod/ConfigStore';
 import { networkTransformBuffer } from '../networking/NetworkTransformBuffer';
 
+
 // EIDOLON-V FIX: Batch processing removed in favor of Pure DOD Iteration
 // Memory overhead reduced.
 
@@ -71,13 +72,8 @@ class OptimizedGameEngine {
     for (let i = 0; i < MAX_ENTITIES; i++) {
       // Filter: Active only
       if ((flags[i] & EntityFlags.ACTIVE) === 0) continue;
-
-      // Insert into Grid (Hybrid: Grid still expects Objects for now)
-      // Ideally we'd have a DOD Grid, but this bridges the gap.
-      const obj = EntityLookup[i];
-      if (obj && !obj.isDead) { // Double check dead flag on object if needed
-        grid.insert(obj);
-      }
+      if ((flags[i] & EntityFlags.DEAD) !== 0) continue;
+      grid.insertIndex(i);
     }
   }
 
@@ -125,14 +121,6 @@ class OptimizedGameEngine {
       const idx = ent.physicsIndex;
       if (idx !== undefined) {
         const tIdx = idx * 8;
-
-        // EIDOLON-V 2.2: Camera-based filtering (skip entities outside viewport)
-        // Always sync local player regardless of position
-        if (ent.id !== alwaysSyncId) {
-          const x = tData[tIdx];
-          const y = tData[tIdx + 1];
-          if (!this.isInViewport(x, y)) continue;
-        }
 
         const pIdx = idx * 8;
 
@@ -367,8 +355,8 @@ class OptimizedGameEngine {
       const oy = tData[tIdx + 1];
       const or = pData[pIdx + 4];
 
-      const dx = ox - projectile.position.x;
-      const dy = oy - projectile.position.y;
+      const dx = ox - px;
+      const dy = oy - py;
       const distSq = dx * dx + dy * dy;
       const collisionDist = or + projectile.radius;
 
@@ -559,61 +547,49 @@ class OptimizedGameEngine {
 
         const isPlayer = (flags[i] & EntityFlags.PLAYER) !== 0;
         const isBot = (flags[i] & EntityFlags.BOT) !== 0;
+        if (!isPlayer && !isBot) continue;
 
-        // A. MOVEMENT & LOGIC (Pure DOD)
-        if (isPlayer || isBot) {
-          // Sync Bot/Player Target to InputStore (Hybrid Bridge)
-          const obj = EntityLookup[i] as Player | Bot;
-
-          if (obj) {
-            if (isBot) {
-              // AI Runs on Object -> Writes to Store
-              updateAI(obj as Bot, state, dt);
-              // Sync Target to InputStore
-              const bot = obj as Bot;
-              if (bot.targetPosition) {
-                InputStore.setTarget(i, bot.targetPosition.x, bot.targetPosition.y);
-              }
-            } else {
-              // Player Input: Sync InputManager target to Store
-              // (Assuming InputManager updates obj.targetPosition or we read it here)
-              const player = obj as Player;
-              if (player.targetPosition) {
-                InputStore.setTarget(i, player.targetPosition.x, player.targetPosition.y);
-              }
-
-              // Skill Input (read from InputStore)
-              if (InputStore.consumeSkillInput(i)) {
-                SkillSystem.handleInput(i, { space: true, target: player.targetPosition }, state);
-              }
+        const obj = EntityLookup[i] as Player | Bot;
+        if (obj) {
+          if (isBot) {
+            updateAI(obj as Bot, state, dt);
+            const bot = obj as Bot;
+            if (bot.targetPosition) {
+              InputStore.setTarget(i, bot.targetPosition.x, bot.targetPosition.y);
+            }
+          } else {
+            const player = obj as Player;
+            if (player.targetPosition) {
+              InputStore.setTarget(i, player.targetPosition.x, player.targetPosition.y);
             }
 
-            // Config ConfigStore (Radius/Damage) from Object if it changed?
-            // Doing this every frame is costly. Ideally only on change.
-            // For now, assume ConfigStore is authoritative or synced elsewhere.
-
-            // Visual Juice Decay (Object state)
-            if (obj.aberrationIntensity && obj.aberrationIntensity > 0) {
-              obj.aberrationIntensity -= dt * 3.0;
-              if (obj.aberrationIntensity < 0) obj.aberrationIntensity = 0;
+            if (InputStore.consumeSkillInput(i)) {
+              SkillSystem.handleInput(i, { space: true, target: player.targetPosition }, state);
             }
-
-            // Stats Regen & Cooldowns
-            this.updateEntityTimers(i, obj, dt);
           }
 
-          // CHẠY MOVEMENT (Pure DOD)
-          MovementSystem.update(i, dt);
-
-          // MAGNET (Pure DOD)
-          if (obj && isPlayer) { // Magnet logic usually for players/bots
-            this.updateMagnetLogic(obj as Player, state, dt);
+          if (obj.aberrationIntensity && obj.aberrationIntensity > 0) {
+            obj.aberrationIntensity -= dt * 3.0;
+            if (obj.aberrationIntensity < 0) obj.aberrationIntensity = 0;
           }
 
-          // COLLISION (Pure DOD Check -> Hybrid Resolve)
-          if (obj) {
-            this.checkUnitCollisions(obj as Player, state, dt);
-          }
+          this.updateEntityTimers(i, obj, dt);
+        }
+
+        MovementSystem.update(i, dt);
+
+        if (obj && isPlayer) {
+          this.updateMagnetLogic(obj as Player, state, dt);
+        }
+      }
+
+      // 5. COLLISION (Post-physics)
+      for (let i = 0; i < MAX_ENTITIES; i++) {
+        if ((flags[i] & EntityFlags.ACTIVE) === 0) continue;
+        if ((flags[i] & (EntityFlags.PLAYER | EntityFlags.BOT)) === 0) continue;
+        const obj = EntityLookup[i] as Player | Bot;
+        if (obj) {
+          this.checkUnitCollisions(obj as Player, state, dt);
         }
       }
 

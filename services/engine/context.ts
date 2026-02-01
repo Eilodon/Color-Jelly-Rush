@@ -14,7 +14,7 @@ import { SpatialHashGrid, SpatialQueryResult } from '../spatial/SpatialHashGrid'
 
 // --- Optimization: Persistent Spatial Grid ---
 // ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
-import { EntityLookup } from './dod/ComponentStores';
+import { EntityLookup, TransformStore } from './dod/ComponentStores';
 
 // --- Optimization: Persistent Spatial Grid ---
 // ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
@@ -36,6 +36,10 @@ export class SpatialGrid implements ISpatialGrid {
   // Clear only dynamic entities (used by optimized engine)
   clearDynamic() {
     this.grid.clearDynamic();
+  }
+
+  insertIndex(index: number) {
+    this.grid.add(index, false);
   }
 
   insert(entity: Entity) {
@@ -71,16 +75,25 @@ export class SpatialGrid implements ISpatialGrid {
   // Legacy Adapter: Zero-allocation query (optimally supported by native methods, but adapter proxies it)
   // WARNING: This is now "Slow-allocation" because we must look up objects. 
   // Optimized Consumers should use `grid.queryRadiusInto` with indices directly.
-  getNearbyInto(entity: Entity, outArray: Entity[], maxDistance: number = 200): number {
+  getNearbyInto(entity: Entity, outArray: Entity[], indices: number[], maxDistance: number = 200): number {
     // Validate input
     if (!outArray) {
       console.warn('SpatialGrid.getNearbyInto: outArray is null or undefined');
       return 0;
     }
+    if (!indices) {
+      console.warn('SpatialGrid.getNearbyInto: indices is null or undefined');
+      return 0;
+    }
     
-    // Temp array for indices
-    const indices: number[] = [];
-    this.grid.queryRadiusInto(entity.position.x, entity.position.y, maxDistance, indices);
+    let x = entity.position.x;
+    let y = entity.position.y;
+    if (entity.physicsIndex !== undefined) {
+      const tIdx = entity.physicsIndex * 8;
+      x = TransformStore.data[tIdx];
+      y = TransformStore.data[tIdx + 1];
+    }
+    this.grid.queryRadiusInto(x, y, maxDistance, indices);
 
     outArray.length = 0;
     for (const idx of indices) {

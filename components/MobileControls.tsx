@@ -28,7 +28,8 @@ const MobileControls: React.FC = memo(() => {
     }
 
     stickRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
-    inputManager.setJoystick(dx / maxDist, dy / maxDist);
+    const scale = Math.min(window.innerWidth, window.innerHeight) / 2;
+    inputManager.setJoystick(dx / scale, dy / scale);
   };
 
   const handleStart = (e: React.TouchEvent) => {

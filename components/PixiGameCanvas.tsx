@@ -5,6 +5,9 @@ import { GameState, Entity, Player, Bot, Food, Projectile } from '../types';
 import { JELLY_VERTEX, JELLY_FRAGMENT } from '../services/cjr/shaders';
 import { MAP_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, COLOR_PALETTE_HEX } from '../constants';
 import { intToHex } from '../services/cjr/colorMath';
+import { getInterpolatedPosition } from '../services/engine/RenderBridge';
+
+const _renderPoint = { x: 0, y: 0 };
 
 interface PixiGameCanvasProps {
     gameStateRef: React.RefObject<GameState | null>;
@@ -52,7 +55,7 @@ class RenderPool<T extends Container> {
     getActive(): Map<string, T> { return this.active; }
 }
 
-const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
+const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
 
@@ -236,7 +239,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
                     if (f.isDead) continue;
                     seenIds.add(f.id);
                     const gfx = foodPoolRef.current!.get(f.id);
-                    gfx.position.set(f.position.x, f.position.y);
+                    const alpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(f.id, alpha, _renderPoint);
+                    const fx = pos ? pos.x : f.position.x;
+                    const fy = pos ? pos.y : f.position.y;
+                    gfx.position.set(fx, fy);
                     gfx.clear();
 
                     // Style by kind
@@ -266,7 +273,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
 
                     const mesh = unitPoolRef.current!.get(u.id);
                     // Mesh is 2x2 normalized quad, scale it to Radius
-                    mesh.position.set(u.position.x, u.position.y);
+                    const alpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(u.id, alpha, _renderPoint);
+                    const ux = pos ? pos.x : u.position.x;
+                    const uy = pos ? pos.y : u.position.y;
+                    mesh.position.set(ux, uy);
                     mesh.scale.set(u.radius, u.radius);
 
                     // Update Shader Uniforms
@@ -281,7 +292,13 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
                         const r = ((c >> 16) & 255) / 255;
                         const g = ((c >> 8) & 255) / 255;
                         const b = (c & 255) / 255;
-                        uData.uJellyColor = [r, g, b];
+
+                        if (!uData.uJellyColor || !(uData.uJellyColor instanceof Float32Array) || uData.uJellyColor.length !== 3) {
+                            uData.uJellyColor = new Float32Array(3);
+                        }
+                        uData.uJellyColor[0] = r;
+                        uData.uJellyColor[1] = g;
+                        uData.uJellyColor[2] = b;
 
                         // Juice
                         uData.uTime = state.gameTime;
@@ -301,7 +318,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef }) => {
                     if (p.isDead) continue;
                     seenIds.add(p.id);
                     const gfx = projectilePoolRef.current!.get(p.id);
-                    gfx.position.set(p.position.x, p.position.y);
+                    const alpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(p.id, alpha, _renderPoint);
+                    const px = pos ? pos.x : p.position.x;
+                    const py = pos ? pos.y : p.position.y;
+                    gfx.position.set(px, py);
                     // Simple redraw or cache
                     gfx.clear();
                     gfx.circle(0, 0, p.radius);

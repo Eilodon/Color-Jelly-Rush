@@ -51,10 +51,15 @@ export const getInterpolatedPositionsBatch = (
 /**
  * Get interpolated position for a single entity
  */
-export const getInterpolatedPosition = (
+export type RenderPoint = { x: number; y: number };
+
+export function getInterpolatedPosition(entityId: string, alpha: number): RenderPoint | null;
+export function getInterpolatedPosition(entityId: string, alpha: number, out: RenderPoint): RenderPoint | null;
+export function getInterpolatedPosition(
     entityId: string,
-    alpha: number
-): { x: number; y: number } | null => {
+    alpha: number,
+    out?: RenderPoint
+): RenderPoint | null {
     const world = getPhysicsWorld();
     const idx = world.idToIndex.get(entityId);
     if (idx === undefined) return null;
@@ -66,11 +71,11 @@ export const getInterpolatedPosition = (
     const prevX = data[baseIdx + PREV_X_OFFSET];
     const prevY = data[baseIdx + PREV_Y_OFFSET];
 
-    return {
-        x: prevX + (currX - prevX) * alpha,
-        y: prevY + (currY - prevY) * alpha,
-    };
-};
+    const result = out || { x: 0, y: 0 };
+    result.x = prevX + (currX - prevX) * alpha;
+    result.y = prevY + (currY - prevY) * alpha;
+    return result;
+}
 
 /**
  * Consume all pending VFX events from the ring buffer

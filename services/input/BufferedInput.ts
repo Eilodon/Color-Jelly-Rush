@@ -56,8 +56,24 @@ export class InputRingBuffer {
 
     // EIDOLON-V FIX: Get events since stored frame index
     getEventsSince(lastFrameIndex: number): InputEvent[] {
+        const startIndex = this.frameStartIndices[lastFrameIndex];
+        if (startIndex === undefined) return [];
+
+        // Number of elements currently in the buffer (head === tail means empty)
+        const count = (this.head - this.tail + this.size) % this.size;
+        if (count === 0) return [];
+
+        // Validate that startIndex is still within the retained window; otherwise clamp to tail.
+        const distanceFromTail = (startIndex - this.tail + this.size) % this.size;
+        let current = distanceFromTail < count ? startIndex : this.tail;
+
         const events: InputEvent[] = [];
-        // Simplified: return empty for now, ring buffer query not needed for current use case
+        while (current !== this.head) {
+            const ev = this.buffer[current];
+            if (ev) events.push(ev);
+            current = (current + 1) % this.size;
+        }
+
         return events;
     }
 

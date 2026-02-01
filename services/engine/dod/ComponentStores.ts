@@ -41,7 +41,7 @@ export class PhysicsStore {
 
 export class StateStore {
     // Flags for type and status
-    public static readonly flags = new Uint8Array(MAX_ENTITIES);
+    public static readonly flags = new Uint16Array(MAX_ENTITIES);
 
     static setFlag(id: number, flag: EntityFlags) {
         this.flags[id] |= flag;
