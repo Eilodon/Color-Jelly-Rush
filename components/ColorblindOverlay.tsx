@@ -56,15 +56,25 @@ const ColorblindOverlay: React.FC<ColorblindOverlayProps> = ({
 
     drawPatternOverlay();
 
-    // Handle resize
+    // EIDOLON-V: Debounced resize handler to prevent excessive redraws
+    // Pattern redraw is expensive (O(width + height) lines) - debounce 100ms
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      drawPatternOverlay();
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        drawPatternOverlay();
+        resizeTimeout = null;
+      }, 100);
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
   }, [enabled, config]);
 
   const toggleColorblindMode = () => {
