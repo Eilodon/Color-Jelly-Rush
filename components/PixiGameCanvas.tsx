@@ -15,44 +15,45 @@ interface PixiGameCanvasProps {
     alphaRef: React.MutableRefObject<number>;
 }
 
-// EIDOLON-V: Object Pools for Zero-GC Rendering
-class RenderPool<T extends Container> {
+// EIDOLON-V: FixedRenderPool - Cursor-based Zero-Allocation Pool
+// Pattern: Pre-allocate + Cursor index = No .pop() fragmentation, No Map overhead
+class FixedRenderPool<T extends Container> {
     private pool: T[] = [];
-    private active: Map<string, T> = new Map();
+    private activeIndex: number = 0;
     private factory: () => T;
 
-    constructor(factory: () => T) {
+    constructor(initialSize: number, factory: () => T) {
         this.factory = factory;
+        // Pre-allocate entire pool upfront - eliminates runtime allocations
+        for (let i = 0; i < initialSize; i++) {
+            const item = factory();
+            item.visible = false;
+            this.pool.push(item);
+        }
     }
 
-    get(id: string): T {
-        let item = this.active.get(id);
-        if (!item) {
-            item = this.pool.pop() || this.factory();
-            this.active.set(id, item);
-            item.visible = true;
+    get(): T {
+        if (this.activeIndex >= this.pool.length) {
+            // Emergency expansion - should rarely trigger if initialSize is calibrated
+            const item = this.factory();
+            this.pool.push(item);
         }
+        const item = this.pool[this.activeIndex++];
+        item.visible = true;
         return item;
     }
 
-    release(id: string) {
-        const item = this.active.get(id);
-        if (item) {
-            item.visible = false;
-            this.pool.push(item);
-            this.active.delete(id);
+    reset(): void {
+        // O(activeIndex) visibility toggle - much faster than Map iteration
+        for (let i = 0; i < this.activeIndex; i++) {
+            this.pool[i].visible = false;
         }
+        this.activeIndex = 0;
     }
 
-    releaseAll() {
-        for (const [id, item] of this.active) {
-            item.visible = false;
-            this.pool.push(item);
-        }
-        this.active.clear();
+    getActiveCount(): number {
+        return this.activeIndex;
     }
-
-    getActive(): Map<string, T> { return this.active; }
 }
 
 const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef }) => {
@@ -67,11 +68,11 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
     const vfxLayerRef = useRef<Container | null>(null);
     const uiLayerRef = useRef<Container | null>(null);
 
-    // Pools
-    const foodPoolRef = useRef<RenderPool<Graphics> | null>(null);
-    const projectilePoolRef = useRef<RenderPool<Graphics> | null>(null);
-    const unitPoolRef = useRef<RenderPool<Mesh<Geometry, Shader>> | null>(null); // Units use Mesh for Shader
-    const vfxPoolRef = useRef<RenderPool<Graphics> | null>(null);
+    // Pools - FixedRenderPool with cursor pattern for zero-GC rendering
+    const foodPoolRef = useRef<FixedRenderPool<Graphics> | null>(null);
+    const projectilePoolRef = useRef<FixedRenderPool<Graphics> | null>(null);
+    const unitPoolRef = useRef<FixedRenderPool<Mesh<Geometry, Shader>> | null>(null);
+    const vfxPoolRef = useRef<FixedRenderPool<Graphics> | null>(null);
 
     // Shared Shader
     const shaderRef = useRef<Shader | null>(null);
@@ -144,16 +145,21 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
                 }
             });
 
-            // 3. Initialize Pools
-            foodPoolRef.current = new RenderPool(() => {
+            // 3. Initialize Pools with Pre-allocation
+            // Pool sizes calibrated for typical gameplay scenarios
+            const FOOD_POOL_SIZE = 200;
+            const PROJECTILE_POOL_SIZE = 50;
+            const UNIT_POOL_SIZE = 32; // Player + Bots
+
+            foodPoolRef.current = new FixedRenderPool(FOOD_POOL_SIZE, () => {
                 const g = new Graphics();
-                g.circle(0, 0, 10); // Radius updated per frame if needed
+                g.circle(0, 0, 10);
                 g.fill(0xffffff);
                 foodLayer.addChild(g);
                 return g;
             });
 
-            projectilePoolRef.current = new RenderPool(() => {
+            projectilePoolRef.current = new FixedRenderPool(PROJECTILE_POOL_SIZE, () => {
                 const g = new Graphics();
                 g.circle(0, 0, 5);
                 g.fill(0xff0000);
@@ -161,19 +167,17 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
                 return g;
             });
 
-            unitPoolRef.current = new RenderPool(() => {
+            unitPoolRef.current = new FixedRenderPool(UNIT_POOL_SIZE, () => {
                 // Quad Geometry for Shader
                 const geometry = new Geometry({
                     attributes: {
-                        position: [-1, -1, 1, -1, 1, 1, -1, 1], // Normalized quad
+                        position: [-1, -1, 1, -1, 1, 1, -1, 1],
                         uv: [0, 0, 1, 0, 1, 1, 0, 1]
                     },
                     indexBuffer: [0, 1, 2, 0, 2, 3]
                 });
 
-                // Clone shader for individual uniforms (Color/Aberration)
-                // Note: In Pixi v8, shader resources might be shared.
-                // We'll see if we need unique shaders per mesh. Assuming yes for uniforms.
+                // Clone shader for individual uniforms
                 const s = new Shader({
                     glProgram,
                     resources: {
@@ -182,6 +186,14 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
                 });
 
                 const m = new Mesh({ geometry, shader: s, texture: Texture.WHITE });
+
+                // CRITICAL: Pre-initialize uJellyColor as Float32Array ONCE at creation
+                // This eliminates runtime allocation in render loop
+                const uData = (m.shader.resources.uniforms as any).uniforms;
+                if (uData) {
+                    uData.uJellyColor = new Float32Array([0, 0, 0]);
+                }
+
                 unitLayer.addChild(m);
                 return m;
             });
@@ -231,106 +243,71 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
                 g.stroke();
 
 
-                // C. Sync Entities
-                const seenIds = new Set<string>();
+                // C. Reset Pools - Cursor pattern eliminates cleanup loops
+                foodPoolRef.current!.reset();
+                unitPoolRef.current!.reset();
+                projectilePoolRef.current!.reset();
 
-                // Food
+                // D. Render Food
                 for (const f of state.food) {
                     if (f.isDead) continue;
-                    seenIds.add(f.id);
-                    const gfx = foodPoolRef.current!.get(f.id);
-                    const alpha = alphaRef.current;
-                    const pos = getInterpolatedPosition(f.id, alpha, _renderPoint);
-                    const fx = pos ? pos.x : f.position.x;
-                    const fy = pos ? pos.y : f.position.y;
-                    gfx.position.set(fx, fy);
+                    const gfx = foodPoolRef.current!.get();
+                    const interpAlpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(f.id, interpAlpha, _renderPoint);
+                    gfx.position.set(pos ? pos.x : f.position.x, pos ? pos.y : f.position.y);
                     gfx.clear();
 
                     // Style by kind
                     if (f.kind === 'catalyst') {
                         gfx.regularPoly(0, 0, f.radius, 6);
-                        gfx.fill(0xd946ef); // Magenta
+                        gfx.fill(0xd946ef);
                     } else if (f.kind === 'shield') {
                         gfx.rect(-f.radius, -f.radius, f.radius * 2, f.radius * 2);
-                        gfx.fill(0xfbbf24); // Gold
+                        gfx.fill(0xfbbf24);
                     } else {
                         gfx.circle(0, 0, f.radius);
                         gfx.fill(f.color);
                     }
                 }
 
-                // Clean Missing Food
-                for (const [id] of foodPoolRef.current!.getActive()) {
-                    if (!seenIds.has(id)) foodPoolRef.current!.release(id);
-                }
-                seenIds.clear();
-
-                // Units (Player + Bots)
+                // E. Render Units (Player + Bots)
                 const units = [state.player, ...state.bots];
                 for (const u of units) {
                     if (!u || u.isDead) continue;
-                    seenIds.add(u.id);
 
-                    const mesh = unitPoolRef.current!.get(u.id);
-                    // Mesh is 2x2 normalized quad, scale it to Radius
-                    const alpha = alphaRef.current;
-                    const pos = getInterpolatedPosition(u.id, alpha, _renderPoint);
-                    const ux = pos ? pos.x : u.position.x;
-                    const uy = pos ? pos.y : u.position.y;
-                    mesh.position.set(ux, uy);
+                    const mesh = unitPoolRef.current!.get();
+                    const interpAlpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(u.id, interpAlpha, _renderPoint);
+                    mesh.position.set(pos ? pos.x : u.position.x, pos ? pos.y : u.position.y);
                     mesh.scale.set(u.radius, u.radius);
 
-                    // Update Shader Uniforms
-                    // const uniforms = mesh.shader.resources.uniforms.uniforms; // Pixi v8
-                    // Hack for V8 structure access if strict typing fails:
-                    const anyShader = mesh.shader as any;
-                    if (anyShader.resources && anyShader.resources.uniforms && anyShader.resources.uniforms.uniforms) {
-                        const uData = anyShader.resources.uniforms.uniforms;
-
-                        // Color
+                    // Update Shader Uniforms - Direct mutation, ZERO allocation
+                    const uData = (mesh.shader as any).resources?.uniforms?.uniforms;
+                    if (uData) {
+                        // Color extraction via bitwise - no allocation
                         const c = u.color as number;
-                        const r = ((c >> 16) & 255) / 255;
-                        const g = ((c >> 8) & 255) / 255;
-                        const b = (c & 255) / 255;
+                        // Direct mutation of pre-allocated Float32Array
+                        uData.uJellyColor[0] = ((c >> 16) & 255) / 255;
+                        uData.uJellyColor[1] = ((c >> 8) & 255) / 255;
+                        uData.uJellyColor[2] = (c & 255) / 255;
 
-                        if (!uData.uJellyColor || !(uData.uJellyColor instanceof Float32Array) || uData.uJellyColor.length !== 3) {
-                            uData.uJellyColor = new Float32Array(3);
-                        }
-                        uData.uJellyColor[0] = r;
-                        uData.uJellyColor[1] = g;
-                        uData.uJellyColor[2] = b;
-
-                        // Juice
+                        // Juice parameters
                         uData.uTime = state.gameTime;
                         uData.uAberration = u.aberrationIntensity || 0;
-                        uData.uEnergy = (u.currentHealth / u.maxHealth);
+                        uData.uEnergy = u.currentHealth / u.maxHealth;
                     }
                 }
 
-                // Clean Missing Units
-                for (const [id] of unitPoolRef.current!.getActive()) {
-                    if (!seenIds.has(id)) unitPoolRef.current!.release(id);
-                }
-                seenIds.clear();
-
-                // Projectiles
+                // F. Render Projectiles
                 for (const p of state.projectiles) {
                     if (p.isDead) continue;
-                    seenIds.add(p.id);
-                    const gfx = projectilePoolRef.current!.get(p.id);
-                    const alpha = alphaRef.current;
-                    const pos = getInterpolatedPosition(p.id, alpha, _renderPoint);
-                    const px = pos ? pos.x : p.position.x;
-                    const py = pos ? pos.y : p.position.y;
-                    gfx.position.set(px, py);
-                    // Simple redraw or cache
+                    const gfx = projectilePoolRef.current!.get();
+                    const interpAlpha = alphaRef.current;
+                    const pos = getInterpolatedPosition(p.id, interpAlpha, _renderPoint);
+                    gfx.position.set(pos ? pos.x : p.position.x, pos ? pos.y : p.position.y);
                     gfx.clear();
                     gfx.circle(0, 0, p.radius);
                     gfx.fill(0xff0000);
-                }
-                // Clean Missing Projectiles
-                for (const [id] of projectilePoolRef.current!.getActive()) {
-                    if (!seenIds.has(id)) projectilePoolRef.current!.release(id);
                 }
 
             });
