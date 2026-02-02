@@ -633,39 +633,65 @@ export class NetworkClient {
     const snapshot = this.snapshotBuffer[this.snapshotHead];
     snapshot.time = this.nowMs();
 
-    // Clear Maps (reusing Map objects - no allocation)
-    snapshot.players.clear();
-    snapshot.bots.clear();
-    snapshot.food.clear();
+    // EIDOLON-V P0 FIX: Track which IDs exist this frame for cleanup
+    const activePlayerIds = new Set<string>();
+    const activeBotIds = new Set<string>();
+    const activeFoodIds = new Set<string>();
 
-    // Populate Maps with entity data (Map.set reuses internal structure)
+    // EIDOLON-V P0 FIX: Reuse existing EntitySnapshot objects instead of creating new ones
+    // Populate Maps with entity data - MUTATE existing objects, don't replace
     state.players.forEach((p: any, id: string) => {
-      snapshot.players.set(id, {
-        x: p.position.x,
-        y: p.position.y,
-        vx: p.velocity.x,
-        vy: p.velocity.y,
-        radius: p.radius,
-      });
+      activePlayerIds.add(id);
+      let snap = snapshot.players.get(id);
+      if (!snap) {
+        // Only allocate if truly new entity
+        snap = { x: 0, y: 0, vx: 0, vy: 0, radius: 0 };
+        snapshot.players.set(id, snap);
+      }
+      // Mutate existing object - zero allocation
+      snap.x = p.position.x;
+      snap.y = p.position.y;
+      snap.vx = p.velocity.x;
+      snap.vy = p.velocity.y;
+      snap.radius = p.radius;
     });
 
     state.bots.forEach((b: any, id: string) => {
-      snapshot.bots.set(id, {
-        x: b.position.x,
-        y: b.position.y,
-        vx: b.velocity.x,
-        vy: b.velocity.y,
-        radius: b.radius,
-      });
+      activeBotIds.add(id);
+      let snap = snapshot.bots.get(id);
+      if (!snap) {
+        snap = { x: 0, y: 0, vx: 0, vy: 0, radius: 0 };
+        snapshot.bots.set(id, snap);
+      }
+      snap.x = b.position.x;
+      snap.y = b.position.y;
+      snap.vx = b.velocity.x;
+      snap.vy = b.velocity.y;
+      snap.radius = b.radius;
     });
 
     state.food.forEach((f: any, id: string) => {
-      snapshot.food.set(id, {
-        x: f.x,
-        y: f.y,
-        radius: f.radius,
-      });
+      activeFoodIds.add(id);
+      let snap = snapshot.food.get(id);
+      if (!snap) {
+        snap = { x: 0, y: 0, radius: 0 };
+        snapshot.food.set(id, snap);
+      }
+      snap.x = f.x;
+      snap.y = f.y;
+      snap.radius = f.radius;
     });
+
+    // EIDOLON-V P0 FIX: Cleanup stale entries (entities that no longer exist)
+    for (const id of snapshot.players.keys()) {
+      if (!activePlayerIds.has(id)) snapshot.players.delete(id);
+    }
+    for (const id of snapshot.bots.keys()) {
+      if (!activeBotIds.has(id)) snapshot.bots.delete(id);
+    }
+    for (const id of snapshot.food.keys()) {
+      if (!activeFoodIds.has(id)) snapshot.food.delete(id);
+    }
 
     // Advance circular index (no array operations)
     this.snapshotHead = (this.snapshotHead + 1) % NetworkClient.SNAPSHOT_BUFFER_SIZE;

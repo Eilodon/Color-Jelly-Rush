@@ -69,7 +69,11 @@ export class PhysicsSystem {
         tData[tIdx + 5] = tData[tIdx + 1]; // prevY
 
         // 4. Integrate position (Euler)
-        const delta = dt * 10;
+        // EIDOLON-V P2 FIX: Extracted magic number with explanation
+        // PHYSICS_TIME_SCALE = 10: Converts velocity from "units per 100ms" to "units per frame"
+        // This matches the server's physics tick rate and ensures consistent movement speed
+        const PHYSICS_TIME_SCALE = 10;
+        const delta = dt * PHYSICS_TIME_SCALE;
         tData[tIdx] += vx * delta;
         tData[tIdx + 1] += vy * delta;
 

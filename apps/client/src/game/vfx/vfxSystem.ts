@@ -86,6 +86,7 @@ class ScreenShakeController {
   private duration: number = 0;
   private frequency: number = 0;
   private currentTime: number = 0;
+  // EIDOLON-V P1 FIX: Reuse single object instead of creating new one each frame
   private currentOffset: Vector2 = { x: 0, y: 0 };
 
   applyShake(config: { intensity: number; duration: number; frequency: number }): void {
@@ -97,16 +98,18 @@ class ScreenShakeController {
 
   update(dt: number): void {
     if (this.currentTime >= this.duration) {
-      this.currentOffset = { x: 0, y: 0 };
+      // EIDOLON-V P1 FIX: Mutate existing object instead of creating new
+      this.currentOffset.x = 0;
+      this.currentOffset.y = 0;
       return;
     }
     this.currentTime += dt;
     const progress = this.currentTime / this.duration;
     const fadeOut = 1 - progress;
-    const shakeX = Math.sin(this.currentTime * this.frequency) * this.intensity * fadeOut * 20;
-    const shakeY =
+    // EIDOLON-V P1 FIX: Mutate existing object
+    this.currentOffset.x = Math.sin(this.currentTime * this.frequency) * this.intensity * fadeOut * 20;
+    this.currentOffset.y =
       Math.cos(this.currentTime * this.frequency * 1.3) * this.intensity * fadeOut * 20;
-    this.currentOffset = { x: shakeX, y: shakeY };
   }
 
   getCurrentOffset(): Vector2 {

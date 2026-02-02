@@ -5,6 +5,14 @@ import { fastMath } from '../math/FastMath';
 import { Entity } from '../../types';
 import { TransformStore, PhysicsStore, EntityLookup } from '../engine/dod/ComponentStores';
 
+// EIDOLON-V P0 FIX: __DEV__ guard for hot path warnings
+declare const __DEV__: boolean;
+const warnOnce = (msg: string, data?: unknown) => {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    warnOnce(msg, data);
+  }
+};
+
 export interface SpatialHashConfig {
   worldSize: number;
   cellSize: number;
@@ -109,7 +117,7 @@ export class SpatialHashGrid {
   add(entityIndex: number, isStatic: boolean = false): void {
     // Validate entity index
     if (entityIndex < 0 || entityIndex >= this.config.maxEntities) {
-      console.warn('SpatialHashGrid.add: Invalid entity index', {
+      warnOnce('SpatialHashGrid.add: Invalid entity index', {
         entityIndex,
         maxEntities: this.config.maxEntities,
       });
@@ -119,7 +127,7 @@ export class SpatialHashGrid {
     // Validate TransformStore bounds
     const tIdx = entityIndex * 8;
     if (tIdx + 1 >= TransformStore.data.length) {
-      console.warn('SpatialHashGrid.add: TransformStore index out of bounds', {
+      warnOnce('SpatialHashGrid.add: TransformStore index out of bounds', {
         entityIndex,
         tIdx,
         tDataLength: TransformStore.data.length,
@@ -133,7 +141,7 @@ export class SpatialHashGrid {
 
     // Validate position
     if (!isFinite(x) || !isFinite(y)) {
-      console.warn('SpatialHashGrid.add: Invalid entity position', { entityIndex, x, y });
+      warnOnce('SpatialHashGrid.add: Invalid entity position', { entityIndex, x, y });
       return;
     }
 
@@ -145,7 +153,7 @@ export class SpatialHashGrid {
     // Determine cell based on CENTER position
     const cellIndex = this.hashPosition(x, y);
     if (cellIndex < 0 || cellIndex >= this.totalCells) {
-      console.warn('SpatialHashGrid.add: Invalid cell index', {
+      warnOnce('SpatialHashGrid.add: Invalid cell index', {
         entityIndex,
         x,
         y,
@@ -216,7 +224,7 @@ export class SpatialHashGrid {
 
     // Validate inputs
     if (!isFinite(x) || !isFinite(y) || !isFinite(radius) || radius < 0) {
-      console.warn('SpatialHashGrid.queryRadiusInto: Invalid input parameters', { x, y, radius });
+      warnOnce('SpatialHashGrid.queryRadiusInto: Invalid input parameters', { x, y, radius });
       return;
     }
 
@@ -255,7 +263,7 @@ export class SpatialHashGrid {
       ) {
         // Safety check: prevent infinite loops from corrupted linked lists
         if (this.visitMark[currentEntityIndex] === epoch) {
-          console.warn(
+          warnOnce(
             'SpatialHashGrid: Detected cycle in linked list at entity',
             currentEntityIndex
           );
@@ -265,14 +273,14 @@ export class SpatialHashGrid {
 
         // Validate entity index
         if (currentEntityIndex < 0 || currentEntityIndex >= this.config.maxEntities) {
-          console.warn('SpatialHashGrid: Invalid entity index', currentEntityIndex);
+          warnOnce('SpatialHashGrid: Invalid entity index', currentEntityIndex);
           break;
         }
 
         // DOD Distance Check (direct array access)
         const tIdx = currentEntityIndex * 8;
         if (tIdx + 1 >= tData.length) {
-          console.warn('SpatialHashGrid: TransformStore index out of bounds', {
+          warnOnce('SpatialHashGrid: TransformStore index out of bounds', {
             currentEntityIndex,
             tIdx,
             tDataLength: tData.length,
@@ -284,7 +292,7 @@ export class SpatialHashGrid {
         const ey = tData[tIdx + 1];
         const pIdx = currentEntityIndex * 8 + 4;
         if (pIdx >= pData.length) {
-          console.warn('SpatialHashGrid: PhysicsStore index out of bounds', {
+          warnOnce('SpatialHashGrid: PhysicsStore index out of bounds', {
             currentEntityIndex,
             pIdx,
             pDataLength: pData.length,
@@ -296,7 +304,7 @@ export class SpatialHashGrid {
 
         // Validate position and radius
         if (!isFinite(ex) || !isFinite(ey) || !isFinite(er)) {
-          console.warn('SpatialHashGrid: Invalid entity data', { currentEntityIndex, ex, ey, er });
+          warnOnce('SpatialHashGrid: Invalid entity data', { currentEntityIndex, ex, ey, er });
           currentEntityIndex = this.nextEntity[currentEntityIndex];
           iterationCount++;
           continue;
@@ -314,7 +322,7 @@ export class SpatialHashGrid {
         // CRITICAL: Advance to next in linked list
         const nextIndex = this.nextEntity[currentEntityIndex];
         if (nextIndex === currentEntityIndex) {
-          console.warn('SpatialHashGrid: Self-referencing entity', currentEntityIndex);
+          warnOnce('SpatialHashGrid: Self-referencing entity', currentEntityIndex);
           break;
         }
         currentEntityIndex = nextIndex;
@@ -322,7 +330,7 @@ export class SpatialHashGrid {
       }
 
       if (iterationCount >= MAX_ITERATIONS) {
-        console.warn('SpatialHashGrid: Max iterations reached, possible infinite loop', {
+        warnOnce('SpatialHashGrid: Max iterations reached, possible infinite loop', {
           cellIndex,
           currentEntityIndex,
         });

@@ -1,6 +1,9 @@
 // EIDOLON-V FIX: Optimized Game Engine with Batch Processing
 // Eliminates O(n²) complexity and reduces function call overhead
 
+// EIDOLON-V P1 FIX: __DEV__ flag for development-only checks
+declare const __DEV__: boolean;
+
 import { GameState, Player, Bot, Food, Entity, Projectile } from '../../types';
 import { MAP_RADIUS } from '../../constants';
 import { gameStateManager } from './GameStateManager';
@@ -471,6 +474,9 @@ class OptimizedGameEngine {
   // All gameplay logic now reads directly from DOD stores.
   // This function logs warnings if any entities lack physicsIndex for debugging.
   private syncEntityPositions(state: GameState): void {
+    // EIDOLON-V P1 FIX: Only log in dev mode to avoid production overhead
+    if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+
     // Telemetry: Log if any entities are missing physicsIndex
     if (state.player && state.player.physicsIndex === undefined) {
       console.warn('[DOD] Player missing physicsIndex!');
