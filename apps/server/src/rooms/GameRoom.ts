@@ -46,6 +46,8 @@ import {
   calcMatchPercentFast,
   mixPigment,
   type PigmentVec3 as EnginePigmentVec3,
+  // IMPERATOR Phase 2: Direct state mutation interface
+  type IEngineGameState,
 } from '@cjr/engine';
 import { EntityFlags, MAX_ENTITIES } from '@cjr/engine/dod/EntityFlags';
 
@@ -401,6 +403,15 @@ export class GameRoom extends Room<GameRoomState> {
     });
   }
 
+  /**
+   * IMPERATOR Phase 2: syncDODToSchema
+   * 
+   * TODO: This method will be reduced to only binary packing
+   * once GameRoomState fully implements IEngineGameState and
+   * ServerEngineBridge.syncDODToEngineState is activated.
+   * 
+   * For now, maintains backward compatibility with direct property writes.
+   */
   private syncDODToSchema() {
     this.state.players.forEach((player, sessionId) => {
       const entityIndex = this.entityIndices.get(sessionId);

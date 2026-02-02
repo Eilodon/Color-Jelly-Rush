@@ -8,6 +8,8 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 
 import { Canvas2DRingRenderer } from '../game/renderer/RingRenderer';
 import { getInterpolatedPosition } from '../game/engine/RenderBridge';
+// IMPERATOR Phase 4: Standalone ParticleSystem (decoupled from React state)
+import { particleSystem } from '../game/vfx/ParticleSystem';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
 // import { EntityType, PickupType } from '../game/renderer/RenderTypes';
 
@@ -437,14 +439,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(-drawX, -drawY);
       }
 
-      // Particles (EIDOLON ARCHITECT: Already optimized - no transform needed)
-      // EIDOLON-V P3-2: Skip particles for users with reduced motion preference
+      // IMPERATOR Phase 4: Particles (Decoupled from React State)
+      // Uses standalone ParticleSystem consuming vfxBuffer directly
       if (!reducedMotion) {
-        for (let i = 0; i < state.particles.length; i++) {
-          const p = state.particles[i];
-          // Particles draw at absolute positions - no transform needed
-          drawParticle(ctx, p);
-        }
+        particleSystem.updateFromBuffer(1/60); // Assume 60fps for dt
+        particleSystem.render(ctx);
       }
 
       // Floating Texts

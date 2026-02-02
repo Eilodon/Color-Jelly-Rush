@@ -7,7 +7,9 @@
     "build": "tsc",
     "prod": "node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:migrate": "tsx src/scripts/run-migrations.ts",
+    "db:reset": "tsx src/scripts/run-migrations.ts --reset"
   },
   "dependencies": {
     "@cjr/engine": "*",

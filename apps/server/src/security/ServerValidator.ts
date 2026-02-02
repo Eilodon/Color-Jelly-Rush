@@ -18,6 +18,15 @@ export interface PositionValidation {
   correctedPosition?: { x: number; y: number };
 }
 
+/**
+ * Rate limiting for player actions
+ * IMPERATOR PLAN Phase 1: O(1) Token Bucket - replaces O(N) array shift
+ */
+interface RateTracker {
+  count: number;
+  resetAt: number;
+}
+
 export class ServerValidator {
   private static readonly MAX_SPEED = 500; // pixels per second
   private static readonly TELEPORT_THRESHOLD = 200; // max distance per update
@@ -25,6 +34,9 @@ export class ServerValidator {
 
   private positionHistory: Map<string, { x: number; y: number; timestamp: number }[]> = new Map();
   private lastUpdateTime: Map<string, number> = new Map();
+
+  // IMPERATOR Phase 1: O(1) rate limiting with counter window
+  private static rateTrackers: Map<string, RateTracker> = new Map();
 
   /**
    * Validate player position to prevent teleportation hacks
@@ -274,50 +286,33 @@ export class ServerValidator {
   }
 
   /**
-   * Rate limiting for player actions
+   * Rate limiting for player actions - IMPERATOR Phase 1: O(1) Token Bucket
    */
-  private static actionTimestamps: Map<string, number[]> = new Map();
-  private static cleanupCounter = 0;
-  private static readonly CLEANUP_INTERVAL = 100; // Cleanup every 100 calls
-
   static validateActionRate(
     sessionId: string,
     actionType: string,
     maxActionsPerSecond: number = 10
   ): ValidationResult {
-    // EIDOLON-V FIX: Periodic cleanup to prevent memory leak
-    this.cleanupCounter++;
-    if (this.cleanupCounter >= this.CLEANUP_INTERVAL) {
-      this.cleanup();
-      this.cleanupCounter = 0;
-    }
-
     const now = Date.now();
     const key = `${sessionId}_${actionType}`;
 
-    if (!this.actionTimestamps.has(key)) {
-      this.actionTimestamps.set(key, []);
+    let tracker = this.rateTrackers.get(key);
+    
+    // O(1): Reset counter if window expired
+    if (!tracker || now > tracker.resetAt) {
+      tracker = { count: 0, resetAt: now + 1000 };
+      this.rateTrackers.set(key, tracker);
     }
 
-    const timestamps = this.actionTimestamps.get(key)!;
-
-    // Remove old timestamps (older than 1 second)
-    const oneSecondAgo = now - 1000;
-    while (timestamps.length > 0 && timestamps[0] < oneSecondAgo) {
-      timestamps.shift();
-    }
-
-    // Check rate limit
-    if (timestamps.length >= maxActionsPerSecond) {
+    // O(1): Check and increment
+    if (tracker.count >= maxActionsPerSecond) {
       return {
         isValid: false,
         reason: `Action rate limit exceeded - max ${maxActionsPerSecond} per second`,
       };
     }
 
-    // Add current timestamp
-    timestamps.push(now);
-
+    tracker.count++;
     return { isValid: true };
   }
 
@@ -353,18 +348,16 @@ export class ServerValidator {
 
   /**
    * Clear old data to prevent memory leaks
+   * IMPERATOR Phase 1: Clean O(1) rate trackers
    */
   static cleanup(): void {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
 
-    // Clean up action timestamps
-    for (const [key, timestamps] of this.actionTimestamps) {
-      while (timestamps.length > 0 && timestamps[0] < oneMinuteAgo) {
-        timestamps.shift();
-      }
-      if (timestamps.length === 0) {
-        this.actionTimestamps.delete(key);
+    // Clean up expired rate trackers
+    for (const [key, tracker] of this.rateTrackers) {
+      if (tracker.resetAt < oneMinuteAgo) {
+        this.rateTrackers.delete(key);
       }
     }
   }

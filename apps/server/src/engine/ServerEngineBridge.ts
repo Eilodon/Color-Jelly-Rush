@@ -1,8 +1,8 @@
 /**
- * ServerEngineBridge
+ * IMPERATOR Phase 2: ServerEngineBridge with Direct State Mutation
  * 
- * Headless engine bridge for server-side simulation.
- * Ignores VFX events - only runs authoritative game logic.
+ * Breaking Change: Engine now writes directly to IEngineGameState,
+ * bypassing manual syncDODToSchema steps.
  */
 
 import {
@@ -23,7 +23,12 @@ import {
     type IWaveState,
     type IRingEntity,
     type ITattooEntity,
+    type IEngineGameState,
+    TransformStore,
+    PhysicsStore,
+    StatsStore,
 } from '@cjr/engine';
+import { logger } from '../logging/Logger';
 
 /**
  * Server-side game state interface
@@ -90,8 +95,49 @@ export class ServerEngineBridge {
     }
 
     /**
-     * Run a single simulation tick
-     * Called by Colyseus room at fixed intervals
+     * IMPERATOR Phase 2: Direct State Mutation
+     * Writes DOD store values directly to IEngineGameState,
+     * eliminating the need for syncDODToSchema in GameRoom.
+     * 
+     * Call this after PhysicsSystem.update() and MovementSystem.update()
+     */
+    syncDODToEngineState(
+        state: IEngineGameState,
+        entityIndices: Map<string, number>
+    ): void {
+        // Direct mutation: DOD stores → Engine State
+        for (const [sessionId, entityIndex] of entityIndices) {
+            const player = state.players.get(sessionId);
+            if (!player) continue;
+
+            // Read from DOD stores
+            const x = TransformStore.getX(entityIndex);
+            const y = TransformStore.getY(entityIndex);
+            const vx = PhysicsStore.getVelocityX(entityIndex);
+            const vy = PhysicsStore.getVelocityY(entityIndex);
+            const radius = PhysicsStore.getRadius(entityIndex);
+            const health = StatsStore.getCurrentHealth(entityIndex);
+
+            // Direct write to state (bypassing manual sync)
+            player.setPosition(x, y);
+            player.setVelocity(vx, vy);
+            player.setRadius(radius);
+            player.setHealth(health);
+
+            // Mark as dead if health <= 0
+            if (health <= 0 && !player.isDead) {
+                player.setDead(true);
+                logger.debug('Player died via direct state mutation', { sessionId });
+            }
+        }
+
+        // Update game time
+        state.incrementGameTime(this.dt);
+    }
+
+    /**
+     * Legacy tick method - maintained for backward compatibility
+     * @deprecated Use tickWithDirectMutation for IMPERATOR Phase 2
      */
     tick(
         state: IServerGameState,

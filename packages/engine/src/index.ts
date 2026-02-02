@@ -23,6 +23,9 @@
 // DOD Module
 export * from './dod';
 
+// IMPERATOR Phase 2: Engine State Interfaces
+export * from './interfaces/IGameState';
+
 // Events Module
 export * from './events';
 
