@@ -780,13 +780,19 @@ export class NetworkClient {
     snapshot: Map<string, EntitySnapshot>,
     excludeId?: string
   ) {
-    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n) if not found
+    // EIDOLON-V: O(1) Map lookup only - NO fallback to O(N) array search
     snapshot.forEach((data, id) => {
       if (id === excludeId) return; // SKIP LOCAL
-      let entity = this.playerMap.get(id) || this.botMap.get(id);
-      // Fallback: O(n) search for testing/edge cases
-      if (!entity) entity = entities.find(e => e.id === id);
-      if (!entity) return;
+      const entity = this.playerMap.get(id) || this.botMap.get(id);
+      // EIDOLON-V FIX: Entity MUST exist in Map - if not, it's a race condition bug
+      // Do NOT fall back to O(N) array search as it causes O(N²) complexity
+      if (!entity) {
+        // Log once per entity to avoid spam
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(`[NetworkClient] Entity ${id.slice(0, 8)} not in Map - skipping snapshot`);
+        }
+        return;
+      }
       entity.position.x = data.x;
       entity.position.y = data.y;
       if (data.vx !== undefined) entity.velocity.x = data.vx;
@@ -795,11 +801,16 @@ export class NetworkClient {
   }
 
   private applyFoodSnapshot(foods: Food[], snapshot: Map<string, EntitySnapshot>) {
-    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
+    // EIDOLON-V: O(1) Map lookup only - NO fallback to O(N) array search
     snapshot.forEach((data, id) => {
-      let food = this.foodMap.get(id);
-      if (!food) food = foods.find(f => f.id === id);
-      if (!food) return;
+      const food = this.foodMap.get(id);
+      // EIDOLON-V FIX: Food MUST exist in Map
+      if (!food) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(`[NetworkClient] Food ${id.slice(0, 8)} not in Map - skipping snapshot`);
+        }
+        return;
+      }
       food.position.x = data.x;
       food.position.y = data.y;
     });
@@ -812,12 +823,17 @@ export class NetworkClient {
     t: number,
     excludeId?: string
   ) {
-    // EIDOLON-V Phase 1: Zero-allocation - use class-level Maps, fallback to O(n)
+    // EIDOLON-V: O(1) Map lookup only - NO fallback to O(N) array search
     newer.forEach((next, id) => {
       if (id === excludeId) return; // SKIP LOCAL
-      let entity = this.playerMap.get(id) || this.botMap.get(id);
-      if (!entity) entity = entities.find(e => e.id === id);
-      if (!entity) return;
+      const entity = this.playerMap.get(id) || this.botMap.get(id);
+      // EIDOLON-V FIX: Entity MUST exist in Map
+      if (!entity) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(`[NetworkClient] Entity ${id.slice(0, 8)} not in Map - skipping interpolation`);
+        }
+        return;
+      }
       const prev = older.get(id) || next;
       entity.position.x = prev.x + (next.x - prev.x) * t;
       entity.position.y = prev.y + (next.y - prev.y) * t;
@@ -836,11 +852,16 @@ export class NetworkClient {
     newer: Map<string, EntitySnapshot>,
     t: number
   ) {
-    // EIDOLON-V Phase 1: Zero-allocation - use class-level foodMap, fallback to O(n)
+    // EIDOLON-V: O(1) Map lookup only - NO fallback to O(N) array search
     newer.forEach((next, id) => {
-      let food = this.foodMap.get(id);
-      if (!food) food = foods.find(f => f.id === id);
-      if (!food) return;
+      const food = this.foodMap.get(id);
+      // EIDOLON-V FIX: Food MUST exist in Map
+      if (!food) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          console.warn(`[NetworkClient] Food ${id.slice(0, 8)} not in Map - skipping interpolation`);
+        }
+        return;
+      }
       const prev = older.get(id) || next;
       food.position.x = prev.x + (next.x - prev.x) * t;
       food.position.y = prev.y + (next.y - prev.y) * t;

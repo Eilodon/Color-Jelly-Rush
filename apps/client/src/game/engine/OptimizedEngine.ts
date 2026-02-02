@@ -562,6 +562,13 @@ class OptimizedGameEngine {
 
         const obj = EntityLookup[i] as Player | Bot;
         if (obj) {
+          // EIDOLON-V SSOT FIX: Sync object from DOD before gameplay logic
+          // This prevents desync between DOD (authoritative) and object cache
+          obj.position.x = TransformStore.getX(i);
+          obj.position.y = TransformStore.getY(i);
+          obj.velocity.x = PhysicsStore.getVelocityX(i);
+          obj.velocity.y = PhysicsStore.getVelocityY(i);
+
           if (isBot) {
             updateAI(obj as Bot, state, dt);
             const bot = obj as Bot;

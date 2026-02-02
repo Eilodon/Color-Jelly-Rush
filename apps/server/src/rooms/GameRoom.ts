@@ -67,6 +67,8 @@ export class GameRoom extends Room<GameRoomState> {
 
   // EIDOLON-V: DOD Entity mapping (sessionId -> entityIndex)
   private entityIndices: Map<string, number> = new Map();
+  // EIDOLON-V BOT DOD: Bot entity mapping (botId -> entityIndex)
+  private botEntityIndices: Map<string, number> = new Map();
   private nextEntityIndex: number = 0;
   // EIDOLON-V P0: Entity pool recycling with generation for safe ID reuse
   private freeEntityIndices: number[] = [];
@@ -122,7 +124,19 @@ export class GameRoom extends Room<GameRoomState> {
     this.serverEngine = new ServerEngineBridge();
 
     this.onMessage('input', (client, message: unknown) => {
-      if (!message) return;
+      // EIDOLON-V P7: Message type and size validation
+      if (!message || typeof message !== 'object') {
+        logger.warn(`Invalid message type from ${client.sessionId}`, { type: typeof message });
+        return;
+      }
+
+      // EIDOLON-V P7: Max payload size check (prevent DoS via large messages)
+      const messageSize = JSON.stringify(message).length;
+      const MAX_MESSAGE_SIZE = 1024; // 1KB max
+      if (messageSize > MAX_MESSAGE_SIZE) {
+        logger.warn(`Message too large from ${client.sessionId}`, { size: messageSize, max: MAX_MESSAGE_SIZE });
+        return;
+      }
 
       // EIDOLON-V PHASE1: Rate Limit Check
       const now = Date.now();
@@ -435,16 +449,13 @@ export class GameRoom extends Room<GameRoomState> {
   }
 
   private broadcastBinaryTransforms() {
-    // EIDOLON-V P1-2: Use indexed transforms for players (33% payload reduction)
+    // EIDOLON-V BOT DOD: Unified indexed transforms for ALL entities (players + bots)
     const indexedUpdates: { index: number; x: number; y: number; vx: number; vy: number }[] = [];
-    const legacyUpdates: { id: string; x: number; y: number; vx: number; vy: number }[] = [];
 
-    // Gather player transforms from DOD stores (authoritative) - use indexed format
+    // Gather player transforms from DOD stores (authoritative)
     this.state.players.forEach((player, sessionId) => {
       const entityIndex = this.entityIndices.get(sessionId);
       if (entityIndex === undefined) return;
-
-      // Only include active entities
       if (!StateStore.isActive(entityIndex)) return;
 
       indexedUpdates.push({
@@ -456,27 +467,25 @@ export class GameRoom extends Room<GameRoomState> {
       });
     });
 
-    // Include bots - still using legacy format (bots don't have DOD indices yet)
-    this.state.bots.forEach((bot, id) => {
-      legacyUpdates.push({
-        id,
-        x: bot.position.x,
-        y: bot.position.y,
-        vx: bot.velocity.x,
-        vy: bot.velocity.y,
+    // EIDOLON-V BOT DOD: Bots now use indexed format (unified with players)
+    this.state.bots.forEach((bot, botId) => {
+      const entityIndex = this.botEntityIndices.get(botId);
+      if (entityIndex === undefined) return;
+      if (!StateStore.isActive(entityIndex)) return;
+
+      indexedUpdates.push({
+        index: entityIndex,
+        x: TransformStore.getX(entityIndex),
+        y: TransformStore.getY(entityIndex),
+        vx: PhysicsStore.getVelocityX(entityIndex),
+        vy: PhysicsStore.getVelocityY(entityIndex),
       });
     });
 
-    // EIDOLON-V P1-2: Broadcast indexed transforms for players (optimized)
+    // Single unified broadcast (players + bots together)
     if (indexedUpdates.length > 0) {
       const buffer = BinaryPacker.packTransformsIndexed(indexedUpdates, this.state.gameTime);
       this.broadcast('binIdx', new Uint8Array(buffer));
-    }
-
-    // Legacy format for bots (until they're migrated to DOD)
-    if (legacyUpdates.length > 0) {
-      const buffer = BinaryPacker.packTransforms(legacyUpdates, this.state.gameTime);
-      this.broadcast('bin', new Uint8Array(buffer));
     }
   }
 
@@ -511,6 +520,67 @@ export class GameRoom extends Room<GameRoomState> {
 
     // Return to free list
     this.freeEntityIndices.push(idx);
+  }
+
+  // EIDOLON-V BOT DOD: Spawn a bot with DOD entity allocation
+  // Returns entityIndex on success, -1 on failure (pool exhausted)
+  spawnBot(
+    botId: string,
+    x: number,
+    y: number,
+    name: string = 'Bot',
+    personality: string = 'farmer'
+  ): number {
+    const entityIndex = this.allocateEntityIndex();
+    if (entityIndex === -1) {
+      logger.error('Cannot spawn bot - entity pool exhausted', { botId });
+      return -1;
+    }
+
+    // Initialize DOD stores
+    TransformStore.set(entityIndex, x, y, 0, 1.0);
+    PhysicsStore.set(entityIndex, 0, 0, 100, PLAYER_START_RADIUS);
+    StatsStore.set(entityIndex, 100, 100, 0, 0, 1, 1);
+    ConfigStore.setMaxSpeed(entityIndex, GameRoom.MAX_SPEED_BASE * 0.8); // Bots slightly slower
+    StateStore.setFlag(entityIndex, EntityFlags.ACTIVE);
+
+    this.botEntityIndices.set(botId, entityIndex);
+
+    // Create Colyseus schema state
+    const bot = new BotState();
+    bot.id = botId;
+    bot.name = name;
+    bot.personality = personality;
+    bot.position.x = x;
+    bot.position.y = y;
+    bot.radius = PLAYER_START_RADIUS;
+    bot.pigment.r = Math.random();
+    bot.pigment.g = Math.random();
+    bot.pigment.b = Math.random();
+    bot.targetPigment.r = Math.random();
+    bot.targetPigment.g = Math.random();
+    bot.targetPigment.b = Math.random();
+
+    this.state.bots.set(botId, bot);
+
+    logger.info('Bot spawned with DOD', {
+      botId,
+      entityIndex,
+      position: { x, y },
+    });
+
+    return entityIndex;
+  }
+
+  // EIDOLON-V BOT DOD: Remove a bot with proper DOD cleanup
+  removeBot(botId: string): void {
+    const entityIndex = this.botEntityIndices.get(botId);
+    if (entityIndex !== undefined) {
+      this.releaseEntityIndex(entityIndex);
+      this.botEntityIndices.delete(botId);
+    }
+    this.state.bots.delete(botId);
+    logger.info('Bot removed', { botId });
   }
 
   // EIDOLON-V P2: Check all players for death condition
