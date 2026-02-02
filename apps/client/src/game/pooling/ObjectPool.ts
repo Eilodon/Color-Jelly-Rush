@@ -121,7 +121,7 @@ export class EntityPoolManager {
   private static instance: EntityPoolManager;
   private pools: Map<string, ObjectPool<any>> = new Map();
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): EntityPoolManager {
     if (!EntityPoolManager.instance) {
@@ -224,7 +224,9 @@ export class PooledEntityFactory {
           this.isDead = false;
           this.value = 1;
           this.type = 'normal';
-          this.pigment = { r: 1, g: 1, b: 1 };
+          this.pigment.r = 1;
+          this.pigment.g = 1;
+          this.pigment.b = 1;
           this.kind = 'normal';
           this.color = 0xffffff;
         },
@@ -272,7 +274,9 @@ export class PooledEntityFactory {
           this.isDead = false;
           this.ownerId = '';
           this.damage = 10;
-          this.pigment = { r: 1, g: 1, b: 1 };
+          this.pigment.r = 1;
+          this.pigment.g = 1;
+          this.pigment.b = 1;
           this.type = 'normal';
           this.duration = 1000;
           this.color = 0xffffff;
@@ -310,7 +314,9 @@ export class PooledEntityFactory {
           this.radius = 2;
           this.isDead = false;
           this.life = 1;
-          this.pigment = { r: 1, g: 1, b: 1 };
+          this.pigment.r = 1;
+          this.pigment.g = 1;
+          this.pigment.b = 1;
           this.size = 2;
           this.maxLife = 1;
           this.color = 0xffffff;

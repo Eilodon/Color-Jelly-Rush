@@ -271,6 +271,7 @@ export const mathPerformanceMonitor = MathPerformanceMonitor;
 import { CENTER_RADIUS, MAP_RADIUS, RING_RADII } from '../../constants';
 
 /** Euclidean distance between two points */
+/** @deprecated Use FastMath.distanceSquared for logic, or Math.sqrt only for final visual/UI. */
 export const distance = (v1: Vector2, v2: Vector2): number => {
   const dx = v2.x - v1.x;
   const dy = v2.y - v1.y;
@@ -331,6 +332,7 @@ export const randomPosInCenter = (): Vector2 => {
 };
 
 /** Normalize a vector to unit length */
+/** @deprecated Use FastMath.fastNormalize or explicit sqrt only when necessary. */
 export const normalize = (v: Vector2): Vector2 => {
   const len = Math.sqrt(v.x * v.x + v.y * v.y);
   return len === 0 ? { x: 0, y: 0 } : { x: v.x / len, y: v.y / len };

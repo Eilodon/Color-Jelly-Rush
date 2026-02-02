@@ -391,6 +391,21 @@ export class PigmentStore {
   }
 
   /**
+   * Set pigment color directly (SSOT Sync)
+   */
+  static set(id: number, r: number, g: number, b: number): void {
+    if (!isValidEntityId(id)) return;
+    const idx = id * PigmentStore.STRIDE;
+
+    this.data[idx + PigmentStore.R] = r;
+    this.data[idx + PigmentStore.G] = g;
+    this.data[idx + PigmentStore.B] = b;
+
+    this.updateMatch(id);
+    this.updateColorInt(id);
+  }
+
+  /**
    * Mix pigment with another color (DOD version of mixPigment)
    * Uses simple RGB lerp - fast path for high-frequency calls
    */

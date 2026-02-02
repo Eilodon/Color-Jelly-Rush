@@ -126,7 +126,17 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
         const boostMult = e.statusMultipliers?.colorBoost || 1;
         const ratio = Math.min(0.35, snappedRatio * boostMult);
 
-        e.pigment = mixPigment(e.pigment, food.pigment, ratio);
+        // EIDOLON-V FIX: No Allocation Mix + Sync to Store
+        const mixed = mixPigment(e.pigment, food.pigment, ratio);
+        e.pigment.r = mixed.r;
+        e.pigment.g = mixed.g;
+        e.pigment.b = mixed.b;
+
+        // Sync to Store (SSOT)
+        if (e.physicsIndex !== undefined) {
+          PigmentStore.set(e.physicsIndex, mixed.r, mixed.g, mixed.b);
+        }
+
         e.color = pigmentToInt(e.pigment);
         e.matchPercent = calcMatchPercentFast(e.pigment, e.targetPigment);
 
@@ -161,7 +171,17 @@ const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) 
       vfxBuffer.push(ex, ey, packHex('#aaaaff'), VFX_TYPES.FLOATING_TEXT, TEXT_IDS.CLEANSE);
       // Simplified solvent logic without pigment mix for brevity if not strictly needed or could call mixPigment
       const neutral = { r: 0.5, g: 0.5, b: 0.5 };
-      e.pigment = mixPigment(e.pigment, neutral, 0.15);
+
+      const mixedSolvent = mixPigment(e.pigment, neutral, 0.15);
+      e.pigment.r = mixedSolvent.r;
+      e.pigment.g = mixedSolvent.g;
+      e.pigment.b = mixedSolvent.b;
+
+      // Sync to Store (SSOT)
+      if (e.physicsIndex !== undefined) {
+        PigmentStore.set(e.physicsIndex, mixedSolvent.r, mixedSolvent.g, mixedSolvent.b);
+      }
+
       e.color = pigmentToInt(e.pigment);
       e.matchPercent = calcMatchPercentFast(e.pigment, e.targetPigment);
       break;
