@@ -176,43 +176,53 @@ export class StatsStore {
 
   // Setters
   static setDefense(id: number, value: number) {
+    if (!isValidEntityId(id)) return;
     this.data[id * StatsStore.STRIDE + 4] = value;
   }
 
   static setDamageMultiplier(id: number, value: number) {
+    if (!isValidEntityId(id)) return;
     this.data[id * StatsStore.STRIDE + 5] = value;
   }
 
   static setCurrentHealth(id: number, value: number) {
+    if (!isValidEntityId(id)) return;
     this.data[id * StatsStore.STRIDE] = value;
   }
 
   static setMaxHealth(id: number, value: number) {
+    if (!isValidEntityId(id)) return;
     this.data[id * StatsStore.STRIDE + 1] = value;
   }
 
   // EIDOLON-V P2: Getter Methods (DOD Authority)
   static getCurrentHealth(id: number): number {
+    if (!isValidEntityId(id)) return 0;
     return this.data[id * StatsStore.STRIDE];
   }
 
   static getMaxHealth(id: number): number {
+    if (!isValidEntityId(id)) return 0;
     return this.data[id * StatsStore.STRIDE + 1];
   }
 
   static getScore(id: number): number {
+    if (!isValidEntityId(id)) return 0;
     return this.data[id * StatsStore.STRIDE + 2];
   }
 
   static getMatchPercent(id: number): number {
+    if (!isValidEntityId(id)) return 0;
     return this.data[id * StatsStore.STRIDE + 3];
   }
 
   static getDefense(id: number): number {
+    if (!isValidEntityId(id)) return 1;
     return this.data[id * StatsStore.STRIDE + 4];
   }
 
   static getDamageMultiplier(id: number): number {
+    if (!isValidEntityId(id)) return 1;
     return this.data[id * StatsStore.STRIDE + 5];
   }
 }
@@ -224,6 +234,7 @@ export class SkillStore {
   public static readonly data = new Float32Array(MAX_ENTITIES * SkillStore.STRIDE);
 
   static set(id: number, cooldown: number, maxCooldown: number, shapeId: number) {
+    if (!isValidEntityId(id)) return;
     const idx = id * SkillStore.STRIDE;
     this.data[idx] = cooldown;
     this.data[idx + 1] = maxCooldown;
@@ -245,6 +256,7 @@ export class TattooStore {
   public static readonly flags = new Uint32Array(MAX_ENTITIES); // Separate flags
 
   static set(id: number, flags: number, procChance: number) {
+    if (!isValidEntityId(id)) return;
     this.flags[id] = flags;
     const idx = id * TattooStore.STRIDE;
     this.data[idx] = 0; // timer1
@@ -260,6 +272,7 @@ export class ProjectileStore {
   public static readonly data = new Float32Array(MAX_ENTITIES * ProjectileStore.STRIDE);
 
   static set(id: number, ownerId: number, damage: number, duration: number, typeId: number = 0) {
+    if (!isValidEntityId(id)) return;
     const idx = id * ProjectileStore.STRIDE;
     this.data[idx] = ownerId;
     this.data[idx + 1] = damage;
@@ -278,28 +291,33 @@ export class InputStore {
   public static readonly data = new Float32Array(MAX_ENTITIES * InputStore.STRIDE);
 
   static setTarget(id: number, x: number, y: number) {
+    if (!isValidEntityId(id)) return;
     const idx = id * InputStore.STRIDE;
     this.data[idx] = x;
     this.data[idx + 1] = y;
   }
 
   static getTarget(id: number, out: { x: number; y: number }) {
+    if (!isValidEntityId(id)) return;
     const idx = id * InputStore.STRIDE;
     out.x = this.data[idx];
     out.y = this.data[idx + 1];
   }
 
   static setSkillActive(id: number, active: boolean) {
+    if (!isValidEntityId(id)) return;
     const idx = id * InputStore.STRIDE;
     this.data[idx + 2] = active ? 1 : 0;
   }
 
   static getSkillActive(id: number): boolean {
+    if (!isValidEntityId(id)) return false;
     const idx = id * InputStore.STRIDE;
     return this.data[idx + 2] === 1;
   }
 
   static consumeSkillInput(id: number): boolean {
+    if (!isValidEntityId(id)) return false;
     const idx = id * InputStore.STRIDE;
     if (this.data[idx + 2] === 1) {
       this.data[idx + 2] = 0;
@@ -309,16 +327,19 @@ export class InputStore {
   }
 
   static setEjectActive(id: number, active: boolean) {
+    if (!isValidEntityId(id)) return;
     const idx = id * InputStore.STRIDE;
     this.data[idx + 3] = active ? 1 : 0;
   }
 
   static getEjectActive(id: number): boolean {
+    if (!isValidEntityId(id)) return false;
     const idx = id * InputStore.STRIDE;
     return this.data[idx + 3] === 1;
   }
 
   static consumeEjectInput(id: number): boolean {
+    if (!isValidEntityId(id)) return false;
     const idx = id * InputStore.STRIDE;
     if (this.data[idx + 3] === 1) {
       this.data[idx + 3] = 0;

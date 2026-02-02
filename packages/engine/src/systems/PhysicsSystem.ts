@@ -6,6 +6,11 @@
 import { MAX_ENTITIES, EntityFlags } from '../dod/EntityFlags';
 import { TransformStore, PhysicsStore, StateStore } from '../dod/ComponentStores';
 
+// EIDOLON-V P2 FIX: Document the intentional difference between physics and visual boundaries
+// PHY_MAP_RADIUS = 2500: Physics hard boundary - entities cannot move beyond this
+// MAP_RADIUS = 1600 (in constants.ts): Visual game boundary / spawn zone
+// The physics boundary is larger to allow visual effects and smooth clamping at edges
+// This is NOT a bug - it's intentional margin for better gameplay feel
 export const PHY_MAP_RADIUS = 2500;
 export const FRICTION_BASE = 0.92;
 
