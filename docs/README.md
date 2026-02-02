@@ -16,6 +16,7 @@
 | [Import Reference](./IMPORT_REFERENCE.md) | Correct import paths |
 | [Systems Overview](./SYSTEMS_OVERVIEW.md) | Game systems explained |
 | [Architecture](./cjr_architecture.md) | Core architecture principles |
+| [Tooling Architecture](./TOOLING_ARCHITECTURE.md) | Dev tools design (Editor, Inspector, Viewer) |
 
 ---
 
@@ -37,6 +38,9 @@ docs/
 ├── REFERENCE
 │   ├── IMPORT_REFERENCE.md      # Import paths guide
 │   └── SYSTEMS_OVERVIEW.md      # All systems documented
+│
+├── TOOLING
+│   └── TOOLING_ARCHITECTURE.md  # Dev tools design & implementation
 │
 └── GAME DESIGN
     ├── COLOR-JELLY-RUSH.txt     # Game design document (Vietnamese)
@@ -135,6 +139,7 @@ docs/
 | Data Flow | Current | Feb 2026 |
 | Import Reference | Current | Feb 2026 |
 | Systems Overview | Current | Feb 2026 |
+| Tooling Architecture | Current | Feb 2026 |
 | Architecture | Current | Jan 2026 |
 | Visual Bible | Needs Update | - |
 | Innovation Plan | Draft | - |
