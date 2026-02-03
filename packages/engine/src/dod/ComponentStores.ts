@@ -41,16 +41,31 @@ function getCachedStore(cache: { store: IRegisteredStore | null }, id: string): 
     return cache.store;
 }
 
+/**
+ * Reset all store caches. Call this when ComponentRegistry is reset.
+ * This ensures ComponentStores fetches fresh stores from the new registry.
+ */
+export function resetStoreCaches(): void {
+    TransformStore.resetCache();
+    PhysicsStore.resetCache();
+    StatsStore.resetCache();
+    StateStore.resetCache();
+    SkillStore.resetCache();
+    ProjectileStore.resetCache();
+    ConfigStore.resetCache();
+    InputStore.resetCache();
+}
+
 export class TransformStore {
     public static readonly STRIDE = 8;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Transform').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Transform').data as Float32Array;
     }
 
     static set(id: number, x: number, y: number, rotation: number, scale: number = 1.0) {
@@ -82,13 +97,13 @@ export class TransformStore {
 export class PhysicsStore {
     public static readonly STRIDE = 8;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Physics').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Physics').data as Float32Array;
     }
 
     static set(
@@ -131,13 +146,13 @@ export class PhysicsStore {
 
 export class StateStore {
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _flags: Uint16Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get flags(): Uint16Array {
-        if (!this._flags) {
-            this._flags = getCachedStore(this._cache, 'State').data as Uint16Array;
-        }
-        return this._flags;
+        return getCachedStore(this._cache, 'State').data as Uint16Array;
     }
 
     static setFlag(id: number, flag: EntityFlags) {
@@ -160,13 +175,13 @@ export class StateStore {
 export class StatsStore {
     public static readonly STRIDE = 8;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Stats').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Stats').data as Float32Array;
     }
 
     static set(
@@ -231,13 +246,13 @@ export class StatsStore {
 export class SkillStore {
     public static readonly STRIDE = 4;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Skill').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Skill').data as Float32Array;
     }
 
     static set(id: number, cooldown: number, maxCooldown: number, shapeId: number) {
@@ -264,13 +279,13 @@ export class SkillStore {
 export class ProjectileStore {
     public static readonly STRIDE = 4;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Projectile').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Projectile').data as Float32Array;
     }
 
     static set(id: number, ownerId: number, damage: number, duration: number, typeId: number = 0) {
@@ -285,13 +300,13 @@ export class ProjectileStore {
 export class ConfigStore {
     public static readonly STRIDE = 4;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Config').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Config').data as Float32Array;
     }
 
     static setMaxSpeed(id: number, value: number) {
@@ -322,7 +337,10 @@ export class ConfigStore {
 export class InputStore {
     public static readonly STRIDE = 4;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
+
+    static resetCache(): void {
+        this._cache.store = null;
+    }
 
     // Action bitmasks - CJR Module defines these bits:
     // Bit 1 = ACTION_EJECT (0x02)
@@ -330,10 +348,7 @@ export class InputStore {
     // Games can define their own bits in higher positions
 
     public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Input').data as Float32Array;
-        }
-        return this._data;
+        return getCachedStore(this._cache, 'Input').data as Float32Array;
     }
 
     static setTarget(id: number, x: number, y: number) {

@@ -22,11 +22,13 @@ import {
     ConfigStore,
     SkillStore,
     ProjectileStore,
+    resetStoreCaches,
 } from '../src/dod/ComponentStores';
 
 describe('Phase 3 & 4: Memory Convergence', () => {
     beforeEach(() => {
         resetComponentRegistry();
+        resetStoreCaches(); // Reset ComponentStores cache to match new registry
         // Register core components before accessing stores
         registerCoreComponents();
     });
@@ -43,16 +45,16 @@ describe('Phase 3 & 4: Memory Convergence', () => {
             expect(registryStore).toBeDefined();
 
             // Write via TransformStore
-            TransformStore.data[0] = 123.456;
+            TransformStore.data[0] = 123.5; // Use value that is exactly representable in Float32
 
             // Read via ComponentRegistry - must be the same buffer
-            expect(registryStore!.data[0]).toBe(123.456);
+            expect(registryStore!.data[0]).toBe(123.5);
 
             // Write via ComponentRegistry
-            registryStore!.data[1] = 789.012;
+            registryStore!.data[1] = 789.5;
 
             // Read via TransformStore - must see the change
-            expect(TransformStore.data[1]).toBe(789.012);
+            expect(TransformStore.data[1]).toBe(789.5);
 
             // Verify they reference the exact same array instance
             expect(TransformStore.data).toBe(registryStore!.data);
@@ -228,7 +230,7 @@ describe('Phase 3 & 4: Memory Convergence', () => {
             expect(PhysicsStore.getVelocityY(0)).toBe(4);
         });
 
-        it('StateStore helper methods should work with registry-backed data', () => {
+        it('StateStore helper methods should work with registry-backed data', async () => {
             const { EntityFlags } = await import('../src/dod/EntityFlags');
 
             StateStore.setFlag(0, EntityFlags.ACTIVE);
