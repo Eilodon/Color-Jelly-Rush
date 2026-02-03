@@ -100,19 +100,29 @@ export const StateSchema: IComponentSchema = {
 };
 
 /**
- * Input component schema
- * [targetX, targetY, isSkillActive, isEjectActive]
+ * Input component schema (GENERIC)
+ * [targetX, targetY, actions (bitmask), _pad]
+ * 
+ * actions bitmask (uint32):
+ *   Bit 0-7:   Digital actions (jump, shoot, eject, etc.)
+ *   Bit 8-15:  Skill slots
+ *   Bit 16-23: Modifier keys
+ *   Bit 24-31: Reserved
+ * 
+ * CJR Mapping (defined in CJRModule):
+ *   Bit 1 = Eject
+ *   Bit 2 = Skill
  */
 export const InputSchema: IComponentSchema = {
     id: 'Input',
     displayName: 'Input',
-    description: 'Input state for entities',
+    description: 'Generic input state with action bitmask',
     stride: 16, // 4 floats × 4 bytes
     fields: [
         { name: 'targetX', type: 'f32', offset: 0 },
         { name: 'targetY', type: 'f32', offset: 4 },
-        { name: 'isSkillActive', type: 'f32', offset: 8 },
-        { name: 'isEjectActive', type: 'f32', offset: 12 },
+        { name: 'actions', type: 'f32', offset: 8 },  // u32 stored as f32 for TypedArray compatibility
+        { name: '_pad', type: 'f32', offset: 12 },
     ],
     required: false,
     tags: ['core', 'input'],
@@ -138,51 +148,37 @@ export const ConfigSchema: IComponentSchema = {
 };
 
 /**
- * Skill component schema
- * [cooldown, maxCooldown, activeTimer, shapeId]
+ * Skill component schema (GENERIC - Game-agnostic)
+ * [cooldown, maxCooldown, activeTimer, _pad]
+ * 
+ * NOTE: shapeId removed - it's CJR-specific. Use generic activeTimer.
  */
 export const SkillSchema: IComponentSchema = {
     id: 'Skill',
     displayName: 'Skill',
-    description: 'Skill cooldown and state',
+    description: 'Generic skill cooldown and state',
     stride: 16, // 4 floats × 4 bytes
     fields: [
         { name: 'cooldown', type: 'f32', offset: 0 },
         { name: 'maxCooldown', type: 'f32', offset: 4 },
         { name: 'activeTimer', type: 'f32', offset: 8 },
-        { name: 'shapeId', type: 'f32', offset: 12 },
+        { name: '_pad', type: 'f32', offset: 12 },
     ],
     required: false,
     tags: ['core', 'skills'],
 };
 
 /**
- * Tattoo component schema
- * [timer1, timer2, procChance, _pad] + flags (Uint32Array)
- */
-export const TattooSchema: IComponentSchema = {
-    id: 'Tattoo',
-    displayName: 'Tattoo',
-    description: 'Tattoo effects and timers',
-    stride: 16, // 4 floats × 4 bytes (data)
-    fields: [
-        { name: 'timer1', type: 'f32', offset: 0 },
-        { name: 'timer2', type: 'f32', offset: 4 },
-        { name: 'procChance', type: 'f32', offset: 8 },
-        { name: '_pad', type: 'f32', offset: 12 },
-    ],
-    required: false,
-    tags: ['core', 'tattoos'],
-};
-
-/**
- * Projectile component schema
+ * Projectile component schema (Physics extension - Generic)
  * [ownerId (float for storage), damage, duration, typeId]
+ * 
+ * NOTE: Kept in Core as it's a common physics/combat pattern.
+ * Games that don't use projectiles simply won't use this component.
  */
 export const ProjectileSchema: IComponentSchema = {
     id: 'Projectile',
     displayName: 'Projectile',
-    description: 'Projectile properties',
+    description: 'Projectile physics properties',
     stride: 16, // 4 floats × 4 bytes
     fields: [
         { name: 'ownerId', type: 'f32', offset: 0 },
@@ -201,6 +197,9 @@ export const ProjectileSchema: IComponentSchema = {
 /**
  * Array of all core component schemas.
  * These are registered at engine initialization.
+ * 
+ * NOTE: TattooSchema removed - it's CJR-specific.
+ * Tattoo is now registered by CJRModule.
  */
 export const CORE_COMPONENT_SCHEMAS: IComponentSchema[] = [
     TransformSchema,
@@ -210,7 +209,7 @@ export const CORE_COMPONENT_SCHEMAS: IComponentSchema[] = [
     InputSchema,
     ConfigSchema,
     SkillSchema,
-    TattooSchema,
+    // TattooSchema removed - CJR-specific, moved to CJRModule
     ProjectileSchema,
 ];
 

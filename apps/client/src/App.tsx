@@ -16,7 +16,9 @@ import { PacketInterceptor } from './dev/PacketInterceptor';
 import { networkClient } from './network/NetworkClient';
 
 // EIDOLON-V Phase 3: Initialize Core Registry for ComponentStores
-import { registerCoreComponents } from '@cjr/engine/core';
+import { registerCoreComponents, initializeAndFreezeCoreRegistry } from '@cjr/engine/core';
+// EIDOLON-V Phase 3b: CJR Module registration
+import { registerCJRComponents } from '@cjr/engine/modules/cjr';
 
 const App: React.FC = () => {
   const session = useGameSession();
@@ -36,6 +38,14 @@ const App: React.FC = () => {
         // This ensures memory convergence between ComponentRegistry and ComponentStores
         registerCoreComponents();
         clientLogger.info('✅ Core components registered');
+
+        // EIDOLON-V Phase 3b: Register CJR-specific components (Tattoo, Pigment, etc.)
+        registerCJRComponents();
+        clientLogger.info('✅ CJR module components registered');
+
+        // EIDOLON-V Phase 3c: Freeze registry - no more component registration after this point
+        initializeAndFreezeCoreRegistry();
+        clientLogger.info('✅ Component registry frozen');
 
         BufferedInput.init();
         mobileOptimizer.optimizeForMobile();

@@ -261,37 +261,6 @@ export class SkillStore {
     }
 }
 
-export class TattooStore {
-    public static readonly STRIDE = 4;
-    private static _cache: { store: IRegisteredStore | null } = { store: null };
-    private static _data: Float32Array | null = null;
-    private static _flags: Uint32Array | null = null;
-
-    public static get data(): Float32Array {
-        if (!this._data) {
-            this._data = getCachedStore(this._cache, 'Tattoo').data as Float32Array;
-        }
-        return this._data;
-    }
-
-    // Note: Tattoo flags stored separately (not in ComponentRegistry schema)
-    // Keeping legacy behavior for backward compatibility
-    public static get flags(): Uint32Array {
-        if (!this._flags) {
-            this._flags = new Uint32Array(MAX_ENTITIES);
-        }
-        return this._flags;
-    }
-
-    static set(id: number, flags: number, procChance: number) {
-        this.flags[id] = flags;
-        const idx = id * TattooStore.STRIDE;
-        this.data[idx] = 0;
-        this.data[idx + 1] = 0;
-        this.data[idx + 2] = procChance;
-    }
-}
-
 export class ProjectileStore {
     public static readonly STRIDE = 4;
     private static _cache: { store: IRegisteredStore | null } = { store: null };
@@ -355,6 +324,11 @@ export class InputStore {
     private static _cache: { store: IRegisteredStore | null } = { store: null };
     private static _data: Float32Array | null = null;
 
+    // Action bitmasks - CJR Module defines these bits:
+    // Bit 1 = ACTION_EJECT (0x02)
+    // Bit 2 = ACTION_SKILL (0x04)
+    // Games can define their own bits in higher positions
+
     public static get data(): Float32Array {
         if (!this._data) {
             this._data = getCachedStore(this._cache, 'Input').data as Float32Array;
@@ -374,34 +348,89 @@ export class InputStore {
         out.y = this.data[idx + 1];
     }
 
+    /**
+     * Set an action bit in the actions bitmask
+     * @param id Entity ID
+     * @param actionBit Bit position (0-31)
+     * @param active Whether the action is active
+     */
+    static setAction(id: number, actionBit: number, active: boolean) {
+        const idx = id * InputStore.STRIDE + 2; // actions field at offset 2
+        const current = this.data[idx];
+        if (active) {
+            this.data[idx] = current | (1 << actionBit);
+        } else {
+            this.data[idx] = current & ~(1 << actionBit);
+        }
+    }
+
+    /**
+     * Check if an action bit is set
+     * @param id Entity ID
+     * @param actionBit Bit position (0-31)
+     */
+    static isActionActive(id: number, actionBit: number): boolean {
+        const idx = id * InputStore.STRIDE + 2;
+        return (this.data[idx] & (1 << actionBit)) !== 0;
+    }
+
+    /**
+     * Consume an action (check and clear)
+     * @param id Entity ID
+     * @param actionBit Bit position (0-31)
+     * @returns true if action was active and consumed
+     */
+    static consumeAction(id: number, actionBit: number): boolean {
+        const idx = id * InputStore.STRIDE + 2;
+        const mask = 1 << actionBit;
+        if ((this.data[idx] & mask) !== 0) {
+            this.data[idx] &= ~mask;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get full actions bitmask
+     * @param id Entity ID
+     */
+    static getActions(id: number): number {
+        return this.data[id * InputStore.STRIDE + 2];
+    }
+
+    /**
+     * Set full actions bitmask
+     * @param id Entity ID
+     * @param actions Full bitmask value
+     */
+    static setActions(id: number, actions: number) {
+        this.data[id * InputStore.STRIDE + 2] = actions;
+    }
+
+    // Legacy compatibility methods (deprecated, for migration)
+    /** @deprecated Use setAction(id, ACTION_SKILL_BIT, active) */
     static setSkillActive(id: number, active: boolean) {
-        this.data[id * InputStore.STRIDE + 2] = active ? 1 : 0;
+        this.setAction(id, 2, active); // Bit 2 = Skill
     }
 
+    /** @deprecated Use isActionActive(id, ACTION_SKILL_BIT) */
     static getSkillActive(id: number): boolean {
-        return this.data[id * InputStore.STRIDE + 2] === 1;
+        return this.isActionActive(id, 2);
     }
 
+    /** @deprecated Use consumeAction(id, ACTION_SKILL_BIT) */
     static consumeSkillInput(id: number): boolean {
-        const idx = id * InputStore.STRIDE;
-        if (this.data[idx + 2] === 1) {
-            this.data[idx + 2] = 0;
-            return true;
-        }
-        return false;
+        return this.consumeAction(id, 2);
     }
 
+    /** @deprecated Use setAction(id, ACTION_EJECT_BIT, active) */
     static setEjectActive(id: number, active: boolean) {
-        this.data[id * InputStore.STRIDE + 3] = active ? 1 : 0;
+        this.setAction(id, 1, active); // Bit 1 = Eject
     }
 
+    /** @deprecated Use consumeAction(id, ACTION_EJECT_BIT) */
     static consumeEjectInput(id: number): boolean {
-        const idx = id * InputStore.STRIDE;
-        if (this.data[idx + 3] === 1) {
-            this.data[idx + 3] = 0;
-            return true;
-        }
-        return false;
+        return this.consumeAction(id, 1);
     }
 }
 
@@ -413,8 +442,7 @@ export function resetAllStores() {
     PhysicsStore.data.fill(0);
     StatsStore.data.fill(0);
     SkillStore.data.fill(0);
-    TattooStore.data.fill(0);
-    TattooStore.flags.fill(0);
+    // TattooStore removed - CJR-specific, managed by CJRModule
     ProjectileStore.data.fill(0);
     ConfigStore.data.fill(0);
     InputStore.data.fill(0);
