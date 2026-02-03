@@ -5,7 +5,7 @@
  */
 
 import { TransformStore, PhysicsStore } from '../../dod/ComponentStores';
-import { RING_RADII, RING_RADII_SQ, THRESHOLDS, COMMIT_BUFFS } from '../../config/constants';
+import { RING_RADII, RING_RADII_SQ, THRESHOLDS, COMMIT_BUFFS } from './constants';
 import { fastMath } from '../../math/FastMath';
 import type { RingId } from './types';
 

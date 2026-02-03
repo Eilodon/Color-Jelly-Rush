@@ -208,11 +208,11 @@ export class BufferedInput {
 
     // 2. Skill Action (Space or Mouse Down)
     const isSkill = this.keys.has('Space') || this.isMouseDown;
-    InputStore.setSkillActive(entityIndex, isSkill);
+    InputStore.setAction(entityIndex, 0, isSkill); // Bit 0 = Primary/Skill
 
     // 3. Eject Action (Q or E)
     const isEject = this.keys.has('KeyQ') || this.keys.has('KeyE');
-    InputStore.setEjectActive(entityIndex, isEject);
+    InputStore.setAction(entityIndex, 1, isEject); // Bit 1 = Secondary/Eject
   }
 
   // EIDOLON-V P3: Reset state without removing listeners

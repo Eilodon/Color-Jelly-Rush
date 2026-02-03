@@ -76,5 +76,5 @@ export * from './modules';
 // Re-export CJR module at root level for backward compatibility
 // TODO: Deprecate this in favor of explicit module imports
 // @deprecated Use `import { ... } from '@cjr/engine/modules/cjr'` instead
-export * from './modules/cjr';
+
 

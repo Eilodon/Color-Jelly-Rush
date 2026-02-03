@@ -4,7 +4,7 @@
  */
 
 import { eventBuffer, EngineEventType, TEXT_IDS } from '../../events/EventRingBuffer';
-import { THRESHOLDS } from '../../config/constants';
+import { THRESHOLDS } from './constants';
 
 /**
  * Minimal entity interface for win condition

@@ -88,6 +88,32 @@ const CJR_COMPONENT_SCHEMAS: IComponentSchema[] = [
         stride: 8,
         tags: ['cjr', 'pickup'],
     },
+    {
+        id: 'Skill',
+        displayName: 'Skill',
+        description: 'Generic skill cooldown and state',
+        stride: 16, // 4 floats × 4 bytes
+        fields: [
+            { name: 'cooldown', type: 'f32', offset: 0 },
+            { name: 'maxCooldown', type: 'f32', offset: 4 },
+            { name: 'activeTimer', type: 'f32', offset: 8 },
+            { name: 'shapeId', type: 'f32', offset: 12 }, // Kept for backward compat or CJR specific
+        ],
+        tags: ['cjr', 'skills'],
+    },
+    {
+        id: 'Projectile',
+        displayName: 'Projectile',
+        description: 'Projectile physics properties',
+        stride: 16, // 4 floats × 4 bytes
+        fields: [
+            { name: 'ownerId', type: 'f32', offset: 0 },
+            { name: 'damage', type: 'f32', offset: 4 },
+            { name: 'duration', type: 'f32', offset: 8 },
+            { name: 'typeId', type: 'f32', offset: 12 },
+        ],
+        tags: ['cjr', 'combat'],
+    },
 ];
 
 /**

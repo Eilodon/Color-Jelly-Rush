@@ -5,10 +5,10 @@
 
 import { Request, Response, NextFunction } from 'express';
 
-export interface ValidationResult {
+export interface ValidationResult<T = unknown> {
   isValid: boolean;
   errors: string[];
-  sanitized?: unknown;
+  sanitized?: T;
 }
 
 export interface GameInput {
@@ -22,7 +22,7 @@ export interface GameInput {
 export interface PlayerOptionsInput {
   name?: string;
   shape?: string;
-  pigment?: { r: unknown; g: unknown; b: unknown };
+  pigment?: { r: number; g: number; b: number };
 }
 
 export interface RoomOptionsInput {
@@ -34,7 +34,7 @@ export interface RoomOptionsInput {
 
 export class InputValidator {
   // EIDOLON-V PHASE1: Username validation
-  static validateUsername(username: unknown): ValidationResult {
+  static validateUsername(username: unknown): ValidationResult<string> {
     const errors: string[] = [];
 
     if (typeof username !== 'string') {
@@ -69,7 +69,7 @@ export class InputValidator {
   }
 
   // EIDOLON-V PHASE1: Game input validation
-  static validateGameInput(input: unknown): ValidationResult {
+  static validateGameInput(input: unknown): ValidationResult<GameInput> {
     const errors: string[] = [];
     const sanitized: GameInput = {};
 
@@ -132,7 +132,7 @@ export class InputValidator {
   }
 
   // EIDOLON-V PHASE1: Player options validation
-  static validatePlayerOptions(options: unknown): ValidationResult {
+  static validatePlayerOptions(options: unknown): ValidationResult<PlayerOptionsInput> {
     const errors: string[] = [];
     const sanitized: PlayerOptionsInput = {};
 
@@ -148,7 +148,7 @@ export class InputValidator {
       if (!nameResult.isValid) {
         errors.push(...nameResult.errors);
       } else {
-        sanitized.name = nameResult.sanitized as string;
+        sanitized.name = nameResult.sanitized;
       }
     }
 
@@ -183,7 +183,6 @@ export class InputValidator {
         });
 
         if (!pigmentError) {
-          // @ts-ignore
           sanitized.pigment = sanitizedPigment;
         }
       }
@@ -212,7 +211,7 @@ export class InputValidator {
   }
 
   // EIDOLON-V PHASE1: Validate and sanitize room options
-  static validateRoomOptions(options: unknown): ValidationResult {
+  static validateRoomOptions(options: unknown): ValidationResult<RoomOptionsInput> {
     const errors: string[] = [];
     const sanitized: RoomOptionsInput = {};
 

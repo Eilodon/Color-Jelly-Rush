@@ -3,7 +3,7 @@
  * Pure spawning logic - no state.engine dependency
  */
 
-import { WAVE_CONFIG, RING_RADII } from '../../config/constants';
+import { WAVE_CONFIG, RING_RADII } from './constants';
 import { randomRange } from '../../math/FastMath';
 import type { PigmentVec3, PickupKind } from './types';
 
@@ -166,7 +166,7 @@ export const updateWaveSpawnerLegacy = (state: {
     engine?: { spatialGrid?: { insert: (food: IFood) => void } };
 }, dt: number): void => {
     const result = updateWaveSpawner(state.runtime.wave, dt);
-    
+
     // Add spawned foods to state
     for (const food of result.foods) {
         state.food.push(food);

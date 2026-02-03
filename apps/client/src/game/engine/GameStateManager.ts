@@ -8,7 +8,7 @@ import { FixedGameLoop } from './GameLoop';
 import { cjrClientRunner } from './runner/CJRClientRunner';
 import { pooledEntityFactory } from '../pooling/ObjectPool';
 import { mathPerformanceMonitor } from '../math/FastMath';
-import { performanceMonitor } from '../core/performance/PerformanceMonitor';
+import { performanceMonitor } from '../../core/performance/PerformanceMonitor';
 
 // EIDOLON-V FIX: Dependency Injection
 import { BufferedInput } from '../input/BufferedInput';
@@ -17,11 +17,11 @@ import {
   NetworkClient,
   networkClient as defaultNetworkClient,
   NetworkStatus,
-} from './networking/NetworkClient';
+} from '../../network/NetworkClient';
 import { AudioEngine, audioEngine as defaultAudioEngine } from '../audio/AudioEngine';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { ShapeId } from '../cjr/cjrTypes';
-import { clientLogger } from '../core/logging/ClientLogger';
+import { clientLogger } from '../../core/logging/ClientLogger';
 
 // EIDOLON-V FIX: Event System Types
 export type GameEvent =

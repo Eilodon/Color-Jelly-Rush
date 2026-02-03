@@ -17,4 +17,4 @@ export {
   intToRgbString,
   pigmentToHex,
   getSnapAlpha,
-} from '@cjr/engine/cjr';
+} from '@cjr/engine/modules/cjr';

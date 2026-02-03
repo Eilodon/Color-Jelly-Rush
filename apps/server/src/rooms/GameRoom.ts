@@ -333,7 +333,10 @@ export class GameRoom extends Room<GameRoomState> {
 
       // Handle skill input
       if (input.space) {
-        InputStore.setSkillActive(entityIndex, true);
+        InputStore.setAction(entityIndex, 0, true); // Bit 0 = Primary/Skill
+      }
+      if (input.w) {
+        InputStore.setAction(entityIndex, 1, true); // Bit 1 = Secondary/Eject
       }
 
       // Mark input as processed

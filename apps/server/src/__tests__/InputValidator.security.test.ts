@@ -133,8 +133,8 @@ describe('InputValidator Security Tests', () => {
         pigment: { r: 1.5, g: -0.5, b: 2.0 },
       });
       expect(result.isValid).toBe(true);
-      expect(result.sanitized?.pigment.r).toBeLessThanOrEqual(1);
-      expect(result.sanitized?.pigment.g).toBeGreaterThanOrEqual(0);
+      expect(result.sanitized?.pigment!.r).toBeLessThanOrEqual(1);
+      expect(result.sanitized?.pigment!.g).toBeGreaterThanOrEqual(0);
     });
 
     it('should reject names that are too long', () => {

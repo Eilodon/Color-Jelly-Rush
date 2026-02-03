@@ -10,7 +10,7 @@ export {
     StateStore,
     StatsStore,
     SkillStore,
-    TattooStore,
+
     ProjectileStore,
     ConfigStore,
     InputStore,

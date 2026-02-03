@@ -422,31 +422,7 @@ export class InputStore {
         this.data[id * InputStore.STRIDE + 2] = actions;
     }
 
-    // Legacy compatibility methods (deprecated, for migration)
-    /** @deprecated Use setAction(id, ACTION_SKILL_BIT, active) */
-    static setSkillActive(id: number, active: boolean) {
-        this.setAction(id, 2, active); // Bit 2 = Skill
-    }
 
-    /** @deprecated Use isActionActive(id, ACTION_SKILL_BIT) */
-    static getSkillActive(id: number): boolean {
-        return this.isActionActive(id, 2);
-    }
-
-    /** @deprecated Use consumeAction(id, ACTION_SKILL_BIT) */
-    static consumeSkillInput(id: number): boolean {
-        return this.consumeAction(id, 2);
-    }
-
-    /** @deprecated Use setAction(id, ACTION_EJECT_BIT, active) */
-    static setEjectActive(id: number, active: boolean) {
-        this.setAction(id, 1, active); // Bit 1 = Eject
-    }
-
-    /** @deprecated Use consumeAction(id, ACTION_EJECT_BIT) */
-    static consumeEjectInput(id: number): boolean {
-        return this.consumeAction(id, 1);
-    }
 }
 
 /**

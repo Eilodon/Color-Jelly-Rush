@@ -147,48 +147,7 @@ export const ConfigSchema: IComponentSchema = {
     tags: ['core', 'config'],
 };
 
-/**
- * Skill component schema (GENERIC - Game-agnostic)
- * [cooldown, maxCooldown, activeTimer, _pad]
- * 
- * NOTE: shapeId removed - it's CJR-specific. Use generic activeTimer.
- */
-export const SkillSchema: IComponentSchema = {
-    id: 'Skill',
-    displayName: 'Skill',
-    description: 'Generic skill cooldown and state',
-    stride: 16, // 4 floats × 4 bytes
-    fields: [
-        { name: 'cooldown', type: 'f32', offset: 0 },
-        { name: 'maxCooldown', type: 'f32', offset: 4 },
-        { name: 'activeTimer', type: 'f32', offset: 8 },
-        { name: '_pad', type: 'f32', offset: 12 },
-    ],
-    required: false,
-    tags: ['core', 'skills'],
-};
 
-/**
- * Projectile component schema (Physics extension - Generic)
- * [ownerId (float for storage), damage, duration, typeId]
- * 
- * NOTE: Kept in Core as it's a common physics/combat pattern.
- * Games that don't use projectiles simply won't use this component.
- */
-export const ProjectileSchema: IComponentSchema = {
-    id: 'Projectile',
-    displayName: 'Projectile',
-    description: 'Projectile physics properties',
-    stride: 16, // 4 floats × 4 bytes
-    fields: [
-        { name: 'ownerId', type: 'f32', offset: 0 },
-        { name: 'damage', type: 'f32', offset: 4 },
-        { name: 'duration', type: 'f32', offset: 8 },
-        { name: 'typeId', type: 'f32', offset: 12 },
-    ],
-    required: false,
-    tags: ['core', 'combat'],
-};
 
 // =============================================================================
 // Core Registry Helper
@@ -208,9 +167,9 @@ export const CORE_COMPONENT_SCHEMAS: IComponentSchema[] = [
     StateSchema,
     InputSchema,
     ConfigSchema,
-    SkillSchema,
     // TattooSchema removed - CJR-specific, moved to CJRModule
-    ProjectileSchema,
+    // SkillSchema removed - CJR-specific, moved to CJRModule
+    // ProjectileSchema removed - CJR-specific, moved to CJRModule
 ];
 
 /**

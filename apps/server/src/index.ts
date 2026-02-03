@@ -42,7 +42,18 @@ interface AuthenticatedRequest extends Request {
 const PORT = parseInt(process.env.PORT || '2567', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
+// EIDOLON-V ENGINE INIT
+import { registerCoreComponents, initializeAndFreezeCoreRegistry } from '@cjr/engine/core';
+import { registerCJRComponents } from '@cjr/engine/modules/cjr';
+
 async function main() {
+  // EIDOLON-V PHASE 5: Register Engine Components
+  console.info('🔧 Initializing Game Engine...');
+  registerCoreComponents();
+  registerCJRComponents();
+  initializeAndFreezeCoreRegistry();
+  console.info('✅ Game Engine Initialized');
+
   // EIDOLON-V PHASE1: Setup global error handlers
   errorHandler.setupGlobalHandlers();
 

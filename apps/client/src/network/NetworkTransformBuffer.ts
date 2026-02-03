@@ -8,7 +8,7 @@
  * All transforms flow: Network -> Buffer -> Engine Tick -> DOD Stores
  */
 
-import { TransformStore, PhysicsStore } from '../engine/dod/ComponentStores';
+import { TransformStore, PhysicsStore } from '../game/engine/dod/ComponentStores';
 
 interface PendingTransform {
   x: number;
@@ -26,7 +26,7 @@ export class NetworkTransformBuffer {
   // Pre-allocated temp object for iteration (zero allocation in flush)
   private static readonly EMPTY: PendingTransform = { x: 0, y: 0, vx: 0, vy: 0 };
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): NetworkTransformBuffer {
     if (!NetworkTransformBuffer.instance) {
