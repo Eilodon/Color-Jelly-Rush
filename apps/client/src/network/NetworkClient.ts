@@ -14,7 +14,7 @@ import { StatusFlag } from '../game/engine/statusFlags';
 import { SchemaBinaryUnpacker } from '@cjr/engine/networking';
 import { MovementSystem } from '@cjr/engine/systems';
 import { PhysicsSystem } from '@cjr/engine/systems';
-import { TransformStore, PhysicsStore, defaultWorld } from '@cjr/engine';
+import { TransformAccess, PhysicsAccess, defaultWorld } from '@cjr/engine';
 import { InputRingBuffer } from './InputRingBuffer';
 import { clientLogger } from '../game/logging/ClientLogger';
 // EIDOLON-V: Dev tooling
@@ -445,21 +445,20 @@ export class NetworkClient {
 
     const world = this.localState?.engine.physicsWorld;
     if (world && localPlayer.physicsIndex !== undefined) {
-      // Sync Server State to DOD
-      TransformStore.set(
-        localPlayer.physicsIndex,
-        _serverPos.x,
-        _serverPos.y,
-        0,
-        localPlayer.radius
-      );
-      PhysicsStore.set(localPlayer.physicsIndex, _resimVel.x, _resimVel.y, 1, localPlayer.radius);
-
       // EIDOLON-V P4: Zero-allocation replay loop
+      // 1. Reset Physics State to Server State
+      // Use Accessors directly for max performance and type safety
+      TransformAccess.setX(defaultWorld, localPlayer.physicsIndex, _serverPos.x);
+      TransformAccess.setY(defaultWorld, localPlayer.physicsIndex, _serverPos.y);
+      PhysicsAccess.setVx(defaultWorld, localPlayer.physicsIndex, _resimVel.x);
+      PhysicsAccess.setVy(defaultWorld, localPlayer.physicsIndex, _resimVel.y);
+
+      // 2. Re-simulate Pending Inputs
       this.pendingInputs.forEach((seq, targetX, targetY, space, w, dt) => {
         _replayTarget.x = targetX;
         _replayTarget.y = targetY;
 
+        // Apply Input -> Velocity
         MovementSystem.applyInputDOD(
           defaultWorld,
           localPlayer.physicsIndex!,
@@ -467,17 +466,20 @@ export class NetworkClient {
           {
             maxSpeed: localPlayer.maxSpeed,
             speedMultiplier: localPlayer.statusMultipliers.speed || 1,
+            acceleration: localPlayer.acceleration * 2000
           },
           dt
         );
-        PhysicsSystem.integrateEntity(localPlayer.physicsIndex!, dt, 0.9);
+
+        // Integrate Velocity -> Position (and friction)
+        PhysicsSystem.integrateEntity(defaultWorld, localPlayer.physicsIndex!, dt, 0.92);
       });
 
       // Read final Re-simulated state
-      const finalX = TransformStore.data[localPlayer.physicsIndex * 8];
-      const finalY = TransformStore.data[localPlayer.physicsIndex * 8 + 1];
-      const finalVx = PhysicsStore.data[localPlayer.physicsIndex * 8];
-      const finalVy = PhysicsStore.data[localPlayer.physicsIndex * 8 + 1];
+      const finalX = TransformAccess.getX(defaultWorld, localPlayer.physicsIndex);
+      const finalY = TransformAccess.getY(defaultWorld, localPlayer.physicsIndex);
+      const finalVx = PhysicsAccess.getVx(defaultWorld, localPlayer.physicsIndex);
+      const finalVy = PhysicsAccess.getVy(defaultWorld, localPlayer.physicsIndex);
 
       // Check divergence
       const dx = localPlayer.position.x - finalX;

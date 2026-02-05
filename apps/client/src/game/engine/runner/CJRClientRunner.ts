@@ -98,8 +98,12 @@ export class CJRClientRunner extends ClientRunner {
    * Called for render interpolation
    */
   protected onInterpolate(_alpha: number): void {
-    // Future: Interpolate between previous and current state for smooth rendering
-    // Currently using latest state directly
+    // EIDOLON-V: Interpolate Visuals (NetworkClient buffer integration pending)
+    // The NetworkClient handles remote entity interpolation internally via requestAnimationFrame
+    // But we can trigger it here to sync with the engine loop if desired.
+    // For now, leave empty as NetworkClient.interpolateState is called by main loop or synced externally.
+    // Actually, checking ClientRunner.ts... update() calls updateEntities() then render()
+    // We should call NetworkClient interpolation here if we want strict frame sync.
   }
 
   /**
