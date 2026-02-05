@@ -9,14 +9,14 @@
  * - ClientRunner: extends with prediction, interpolation, render sync
  * - ServerRunner: extends with authoritative state, network sync
  * 
- * EIDOLON-V REFACTOR: Now uses instance-based WorldState instead of static stores.
+ * EIDOLON-V REFACTOR: Now uses generated WorldState from schema.
  */
 
 import { PhysicsSystem, MovementSystem } from '../systems';
 import { SkillSystem } from '../systems/SkillSystem';
 import { eventBuffer } from '../events';
-import { EntityFlags, MAX_ENTITIES } from '../dod/EntityFlags';
-import { WorldState, defaultWorld } from '../dod/WorldState';
+import { WorldState, defaultWorld, MAX_ENTITIES } from '../generated/WorldState';
+import { EntityFlags, StateAccess } from '../generated/ComponentAccessors';
 import { DirtyTracker, DirtyMask } from '../networking/DirtyTracker';
 
 export interface ISimulationConfig {
@@ -185,15 +185,8 @@ export abstract class BaseSimulation {
      * Update core systems (Movement, Skills, etc.)
      */
     protected updateSystems(dt: number): void {
-        // Update all entities' movement
-        const flags = this.world.stateFlags;
-        const maxEntities = this.world.maxEntities;
-
-        for (let i = 0; i < maxEntities; i++) {
-            if ((flags[i] & EntityFlags.ACTIVE) !== 0) {
-                MovementSystem.update(i, dt);
-            }
-        }
+        // Update all entities' movement using new accessor pattern
+        MovementSystem.updateAll(this.world, dt);
 
         // Update skill system
         SkillSystem.update(dt);
@@ -216,11 +209,10 @@ export abstract class BaseSimulation {
      */
     protected updateLifecycle(_dt: number): void {
         // Mark dead entities for cleanup
-        const flags = this.world.stateFlags;
         const maxEntities = this.world.maxEntities;
 
         for (let i = 0; i < maxEntities; i++) {
-            if ((flags[i] & EntityFlags.DEAD) !== 0) {
+            if (StateAccess.isDead(this.world, i)) {
                 this.onEntityDeath(i);
             }
         }

@@ -12,7 +12,7 @@ import {
     FIELD_TYPE_ARRAY,
     validateComponentSchema,
 } from '../interfaces/IComponent';
-import { MAX_ENTITIES } from '../dod/EntityFlags';
+import { MAX_ENTITIES } from '../generated/WorldState';
 
 /**
  * Typed array union for component stores.

@@ -53,6 +53,9 @@ export interface IWorldConfig {
 export class WorldState {
     public readonly maxEntities: number;
     
+    // Entity State Flags (ACTIVE, DEAD, etc.)
+    public readonly stateFlags: Uint8Array;
+    
     // Component Buffers
 `;
 
@@ -65,6 +68,64 @@ export class WorldState {
  */
 
 import type { WorldState } from './WorldState';
+
+// Entity State Flags
+export const enum EntityFlags {
+    ACTIVE = 0x01,
+    DEAD = 0x02,
+    PLAYER = 0x04,
+    BOT = 0x08,
+    FOOD = 0x10,
+    PROJECTILE = 0x20,
+    BOSS = 0x40,
+    LOCAL = 0x80,
+}
+
+// =============================================================================
+// STATE ACCESSOR (Special - uses Uint8Array directly)
+// =============================================================================
+
+export class StateAccess {
+    static isActive(world: WorldState, id: number): boolean {
+        return (world.stateFlags[id] & EntityFlags.ACTIVE) !== 0;
+    }
+
+    static isDead(world: WorldState, id: number): boolean {
+        return (world.stateFlags[id] & EntityFlags.DEAD) !== 0;
+    }
+
+    static setFlag(world: WorldState, id: number, flag: number): void {
+        world.stateFlags[id] |= flag;
+    }
+
+    static clearFlag(world: WorldState, id: number, flag: number): void {
+        world.stateFlags[id] &= ~flag;
+    }
+
+    static hasFlag(world: WorldState, id: number, flag: number): boolean {
+        return (world.stateFlags[id] & flag) !== 0;
+    }
+
+    static getFlags(world: WorldState, id: number): number {
+        return world.stateFlags[id];
+    }
+
+    static setFlags(world: WorldState, id: number, flags: number): void {
+        world.stateFlags[id] = flags;
+    }
+
+    static activate(world: WorldState, id: number): void {
+        world.stateFlags[id] |= EntityFlags.ACTIVE;
+    }
+
+    static deactivate(world: WorldState, id: number): void {
+        world.stateFlags[id] &= ~EntityFlags.ACTIVE;
+    }
+
+    static markDead(world: WorldState, id: number): void {
+        world.stateFlags[id] |= EntityFlags.DEAD;
+    }
+}
 
 `;
 
@@ -98,20 +159,7 @@ export class NetworkSerializer {
         switch (componentId) {
 `;
 
-    let unpackerBody = `
-    /**
-     * Unpack a single entity's component from a DataView
-     * @returns New offset after reading
-     */
-    static unpackEntityComponent(
-        world: WorldState, 
-        id: number, 
-        componentId: number, 
-        view: DataView, 
-        offset: number
-    ): number {
-        switch (componentId) {
-`;
+    let unpackerBody = '';
 
     // =========================================================================
     // GENERATE FOR EACH COMPONENT
@@ -146,7 +194,8 @@ export class NetworkSerializer {
         componentMeta.push({ name: compName, id: config.id, stride, fields });
 
         // --- WorldState: Add buffer properties ---
-        worldStateCode += `    public readonly ${compName.toLowerCase()}: ArrayBuffer;\n`;
+        worldStateCode += `    public readonly ${compName.toLowerCase()}: Float32Array;\n`;
+        worldStateCode += `    public readonly ${compName.toLowerCase()}Buffer: ArrayBuffer;\n`;
         worldStateCode += `    public readonly ${compName.toLowerCase()}View: DataView;\n`;
 
         // --- Accessor Class ---
@@ -214,12 +263,18 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
     constructor(config?: IWorldConfig) {
         this.maxEntities = config?.maxEntities ?? MAX_ENTITIES;
         
-        // Allocate Buffers
+        // Allocate State Flags (1 byte per entity)
+        this.stateFlags = new Uint8Array(this.maxEntities);
+        
+        // Allocate Component Buffers
 `;
     for (const meta of componentMeta) {
         const lowerName = meta.name.toLowerCase();
-        worldStateCode += `        this.${lowerName} = new ArrayBuffer(this.maxEntities * ${meta.stride});\n`;
-        worldStateCode += `        this.${lowerName}View = new DataView(this.${lowerName});\n`;
+        // Stride in floats (bytes / 4) for Float32Array indexing
+        const strideFloats = meta.stride / 4;
+        worldStateCode += `        this.${lowerName}Buffer = new ArrayBuffer(this.maxEntities * ${meta.stride});\n`;
+        worldStateCode += `        this.${lowerName} = new Float32Array(this.${lowerName}Buffer);\n`;
+        worldStateCode += `        this.${lowerName}View = new DataView(this.${lowerName}Buffer);\n`;
     }
     worldStateCode += `    }
 
@@ -227,9 +282,10 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
      * Reset all component data to zero
      */
     reset(): void {
+        this.stateFlags.fill(0);
 `;
     for (const meta of componentMeta) {
-        worldStateCode += `        new Uint8Array(this.${meta.name.toLowerCase()}).fill(0);\n`;
+        worldStateCode += `        this.${meta.name.toLowerCase()}.fill(0);\n`;
     }
     worldStateCode += `    }
 
@@ -240,13 +296,29 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
         return id >= 0 && id < this.maxEntities;
     }
 }
+
+// STRIDES in floats (for array indexing, not bytes)
+export const STRIDES = {
+`;
+    for (const meta of componentMeta) {
+        const strideFloats = meta.stride / 4;
+        worldStateCode += `    ${meta.name.toUpperCase()}: ${strideFloats},\n`;
+    }
+    worldStateCode += `} as const;
+
+/**
+ * Default global WorldState instance.
+ * Used for backward compatibility with static Store classes.
+ * @deprecated Prefer injecting WorldState instances for new code.
+ */
+export const defaultWorld = new WorldState();
 `;
 
     // =========================================================================
-    // FINALIZE PACKER
+    // NETWORK PACKER (SERIALIZER)
     // =========================================================================
     packerCode += `} as const;
-
+    
 export const COMPONENT_STRIDES = {
 `;
     for (const meta of componentMeta) {
@@ -255,9 +327,34 @@ export const COMPONENT_STRIDES = {
     packerCode += `} as const;
 `;
     packerCode += packerBody;
-    packerCode += `            default: return offset;\n        }\n    }\n`;
-    packerCode += unpackerBody;
     packerCode += `            default: return offset;\n        }\n    }\n}\n`;
+
+    // =========================================================================
+    // NETWORK DESERIALIZER
+    // =========================================================================
+    let deserializerCode = `/**
+ * AUTO-GENERATED by EIDOLON-V GENESIS - DO NOT EDIT MANUALLY
+ * Generated: ${timestamp}
+ */
+
+import type { WorldState } from './WorldState';
+
+export class NetworkDeserializer {
+    /**
+     * Deserialize a single entity's component from a DataView
+     * @returns New offset after reading
+     */
+    static deserializeComponent(
+        world: WorldState, 
+        id: number, 
+        componentId: number, 
+        view: DataView, 
+        offset: number
+    ): number {
+        switch (componentId) {
+`;
+    deserializerCode += unpackerBody;
+    deserializerCode += `            default: return offset;\n        }\n    }\n}\n`;
 
     // =========================================================================
     // WRITE FILES
@@ -265,6 +362,7 @@ export const COMPONENT_STRIDES = {
     fs.writeFileSync(path.join(OUTPUT_DIR, 'WorldState.ts'), worldStateCode);
     fs.writeFileSync(path.join(OUTPUT_DIR, 'ComponentAccessors.ts'), accessorCode);
     fs.writeFileSync(path.join(OUTPUT_DIR, 'NetworkPacker.ts'), packerCode);
+    fs.writeFileSync(path.join(OUTPUT_DIR, 'NetworkDeserializer.ts'), deserializerCode);
 
     // Generate index.ts for easy imports
     const indexCode = `/**
@@ -272,15 +370,17 @@ export const COMPONENT_STRIDES = {
  * Generated: ${timestamp}
  */
 
-export { WorldState, MAX_ENTITIES, type IWorldConfig } from './WorldState';
+export { WorldState, MAX_ENTITIES, STRIDES, defaultWorld, type IWorldConfig } from './WorldState';
 export * from './ComponentAccessors';
 export { NetworkSerializer, COMPONENT_IDS, COMPONENT_STRIDES } from './NetworkPacker';
+export { NetworkDeserializer } from './NetworkDeserializer';
 `;
     fs.writeFileSync(path.join(OUTPUT_DIR, 'index.ts'), indexCode);
 
     console.log('✅ Generated WorldState.ts');
     console.log('✅ Generated ComponentAccessors.ts');
     console.log('✅ Generated NetworkPacker.ts');
+    console.log('✅ Generated NetworkDeserializer.ts');
     console.log('✅ Generated index.ts');
     console.log(`📁 Output: ${OUTPUT_DIR}`);
     console.log('🚀 EIDOLON SYSTEM READY.');

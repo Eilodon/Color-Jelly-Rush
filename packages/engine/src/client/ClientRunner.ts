@@ -18,12 +18,12 @@
  * 3. Render sync (DOD → Render objects)
  * 4. Visual effects (particles, screen shake)
  * 
- * EIDOLON-V FIX: Zero-allocation render loop using activeEntityIds array
+ * EIDOLON-V: Uses generated WorldState for zero-allocation render loop
  */
 
 import { BaseSimulation, type ISimulationConfig } from '../core/BaseSimulation';
-import { TransformStore, StateStore } from '../dod/ComponentStores';
-import { EntityFlags } from '../dod/EntityFlags';
+import { STRIDES } from '../generated/WorldState';
+import { TransformAccess, EntityFlags, StateAccess } from '../generated/ComponentAccessors';
 
 /**
  * Entity lookup for render sync
@@ -211,7 +211,6 @@ export abstract class ClientRunner extends BaseSimulation {
      * Uses pre-cached activeEntityIds instead of Object.keys()
      */
     protected interpolateEntities(alpha: number): void {
-        const flags = StateStore.flags;
         const len = this.activeEntityIds.length;
 
         for (let i = 0; i < len; i++) {
@@ -221,11 +220,11 @@ export abstract class ClientRunner extends BaseSimulation {
             if (!entity || entity.isDead) continue;
 
             // Skip if not active in DOD
-            if ((flags[entityId] & EntityFlags.ACTIVE) === 0) continue;
+            if (!StateAccess.isActive(this.world, entityId)) continue;
 
             // Get current DOD position
-            const currentX = TransformStore.getX(entityId);
-            const currentY = TransformStore.getY(entityId);
+            const currentX = TransformAccess.getX(this.world, entityId);
+            const currentY = TransformAccess.getY(this.world, entityId);
 
             // Get previous position
             const prev = this.previousPositions.get(entityId);
@@ -306,15 +305,14 @@ export abstract class ClientRunner extends BaseSimulation {
      */
     getViewportEntityCount(): number {
         let count = 0;
-        const flags = StateStore.flags;
         const len = this.activeEntityIds.length;
 
         for (let i = 0; i < len; i++) {
             const entityId = this.activeEntityIds[i];
-            if ((flags[entityId] & EntityFlags.ACTIVE) === 0) continue;
+            if (!StateAccess.isActive(this.world, entityId)) continue;
 
-            const x = TransformStore.getX(entityId);
-            const y = TransformStore.getY(entityId);
+            const x = TransformAccess.getX(this.world, entityId);
+            const y = TransformAccess.getY(this.world, entityId);
 
             if (this.isInViewport(x, y)) {
                 count++;

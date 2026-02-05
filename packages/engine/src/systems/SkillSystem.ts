@@ -1,10 +1,12 @@
 /**
  * @cjr/engine - SkillSystem
  * Pure skill logic - VFX decoupled via eventBuffer
+ * 
+ * EIDOLON-V: Refactored to use generated WorldState and accessors
  */
 
-import { SkillStore, TransformStore, PhysicsStore, StateStore } from '../dod/ComponentStores';
-import { MAX_ENTITIES, EntityFlags } from '../dod/EntityFlags';
+import { WorldState, defaultWorld, MAX_ENTITIES } from '../generated/WorldState';
+import { EntityFlags, StateAccess, SkillAccess, TransformAccess, PhysicsAccess } from '../generated/ComponentAccessors';
 import { eventBuffer, EngineEventType } from '../events/EventRingBuffer';
 
 /**
@@ -23,39 +25,38 @@ export class SkillSystem {
      */
     static handleInput(
         id: number,
-        input: { space: boolean; target: { x: number; y: number } }
+        input: { space: boolean; target: { x: number; y: number } },
+        world: WorldState = defaultWorld
     ) {
-        // Validation via bitmask
-        if ((StateStore.flags[id] & EntityFlags.ACTIVE) === 0) return;
+        // Validation via StateAccess
+        if (!StateAccess.isActive(world, id)) return;
         if (!input.space) return;
 
-        const sIdx = id * SkillStore.STRIDE;
-
         // Check cooldown
-        if (SkillStore.data[sIdx] > 0) return;
+        const cooldown = SkillAccess.getCooldown(world, id);
+        if (cooldown > 0) return;
 
         // Execute skill
-        const shapeId = SkillStore.data[sIdx + 3];
-        this.executeSkillDOD(id, shapeId, input.target);
+        const shapeId = SkillAccess.getShapeId(world, id);
+        this.executeSkillDOD(id, shapeId, input.target, world);
 
-        // Reset cooldown (index 1 = maxCooldown)
-        SkillStore.data[sIdx] = SkillStore.data[sIdx + 1];
+        // Reset cooldown
+        const maxCooldown = SkillAccess.getMaxCooldown(world, id);
+        SkillAccess.setCooldown(world, id, maxCooldown);
     }
 
     /**
      * Update cooldowns for all entities
      */
-    static update(dt: number) {
-        const count = MAX_ENTITIES;
-        const flags = StateStore.flags;
-        const data = SkillStore.data;
+    static update(dt: number, world: WorldState = defaultWorld) {
+        const count = world.maxEntities;
 
         for (let id = 0; id < count; id++) {
-            if ((flags[id] & EntityFlags.ACTIVE) === 0) continue;
+            if (!StateAccess.isActive(world, id)) continue;
 
-            const idx = id * SkillStore.STRIDE;
-            if (data[idx] > 0) {
-                data[idx] -= dt;
+            const cooldown = SkillAccess.getCooldown(world, id);
+            if (cooldown > 0) {
+                SkillAccess.setCooldown(world, id, cooldown - dt);
             }
         }
     }
@@ -67,17 +68,13 @@ export class SkillSystem {
     private static executeSkillDOD(
         id: number,
         shapeId: number,
-        target: { x: number; y: number }
+        target: { x: number; y: number },
+        world: WorldState = defaultWorld
     ) {
-        const tIdx = id * 8;
-        const pIdx = id * 8;
-        const tData = TransformStore.data;
-        const pData = PhysicsStore.data;
-
-        const x = tData[tIdx];
-        const y = tData[tIdx + 1];
-        const vx = pData[pIdx];
-        const vy = pData[pIdx + 1];
+        const x = TransformAccess.getX(world, id);
+        const y = TransformAccess.getY(world, id);
+        const vx = PhysicsAccess.getVx(world, id);
+        const vy = PhysicsAccess.getVy(world, id);
 
         // Circle (Jet Dash)
         if (shapeId === ShapeEnum.CIRCLE) {
@@ -92,8 +89,8 @@ export class SkillSystem {
             }
 
             const dashPower = 800;
-            pData[pIdx] = dx * dashPower;
-            pData[pIdx + 1] = dy * dashPower;
+            PhysicsAccess.setVx(world, id, dx * dashPower);
+            PhysicsAccess.setVy(world, id, dy * dashPower);
 
             // Emit VFX event (Cyan particle burst)
             eventBuffer.push(
@@ -126,8 +123,8 @@ export class SkillSystem {
 
             if (dist > 1) {
                 const piercePower = 600;
-                pData[pIdx] = (dx / dist) * piercePower;
-                pData[pIdx + 1] = (dy / dist) * piercePower;
+                PhysicsAccess.setVx(world, id, (dx / dist) * piercePower);
+                PhysicsAccess.setVy(world, id, (dy / dist) * piercePower);
             }
 
             eventBuffer.push(

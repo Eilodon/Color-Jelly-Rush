@@ -29,8 +29,12 @@
 // CORE (Platform-Agnostic)
 // =============================================================================
 
-// DOD Module (Data-Oriented Design)
-export * from './dod';
+// Generated Types (EIDOLON-V) - Primary source
+export * from './generated';
+
+// DOD Module (Data-Oriented Design) - Compatibility layer
+// Note: EntityFlags and other types are re-exported from generated
+// Import from './generated' for new code, './dod' for backward compatibility
 
 // Core (Registry, Memory Management)
 export * from './core';

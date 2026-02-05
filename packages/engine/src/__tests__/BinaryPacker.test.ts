@@ -9,7 +9,7 @@ import { BinaryPacker, PacketType, PROTOCOL_MAGIC, PROTOCOL_VERSION } from '../n
 describe('BinaryPacker', () => {
   describe('Protocol Constants', () => {
     it('should have correct protocol magic', () => {
-      expect(PROTOCOL_MAGIC).toBe(0xC7);
+      expect(PROTOCOL_MAGIC).toBe(0x43);
     });
 
     it('should have correct protocol version', () => {
@@ -93,7 +93,7 @@ describe('BinaryPacker', () => {
       const buffer = BinaryPacker.packTransforms(original, 12345);
       const results: typeof original = [];
 
-      BinaryPacker.unpackTransforms(buffer, (id, x, y, vx, vy) => {
+      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
         results.push({ id, x, y, vx, vy });
       });
 
@@ -113,7 +113,7 @@ describe('BinaryPacker', () => {
       const buffer = BinaryPacker.packTransforms(original, 0);
       const results: typeof original = [];
 
-      BinaryPacker.unpackTransforms(buffer, (id, x, y, vx, vy) => {
+      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
         results.push({ id, x, y, vx, vy });
       });
 
@@ -147,10 +147,7 @@ describe('BinaryPacker', () => {
       const timestamp = 12345.67;
       const buffer = BinaryPacker.packTransformsIndexed(original, timestamp);
 
-      let unpackedTimestamp: number | null = null;
-      BinaryPacker.unpackTransformsIndexed(buffer, (index, x, y, vx, vy) => {}, (ts) => {
-        unpackedTimestamp = ts;
-      });
+      const unpackedTimestamp = BinaryPacker.unpackTransformsIndexed(buffer, (index, x, y, vx, vy) => { });
 
       expect(unpackedTimestamp).toBeCloseTo(timestamp, 2);
     });
@@ -164,7 +161,7 @@ describe('BinaryPacker', () => {
       view.setUint8(0, 0xFF); // Wrong magic
       view.setUint8(1, PROTOCOL_VERSION);
 
-      const result = BinaryPacker.unpackAndApply(invalidBuffer, () => {});
+      const result = BinaryPacker.unpackAndApply(invalidBuffer, () => { });
       expect(result).toBeNull();
     });
 
@@ -174,7 +171,7 @@ describe('BinaryPacker', () => {
       view.setUint8(0, PROTOCOL_MAGIC);
       view.setUint8(1, 99); // Wrong version
 
-      const result = BinaryPacker.unpackAndApply(invalidBuffer, () => {});
+      const result = BinaryPacker.unpackAndApply(invalidBuffer, () => { });
       expect(result).toBeNull();
     });
 
@@ -184,7 +181,7 @@ describe('BinaryPacker', () => {
       view.setUint8(0, PROTOCOL_MAGIC);
       view.setUint8(1, PROTOCOL_VERSION);
 
-      const result = BinaryPacker.unpackAndApply(truncated, () => {});
+      const result = BinaryPacker.unpackAndApply(truncated, () => { });
       expect(result).toBeNull();
     });
   });
@@ -231,7 +228,7 @@ describe('BinaryPacker', () => {
       const buffer = BinaryPacker.packTransforms(original, 0);
       const results: typeof original = [];
 
-      BinaryPacker.unpackTransforms(buffer, (id, x, y, vx, vy) => {
+      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
         results.push({ id, x, y, vx, vy });
       });
 
@@ -250,7 +247,7 @@ describe('BinaryPacker', () => {
       const buffer = BinaryPacker.packTransforms(original, 0);
       const results: typeof original = [];
 
-      BinaryPacker.unpackTransforms(buffer, (id, x, y, vx, vy) => {
+      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
         results.push({ id, x, y, vx, vy });
       });
 
@@ -265,7 +262,7 @@ describe('BinaryPacker', () => {
 
       // Should not throw
       expect(() => {
-        BinaryPacker.unpackTransforms(buffer, () => {});
+        BinaryPacker.unpackTransforms(buffer, () => { });
       }).not.toThrow();
     });
 
@@ -280,7 +277,7 @@ describe('BinaryPacker', () => {
       view.setUint32(6, 0); // timestamp
       view.setUint16(10, 65535); // Invalid string length
 
-      const result = BinaryPacker.unpackAndApply(buffer, () => {});
+      const result = BinaryPacker.unpackAndApply(buffer, () => { });
       expect(result).toBeNull();
     });
   });

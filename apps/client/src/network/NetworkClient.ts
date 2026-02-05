@@ -11,10 +11,10 @@ import {
 } from '../types/status';
 import { StatusFlag } from '../game/engine/statusFlags';
 // EIDOLON-V PHASE3: Import BinaryPacker from @cjr/engine
-import { BinaryPacker } from '@cjr/engine/networking';
+import { BinaryPacker, SchemaBinaryUnpacker } from '@cjr/engine/networking';
 import { MovementSystem } from '@cjr/engine/systems';
 import { PhysicsSystem } from '@cjr/engine/systems';
-import { TransformStore, PhysicsStore } from '@cjr/engine';
+import { TransformStore, PhysicsStore, defaultWorld } from '@cjr/engine';
 import { InputRingBuffer } from './InputRingBuffer';
 import { clientLogger } from '../game/logging/ClientLogger';
 // EIDOLON-V: Dev tooling
@@ -192,41 +192,30 @@ export class NetworkClient {
   }
 
   private handleBinaryUpdate(buffer: any) {
-    // EIDOLON-V Phase 2: SSOT - Write ONLY to PhysicsWorld (DOD stores via buffer)
-    // Objects are synced via syncBatchFromDOD at render time
     const data = typeof buffer === 'object' && buffer.buffer ? buffer.buffer : buffer;
     if (import.meta.env.DEV) {
       PacketInterceptor.getInstance().captureReceive(data);
     }
 
-    const timestamp = BinaryPacker.unpackAndApply(data, (id, x, y, vx, vy) => {
-      // SSOT: Queue to PhysicsWorld ONLY (no direct object writes)
-      if (this.localState?.engine.physicsWorld) {
-        this.localState.engine.physicsWorld.syncBody(id, x, y, vx, vy);
-      }
-    });
+    // EIDOLON-V GENESIS: Use Generated Schema Unpacker
+    // This writes directly to defaultWorld (WorldState) using the generated NetworkDeserializer
+    // It handles TRANSFORM_UPDATE, PHYSICS_UPDATE, and COMPONENT_DELTA
+    const timestamp = SchemaBinaryUnpacker.unpack(data, defaultWorld);
 
-    // Invalid packet - abort
-    if (timestamp === null) return;
+    // Fallback? If timestamp is null, maybe it's a legacy packet?
+    // For now, we assume the server is also migrated to SchemaBinaryPacker.
+    if (timestamp === null) {
+      // Optional: Try legacy unpack if needed, or just warn
+      // console.warn('[NetworkClient] Failed to unpack binary message');
+      return;
+    }
   }
 
   // EIDOLON-V P1-2: Handle indexed binary transforms (optimized)
   // Uses entity index instead of string ID for 33% payload reduction
   private handleBinaryIndexedUpdate(buffer: any) {
-    const data = typeof buffer === 'object' && buffer.buffer ? buffer.buffer : buffer;
-    if (import.meta.env.DEV) {
-      PacketInterceptor.getInstance().captureReceive(data);
-    }
-
-    const timestamp = BinaryPacker.unpackTransformsIndexed(data, (index, x, y, vx, vy) => {
-      // EIDOLON-V P1-2: Direct DOD store write using entity index
-      if (this.localState?.engine.physicsWorld) {
-        // Queue transform update using index (bypasses string ID lookup)
-        this.localState.engine.physicsWorld.syncBodyByIndex(index, x, y, vx, vy);
-      }
-    });
-
-    if (timestamp === null) return;
+    // Both channels now use SchemaBinaryUnpacker as it handles all Packet Types
+    this.handleBinaryUpdate(buffer);
   }
 
   async disconnect() {

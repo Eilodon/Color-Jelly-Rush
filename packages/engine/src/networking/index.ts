@@ -10,3 +10,4 @@ export * from './BinaryPacker';
 export * from './ProtocolSchema';
 export * from './DirtyTracker';
 export * from './SchemaBinaryPacker';
+export * from './SchemaBinaryUnpacker';

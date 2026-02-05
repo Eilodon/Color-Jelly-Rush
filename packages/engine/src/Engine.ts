@@ -12,10 +12,11 @@ import { PhysicsSystem } from './systems/PhysicsSystem';
 import { MovementSystem } from './systems/MovementSystem';
 import { SkillSystem } from './systems/SkillSystem';
 import { eventBuffer } from './events/EventRingBuffer';
-import { resetAllStores } from './dod/ComponentStores';
+import { WorldState, defaultWorld } from './generated/WorldState';
 
 export interface IEngineConfig {
     tickRate: number;
+    world?: WorldState;
 }
 
 export class Engine {
@@ -45,7 +46,7 @@ export class Engine {
      * Reset engine state (clears all entities)
      */
     reset() {
-        resetAllStores();
+        defaultWorld.reset();
         eventBuffer.clear();
         this.time = 0;
     }
@@ -68,9 +69,9 @@ export class Engine {
         while (this.accumulator >= Engine.FIXED_DT) {
             this.time += Engine.FIXED_DT;
 
-            // 1. Systems Update (DOD) with FIXED dt
-            PhysicsSystem.update(Engine.FIXED_DT);
-            MovementSystem.updateAll(Engine.FIXED_DT);
+            // 1. Systems Update (DOD) with FIXED dt and defaultWorld
+            PhysicsSystem.update(defaultWorld, Engine.FIXED_DT);
+            MovementSystem.updateAll(defaultWorld, Engine.FIXED_DT);
             SkillSystem.update(Engine.FIXED_DT);
 
             this.accumulator -= Engine.FIXED_DT;

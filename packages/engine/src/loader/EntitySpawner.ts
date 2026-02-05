@@ -255,7 +255,7 @@ export class EntitySpawner {
         }
 
         // Clear all flags
-        StateStore.flags[entityId] = EntityFlags.NONE;
+        StateStore.flags[entityId] = 0;
 
         // Reset component data
         const transformIdx = entityId * TransformStore.STRIDE;

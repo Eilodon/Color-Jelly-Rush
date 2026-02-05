@@ -2,12 +2,12 @@
  * @cjr/engine - PhysicsSystem
  * Pure physics integration - no VFX dependencies
  * 
- * EIDOLON-V REFACTOR: Now accepts WorldState for instance-based operation
- * while maintaining backward compatibility via defaultWorld.
+ * EIDOLON-V REFACTOR: Now uses generated WorldState from schema.
+ * Uses Float32Array for fast direct access.
  */
 
-import { EntityFlags } from '../dod/EntityFlags';
-import { WorldState, defaultWorld, STRIDES } from '../dod/WorldState';
+import { WorldState, defaultWorld, STRIDES } from '../generated/WorldState';
+import { EntityFlags } from '../generated/ComponentAccessors';
 
 // EIDOLON-V P2 FIX: Document the intentional difference between physics and visual boundaries
 // PHY_MAP_RADIUS = 2500: Physics hard boundary - entities cannot move beyond this

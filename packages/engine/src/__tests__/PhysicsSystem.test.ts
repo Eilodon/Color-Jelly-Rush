@@ -1,33 +1,39 @@
 /**
  * @cjr/engine - Unit Tests: PhysicsSystem
+ * 
+ * EIDOLON-V: Updated to use generated WorldState and accessors
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PhysicsSystem } from '../systems/PhysicsSystem';
-import { TransformStore, PhysicsStore, StateStore, resetAllStores } from '../dod/ComponentStores';
-import { EntityFlags } from '../dod/EntityFlags';
+import { defaultWorld } from '../generated/WorldState';
+import {
+    TransformAccess,
+    PhysicsAccess,
+    StateAccess,
+    EntityFlags
+} from '../generated/ComponentAccessors';
 
 describe('PhysicsSystem', () => {
     beforeEach(() => {
-        resetAllStores();
+        defaultWorld.reset();
     });
 
     describe('update', () => {
         it('should integrate velocity into position', () => {
             const entityId = 0;
 
-            // Setup entity
-            TransformStore.set(entityId, 100, 100, 0);
-            PhysicsStore.set(entityId, 50, 30, 1, 10, 0.9, 1);
-            StateStore.setFlag(entityId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+            // Setup entity using accessors (7 non-pad args for Transform, 7 non-pad args for Physics)
+            TransformAccess.set(defaultWorld, entityId, 100, 100, 0, 1, 0, 0, 0);
+            PhysicsAccess.set(defaultWorld, entityId, 50, 30, 0, 1, 10, 0.5, 0.9);
+            StateAccess.activate(defaultWorld, entityId);
 
             // Run physics for 1 second
-            PhysicsSystem.update(1.0);
+            PhysicsSystem.update(defaultWorld, 1.0);
 
             // Check position changed
-            const tIdx = entityId * TransformStore.STRIDE;
-            const newX = TransformStore.data[tIdx];
-            const newY = TransformStore.data[tIdx + 1];
+            const newX = TransformAccess.getX(defaultWorld, entityId);
+            const newY = TransformAccess.getY(defaultWorld, entityId);
 
             // Position should have moved in direction of velocity
             expect(newX).toBeGreaterThan(100);
@@ -39,19 +45,18 @@ describe('PhysicsSystem', () => {
             const friction = 0.9;
 
             // Setup entity with velocity
-            TransformStore.set(entityId, 0, 0, 0);
-            PhysicsStore.set(entityId, 100, 100, 1, 10, 0.5, friction);
-            StateStore.setFlag(entityId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+            TransformAccess.set(defaultWorld, entityId, 0, 0, 0, 1, 0, 0, 0);
+            PhysicsAccess.set(defaultWorld, entityId, 100, 100, 0, 1, 10, 0.5, friction);
+            StateAccess.activate(defaultWorld, entityId);
 
             // Get initial velocity
-            const pIdx = entityId * PhysicsStore.STRIDE;
-            const initialVx = PhysicsStore.data[pIdx];
+            const initialVx = PhysicsAccess.getVx(defaultWorld, entityId);
 
             // Run physics
-            PhysicsSystem.update(1.0);
+            PhysicsSystem.update(defaultWorld, 1.0);
 
             // Velocity should be reduced by friction
-            const newVx = PhysicsStore.data[pIdx];
+            const newVx = PhysicsAccess.getVx(defaultWorld, entityId);
             expect(newVx).toBeLessThan(initialVx);
         });
 
@@ -59,34 +64,32 @@ describe('PhysicsSystem', () => {
             const entityId = 0;
 
             // Setup entity but DON'T set ACTIVE flag
-            TransformStore.set(entityId, 100, 100, 0);
-            PhysicsStore.set(entityId, 50, 30, 1, 10, 0.9, 1);
-            // StateStore.flags[entityId] = 0; // Not active
+            TransformAccess.set(defaultWorld, entityId, 100, 100, 0, 1, 0, 0, 0);
+            PhysicsAccess.set(defaultWorld, entityId, 50, 30, 0, 1, 10, 0.5, 0.9);
+            // NOT calling StateAccess.activate()
 
             // Run physics
-            PhysicsSystem.update(1.0);
+            PhysicsSystem.update(defaultWorld, 1.0);
 
             // Position should NOT have changed
-            const tIdx = entityId * TransformStore.STRIDE;
-            expect(TransformStore.data[tIdx]).toBe(100);
-            expect(TransformStore.data[tIdx + 1]).toBe(100);
+            expect(TransformAccess.getX(defaultWorld, entityId)).toBe(100);
+            expect(TransformAccess.getY(defaultWorld, entityId)).toBe(100);
         });
 
         it('should handle multiple entities', () => {
             // Setup 3 entities
             for (let i = 0; i < 3; i++) {
-                TransformStore.set(i, i * 100, i * 100, 0);
-                PhysicsStore.set(i, 10, 10, 1, 10, 0.9, 1);
-                StateStore.setFlag(i, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+                TransformAccess.set(defaultWorld, i, i * 100, i * 100, 0, 1, 0, 0, 0);
+                PhysicsAccess.set(defaultWorld, i, 10, 10, 0, 1, 10, 0.5, 0.9);
+                StateAccess.activate(defaultWorld, i);
             }
 
             // Run physics
-            PhysicsSystem.update(1.0);
+            PhysicsSystem.update(defaultWorld, 1.0);
 
             // All entities should have moved
             for (let i = 0; i < 3; i++) {
-                const tIdx = i * TransformStore.STRIDE;
-                expect(TransformStore.data[tIdx]).toBeGreaterThan(i * 100);
+                expect(TransformAccess.getX(defaultWorld, i)).toBeGreaterThan(i * 100);
             }
         });
     });

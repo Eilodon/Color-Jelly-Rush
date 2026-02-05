@@ -2,6 +2,9 @@
  * BinaryPacker - Thread-safe zero-allocation binary serialization
  * Headless version for @cjr/engine (runs on both client and server)
  * 
+ * ⚠️ @deprecated This file is deprecated. Use NetworkSerializer from '../generated/NetworkPacker' instead.
+ * The new NetworkSerializer uses u16 entity indices instead of string IDs for ~80% bandwidth reduction.
+ * 
  * EIDOLON-V P0: Uses Object Pool pattern to prevent race conditions
  * while maintaining zero-allocation performance.
  */
