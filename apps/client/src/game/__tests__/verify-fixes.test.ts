@@ -14,10 +14,10 @@ import {
   InputStore,
   MovementSystem,
   PhysicsSystem,
+  EntityLookup,
 } from '@cjr/engine';
 // Keep local imports for client-specific modules
 import { entityManager } from './engine/dod/EntityManager';
-import { EntityLookup } from './engine/dod/ComponentStores';
 import { createInitialState } from './engine/index';
 import { createPlayer, createFood, createBot } from './engine/factories';
 
