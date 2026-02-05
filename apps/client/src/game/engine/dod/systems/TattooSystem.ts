@@ -1,5 +1,6 @@
-import { TattooStore, StatsStore, StateStore } from '../ComponentStores';
-import { MAX_ENTITIES, EntityFlags } from '../EntityFlags';
+// EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
+import { TattooStore, StatsStore, StateStore } from '@cjr/engine';
+import { MAX_ENTITIES, EntityFlags } from '@cjr/engine/dod/EntityFlags';
 import { TattooFlag } from '../../statusFlags';
 
 export class TattooSystem {

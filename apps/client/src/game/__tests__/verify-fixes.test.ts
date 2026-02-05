@@ -4,20 +4,22 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { EntityFlags, MAX_ENTITIES } from './engine/dod/EntityFlags';
-import { entityManager } from './engine/dod/EntityManager';
+// EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
+import { EntityFlags, MAX_ENTITIES } from '@cjr/engine/dod/EntityFlags';
 import {
   resetAllStores,
   TransformStore,
   PhysicsStore,
   StateStore,
-  EntityLookup,
   InputStore,
-} from './engine/dod/ComponentStores';
+  MovementSystem,
+  PhysicsSystem,
+} from '@cjr/engine';
+// Keep local imports for client-specific modules
+import { entityManager } from './engine/dod/EntityManager';
+import { EntityLookup } from './engine/dod/ComponentStores';
 import { createInitialState } from './engine/index';
 import { createPlayer, createFood, createBot } from './engine/factories';
-import { MovementSystem } from './engine/dod/systems/MovementSystem';
-import { PhysicsSystem } from './engine/dod/systems/PhysicsSystem';
 
 describe('EntityFlags Fix Verification', () => {
   it('DEAD and OBSTACLE should have different bit values', () => {
