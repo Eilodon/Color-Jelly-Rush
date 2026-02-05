@@ -25,6 +25,8 @@ import { clientLogger } from '../../core/logging/ClientLogger';
 import { inputSystem, InputSystem } from './systems/InputSystem';
 import { AudioSyncSystem } from './systems/AudioSyncSystem';
 import { SessionManager } from './systems/SessionManager';
+import { PhysicsCoordinator, physicsCoordinator } from './systems/PhysicsCoordinator';
+import { NetworkSync, networkSync } from './systems/NetworkSync';
 
 export type GameEvent =
   | { type: 'GAME_OVER'; result: 'win' | 'lose' }
@@ -118,17 +120,28 @@ export class GameStateManager {
       const state = this.currentState;
       const isMultiplayer = Boolean(this.sessionManager.getCurrentConfig()?.useMultiplayer && this.networkClient.getRoomId());
 
-      // 1. Simulation Update
+      // 1. Simulation Update (Delegated to PhysicsCoordinator for cleaner separation)
       if (isMultiplayer) {
-        cjrClientRunner.setGameState(state);
-        cjrClientRunner.updateVisualsOnly(dt);
+        physicsCoordinator.updateMultiplayerVisuals(dt, state);
+        networkSync.update(state, dt);  // Handle network interpolation
       } else {
-        cjrClientRunner.setGameState(state);
-        cjrClientRunner.update(dt);
+        physicsCoordinator.updateSingleplayer(dt, state);
       }
 
       // 2. Input System (Sync to DOD / Network)
       this.inputSystem.update(state, this.networkClient, isMultiplayer, dt);
+
+      // 3. Network Sync (Send inputs to server)
+      if (isMultiplayer) {
+        // Get input from buffered input system
+        const hasSpaceInput = this.bufferedInput.state.actions.space;
+        networkSync.sendInput(
+          state.player.position.x,
+          state.player.position.y,
+          { space: hasSpaceInput, w: false },
+          dt
+        );
+      }
 
       // 3. Camera (View Logic - Lightweight enough to stay or move to RenderSystem)
       // EIDOLON-V FIX: Camera follows player with smooth interpolation
