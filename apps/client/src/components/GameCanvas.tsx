@@ -9,6 +9,8 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Canvas2DRingRenderer } from '../game/renderer/RingRenderer';
 // EIDOLON-V FIX: Use index-based API (faster, no Map lookup)
 import { getInterpolatedPositionByIndex, type RenderPoint } from '../game/engine/RenderBridge';
+// EIDOLON-V FIX #4: Direct DOD rendering without JS object intermediaries
+import { renderEntitiesFromDOD, cullEntities } from '../game/engine/DODEntityRenderer';
 // IMPERATOR Phase 4: Standalone ParticleSystem (decoupled from React state)
 import { particleSystem } from '../game/vfx/ParticleSystem';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
