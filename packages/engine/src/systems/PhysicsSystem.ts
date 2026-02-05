@@ -1,10 +1,13 @@
 /**
  * @cjr/engine - PhysicsSystem
  * Pure physics integration - no VFX dependencies
+ * 
+ * EIDOLON-V REFACTOR: Now accepts WorldState for instance-based operation
+ * while maintaining backward compatibility via defaultWorld.
  */
 
-import { MAX_ENTITIES, EntityFlags } from '../dod/EntityFlags';
-import { TransformStore, PhysicsStore, StateStore } from '../dod/ComponentStores';
+import { EntityFlags } from '../dod/EntityFlags';
+import { WorldState, defaultWorld, STRIDES } from '../dod/WorldState';
 
 // EIDOLON-V P2 FIX: Document the intentional difference between physics and visual boundaries
 // PHY_MAP_RADIUS = 2500: Physics hard boundary - entities cannot move beyond this
@@ -15,13 +18,30 @@ export const PHY_MAP_RADIUS = 2500;
 export const FRICTION_BASE = 0.92;
 
 export class PhysicsSystem {
-    static update(dt: number) {
-        const count = MAX_ENTITIES;
-        const flags = StateStore.flags;
-        const pData = PhysicsStore.data;
+    /**
+     * Update physics for all active entities
+     * @param worldOrDt - WorldState instance OR dt for backward compatibility
+     * @param dt - Delta time (only used when worldOrDt is WorldState)
+     */
+    static update(worldOrDt: WorldState | number, dt?: number): void {
+        // Backward compatibility: if first arg is number, use defaultWorld
+        let world: WorldState;
+        let deltaTime: number;
+
+        if (typeof worldOrDt === 'number') {
+            world = defaultWorld;
+            deltaTime = worldOrDt;
+        } else {
+            world = worldOrDt;
+            deltaTime = dt!;
+        }
+
+        const count = world.maxEntities;
+        const flags = world.stateFlags;
+        const pData = world.physics;
 
         // Time scaling for variable framerate
-        const timeScale = dt * 60;
+        const timeScale = deltaTime * 60;
 
         // Fast path check for stable 60fps
         const useFastFriction = Math.abs(timeScale - 1.0) < 0.01;
@@ -33,7 +53,7 @@ export class PhysicsSystem {
             // Bitmask check: only process active entities
             if ((flags[id] & EntityFlags.ACTIVE) === 0) continue;
 
-            const pIdx = id * 8; // PhysicsStore.STRIDE
+            const pIdx = id * STRIDES.PHYSICS;
 
             // Get base friction from store (index 6)
             const frictionBase = pData[pIdx + 6];
@@ -51,32 +71,60 @@ export class PhysicsSystem {
                 }
             }
 
-            this.integrateEntity(id, dt, effectiveFriction);
+            this.integrateEntity(world, id, deltaTime, effectiveFriction);
         }
     }
 
-    static integrateEntity(id: number, dt: number, friction: number) {
-        const tData = TransformStore.data;
-        const pData = PhysicsStore.data;
-        const tIdx = id * 8;
-        const pIdx = id * 8;
+    /**
+     * Integrate single entity's physics
+     * @param worldOrId - WorldState instance OR entity ID for backward compatibility
+     * @param idOrDt - Entity ID (when world is passed) OR dt (backward compat)
+     * @param dtOrFriction - dt (when world is passed) OR friction (backward compat)
+     * @param friction - friction (only when world is passed)
+     */
+    static integrateEntity(
+        worldOrId: WorldState | number,
+        idOrDt: number,
+        dtOrFriction: number,
+        friction?: number
+    ): void {
+        // Backward compatibility
+        let world: WorldState;
+        let id: number;
+        let dt: number;
+        let fric: number;
+
+        if (typeof worldOrId === 'number') {
+            world = defaultWorld;
+            id = worldOrId;
+            dt = idOrDt;
+            fric = dtOrFriction;
+        } else {
+            world = worldOrId;
+            id = idOrDt;
+            dt = dtOrFriction;
+            fric = friction!;
+        }
+
+        const tData = world.transform;
+        const pData = world.physics;
+        const tIdx = id * STRIDES.TRANSFORM;
+        const pIdx = id * STRIDES.PHYSICS;
 
         // 1. Unpack velocity
         let vx = pData[pIdx];
         let vy = pData[pIdx + 1];
 
         // 2. Apply friction
-        vx *= friction;
-        vy *= friction;
+        vx *= fric;
+        vy *= fric;
 
         // 3. Snapshot for interpolation
         tData[tIdx + 4] = tData[tIdx]; // prevX
         tData[tIdx + 5] = tData[tIdx + 1]; // prevY
 
         // 4. Integrate position (Euler)
-        // EIDOLON-V P2 FIX: Extracted magic number with explanation
         // PHYSICS_TIME_SCALE = 10: Converts velocity from "units per 100ms" to "units per frame"
-        // This matches the server's physics tick rate and ensures consistent movement speed
         const PHYSICS_TIME_SCALE = 10;
         const delta = dt * PHYSICS_TIME_SCALE;
         tData[tIdx] += vx * delta;

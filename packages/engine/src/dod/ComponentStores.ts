@@ -3,78 +3,80 @@
  * Data-Oriented Design stores using TypedArrays
  * Zero dependencies - headless compatible
  *
- * EIDOLON-V UNIFICATION: Replaced ComponentRegistry pattern with STATIC TypedArrays.
- * This is the SINGLE SOURCE OF TRUTH for all DOD stores.
+ * EIDOLON-V REFACTOR: Dual API pattern
+ * - *Store classes: Static API using defaultWorld (backward compatible)
+ * - *Access classes: Instance-based API using WorldState injection (new)
  */
 
-import { MAX_ENTITIES, EntityFlags } from './EntityFlags';
+import { EntityFlags, MAX_ENTITIES } from './EntityFlags';
+import { WorldState, defaultWorld, STRIDES } from './WorldState';
 
-// Runtime validation for entity limits
-const MAX_TYPED_ARRAY_SIZE = 65536; // Safe limit for Float32Array
-if (MAX_ENTITIES * 8 > MAX_TYPED_ARRAY_SIZE) {
-    throw new Error(
-        `Entity configuration exceeds TypedArray limits: ${MAX_ENTITIES} entities × 8 stride = ${MAX_ENTITIES * 8} > ${MAX_TYPED_ARRAY_SIZE}`
-    );
-}
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
 
-// Production-safe bounds check (returns false instead of throwing)
 function isValidEntityId(id: number): boolean {
     return id >= 0 && id < MAX_ENTITIES;
 }
 
 // =============================================================================
-// TRANSFORM STORE
+// TRANSFORM ACCESS (Instance-based)
 // =============================================================================
 
-export class TransformStore {
-    // [x, y, rotation, scale, prevX, prevY, prevRotation, _pad]
-    public static readonly STRIDE = 8;
-    public static readonly data = new Float32Array(MAX_ENTITIES * TransformStore.STRIDE);
+export class TransformAccess {
+    static readonly STRIDE = STRIDES.TRANSFORM;
 
-    static set(id: number, x: number, y: number, rotation: number, scale: number = 1.0) {
-        if (!isValidEntityId(id)) {
-            console.error(`[DOD] TransformStore.set: Invalid entity ID ${id}`);
-            return;
-        }
-        const idx = id * 8;
-        this.data[idx] = x;
-        this.data[idx + 1] = y;
-        this.data[idx + 2] = rotation;
-        this.data[idx + 3] = scale;
-        // Initialize prev
-        this.data[idx + 4] = x;
-        this.data[idx + 5] = y;
-        this.data[idx + 6] = rotation;
+    static set(world: WorldState, id: number, x: number, y: number, rotation: number, scale: number = 1.0): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.TRANSFORM;
+        const data = world.transform;
+        data[idx] = x;
+        data[idx + 1] = y;
+        data[idx + 2] = rotation;
+        data[idx + 3] = scale;
+        // Initialize prev values to prevent interpolation glitch on spawn
+        data[idx + 4] = x;
+        data[idx + 5] = y;
+        data[idx + 6] = rotation;
     }
 
-    static setPosition(id: number, x: number, y: number): void {
-        if (!isValidEntityId(id)) return;
-        const idx = id * 8;
-        this.data[idx] = x;
-        this.data[idx + 1] = y;
+    static setPosition(world: WorldState, id: number, x: number, y: number): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.TRANSFORM;
+        world.transform[idx] = x;
+        world.transform[idx + 1] = y;
     }
 
-    static getX(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * 8];
+    static getX(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.transform[id * STRIDES.TRANSFORM];
     }
 
-    static getY(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * 8 + 1];
+    static getY(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.transform[id * STRIDES.TRANSFORM + 1];
+    }
+
+    static getRotation(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.transform[id * STRIDES.TRANSFORM + 2];
+    }
+
+    static getScale(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 1;
+        return world.transform[id * STRIDES.TRANSFORM + 3];
     }
 }
 
 // =============================================================================
-// PHYSICS STORE
+// PHYSICS ACCESS (Instance-based)
 // =============================================================================
 
-export class PhysicsStore {
-    // [vx, vy, vRotation, mass, radius, restitution, friction, _pad]
-    public static readonly STRIDE = 8;
-    public static readonly data = new Float32Array(MAX_ENTITIES * PhysicsStore.STRIDE);
+export class PhysicsAccess {
+    static readonly STRIDE = STRIDES.PHYSICS;
 
     static set(
+        world: WorldState,
         id: number,
         vx: number,
         vy: number,
@@ -82,83 +84,82 @@ export class PhysicsStore {
         radius: number,
         restitution: number = 0.5,
         friction: number = 0.9
-    ) {
-        if (!isValidEntityId(id)) {
-            console.error(`[DOD] PhysicsStore.set: Invalid entity ID ${id}`);
-            return;
-        }
-        const idx = id * 8;
-        this.data[idx] = vx;
-        this.data[idx + 1] = vy;
-        this.data[idx + 2] = 0; // vRotation
-        this.data[idx + 3] = mass;
-        this.data[idx + 4] = radius;
-        this.data[idx + 5] = restitution;
-        this.data[idx + 6] = friction;
+    ): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PHYSICS;
+        const data = world.physics;
+        data[idx] = vx;
+        data[idx + 1] = vy;
+        data[idx + 2] = 0; // vRotation
+        data[idx + 3] = mass;
+        data[idx + 4] = radius;
+        data[idx + 5] = restitution;
+        data[idx + 6] = friction;
     }
 
-    static setVelocity(id: number, vx: number, vy: number): void {
-        if (!isValidEntityId(id)) return;
-        const idx = id * 8;
-        this.data[idx] = vx;
-        this.data[idx + 1] = vy;
+    static setVelocity(world: WorldState, id: number, vx: number, vy: number): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PHYSICS;
+        world.physics[idx] = vx;
+        world.physics[idx + 1] = vy;
     }
 
-    static getVelocityX(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * 8];
+    static getVelocityX(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.physics[id * STRIDES.PHYSICS];
     }
 
-    static getVelocityY(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * 8 + 1];
+    static getVelocityY(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.physics[id * STRIDES.PHYSICS + 1];
     }
 
-    static getRadius(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * 8 + 4];
-    }
-}
-
-// =============================================================================
-// STATE STORE
-// =============================================================================
-
-export class StateStore {
-    // Flags for type and status
-    public static readonly flags = new Uint16Array(MAX_ENTITIES);
-
-    static setFlag(id: number, flag: EntityFlags) {
-        if (!isValidEntityId(id)) return;
-        this.flags[id] |= flag;
+    static getRadius(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.physics[id * STRIDES.PHYSICS + 4];
     }
 
-    static clearFlag(id: number, flag: EntityFlags) {
-        if (!isValidEntityId(id)) return;
-        this.flags[id] &= ~flag;
-    }
-
-    static hasFlag(id: number, flag: EntityFlags): boolean {
-        if (!isValidEntityId(id)) return false;
-        return (this.flags[id] & flag) === flag;
-    }
-
-    static isActive(id: number): boolean {
-        if (!isValidEntityId(id)) return false;
-        return (this.flags[id] & EntityFlags.ACTIVE) !== 0;
+    static getMass(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.physics[id * STRIDES.PHYSICS + 3];
     }
 }
 
 // =============================================================================
-// STATS STORE
+// STATE ACCESS (Instance-based)
 // =============================================================================
 
-export class StatsStore {
-    // [currentHealth, maxHealth, score, matchPercent, defense, damageMultiplier, _pad, _pad]
-    public static readonly STRIDE = 8;
-    public static readonly data = new Float32Array(MAX_ENTITIES * StatsStore.STRIDE);
+export class StateAccess {
+    static setFlag(world: WorldState, id: number, flag: EntityFlags): void {
+        if (!world.isValidEntityId(id)) return;
+        world.stateFlags[id] |= flag;
+    }
+
+    static clearFlag(world: WorldState, id: number, flag: EntityFlags): void {
+        if (!world.isValidEntityId(id)) return;
+        world.stateFlags[id] &= ~flag;
+    }
+
+    static hasFlag(world: WorldState, id: number, flag: EntityFlags): boolean {
+        if (!world.isValidEntityId(id)) return false;
+        return (world.stateFlags[id] & flag) === flag;
+    }
+
+    static isActive(world: WorldState, id: number): boolean {
+        if (!world.isValidEntityId(id)) return false;
+        return (world.stateFlags[id] & EntityFlags.ACTIVE) !== 0;
+    }
+}
+
+// =============================================================================
+// STATS ACCESS (Instance-based)
+// =============================================================================
+
+export class StatsAccess {
+    static readonly STRIDE = STRIDES.STATS;
 
     static set(
+        world: WorldState,
         id: number,
         currentHealth: number,
         maxHealth: number,
@@ -166,292 +167,201 @@ export class StatsStore {
         matchPercent: number,
         defense: number = 1,
         damageMultiplier: number = 1
-    ) {
-        const idx = id * StatsStore.STRIDE;
-        this.data[idx] = currentHealth;
-        this.data[idx + 1] = maxHealth;
-        this.data[idx + 2] = score;
-        this.data[idx + 3] = matchPercent;
-        this.data[idx + 4] = defense;
-        this.data[idx + 5] = damageMultiplier;
+    ): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.STATS;
+        const data = world.stats;
+        data[idx] = currentHealth;
+        data[idx + 1] = maxHealth;
+        data[idx + 2] = score;
+        data[idx + 3] = matchPercent;
+        data[idx + 4] = defense;
+        data[idx + 5] = damageMultiplier;
     }
 
-    static setDefense(id: number, value: number) {
-        if (!isValidEntityId(id)) return;
-        this.data[id * StatsStore.STRIDE + 4] = value;
+    static getCurrentHealth(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.stats[id * STRIDES.STATS];
     }
 
-    static setDamageMultiplier(id: number, value: number) {
-        if (!isValidEntityId(id)) return;
-        this.data[id * StatsStore.STRIDE + 5] = value;
+    static getMaxHealth(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.stats[id * STRIDES.STATS + 1];
     }
 
-    static setCurrentHealth(id: number, value: number) {
-        if (!isValidEntityId(id)) return;
-        this.data[id * StatsStore.STRIDE] = value;
+    static getScore(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.stats[id * STRIDES.STATS + 2];
     }
 
-    static setMaxHealth(id: number, value: number) {
-        if (!isValidEntityId(id)) return;
-        this.data[id * StatsStore.STRIDE + 1] = value;
+    static getMatchPercent(world: WorldState, id: number): number {
+        if (!world.isValidEntityId(id)) return 0;
+        return world.stats[id * STRIDES.STATS + 3];
     }
 
-    static getCurrentHealth(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * StatsStore.STRIDE];
+    static setCurrentHealth(world: WorldState, id: number, value: number): void {
+        if (!world.isValidEntityId(id)) return;
+        world.stats[id * STRIDES.STATS] = value;
     }
 
-    static getMaxHealth(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * StatsStore.STRIDE + 1];
-    }
-
-    static getScore(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * StatsStore.STRIDE + 2];
-    }
-
-    static getMatchPercent(id: number): number {
-        if (!isValidEntityId(id)) return 0;
-        return this.data[id * StatsStore.STRIDE + 3];
-    }
-
-    static getDefense(id: number): number {
-        if (!isValidEntityId(id)) return 1;
-        return this.data[id * StatsStore.STRIDE + 4];
-    }
-
-    static getDamageMultiplier(id: number): number {
-        if (!isValidEntityId(id)) return 1;
-        return this.data[id * StatsStore.STRIDE + 5];
+    static setMaxHealth(world: WorldState, id: number, value: number): void {
+        if (!world.isValidEntityId(id)) return;
+        world.stats[id * STRIDES.STATS + 1] = value;
     }
 }
 
 // =============================================================================
-// SKILL STORE
+// SKILL ACCESS (Instance-based)
 // =============================================================================
 
-export class SkillStore {
-    // [cooldown, maxCooldown, activeTimer, shapeId]
-    public static readonly STRIDE = 4;
-    public static readonly data = new Float32Array(MAX_ENTITIES * SkillStore.STRIDE);
+export class SkillAccess {
+    static readonly STRIDE = STRIDES.SKILL;
 
-    static set(id: number, cooldown: number, maxCooldown: number, shapeId: number) {
-        if (!isValidEntityId(id)) return;
-        const idx = id * SkillStore.STRIDE;
-        this.data[idx] = cooldown;
-        this.data[idx + 1] = maxCooldown;
-        this.data[idx + 2] = 0; // activeTimer
-        this.data[idx + 3] = shapeId;
+    static set(world: WorldState, id: number, cooldown: number, maxCooldown: number, activeTimer: number, shapeId: number = 0): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.SKILL;
+        const data = world.skills;
+        data[idx] = cooldown;
+        data[idx + 1] = maxCooldown;
+        data[idx + 2] = activeTimer;
+        data[idx + 3] = shapeId;
     }
 
-    static getCooldown(id: number): number {
-        return this.data[id * SkillStore.STRIDE];
+    static getCooldown(world: WorldState, id: number): number {
+        return world.skills[id * STRIDES.SKILL];
     }
 
-    static setCooldown(id: number, value: number) {
-        this.data[id * SkillStore.STRIDE] = value;
+    static setCooldown(world: WorldState, id: number, value: number): void {
+        world.skills[id * STRIDES.SKILL] = value;
     }
 
-    static getMaxCooldown(id: number): number {
-        return this.data[id * SkillStore.STRIDE + 1];
+    static getMaxCooldown(world: WorldState, id: number): number {
+        return world.skills[id * STRIDES.SKILL + 1];
     }
 
-    static setMaxCooldown(id: number, value: number) {
-        this.data[id * SkillStore.STRIDE + 1] = value;
+    static setMaxCooldown(world: WorldState, id: number, value: number): void {
+        world.skills[id * STRIDES.SKILL + 1] = value;
     }
 
-    static getActiveTimer(id: number): number {
-        return this.data[id * SkillStore.STRIDE + 2];
+    static getActiveTimer(world: WorldState, id: number): number {
+        return world.skills[id * STRIDES.SKILL + 2];
     }
 
-    static setActiveTimer(id: number, value: number) {
-        this.data[id * SkillStore.STRIDE + 2] = value;
+    static setActiveTimer(world: WorldState, id: number, value: number): void {
+        world.skills[id * STRIDES.SKILL + 2] = value;
     }
 }
 
 // =============================================================================
-// TATTOO STORE (CJR-specific)
+// CONFIG ACCESS (Instance-based)
 // =============================================================================
 
-export class TattooStore {
-    public static readonly STRIDE = 4;
-    public static readonly data = new Float32Array(MAX_ENTITIES * TattooStore.STRIDE);
-    public static readonly flags = new Uint32Array(MAX_ENTITIES);
-
-    static set(id: number, flags: number, procChance: number) {
-        if (!isValidEntityId(id)) return;
-        this.flags[id] = flags;
-        const idx = id * TattooStore.STRIDE;
-        this.data[idx] = 0; // timer1
-        this.data[idx + 1] = 0; // timer2
-        this.data[idx + 2] = procChance;
-    }
-}
-
-// =============================================================================
-// PROJECTILE STORE
-// =============================================================================
-
-export class ProjectileStore {
-    // [ownerId (int), damage, duration, typeId]
-    public static readonly STRIDE = 4;
-    public static readonly data = new Float32Array(MAX_ENTITIES * ProjectileStore.STRIDE);
-
-    static set(id: number, ownerId: number, damage: number, duration: number, typeId: number = 0) {
-        if (!isValidEntityId(id)) return;
-        const idx = id * ProjectileStore.STRIDE;
-        this.data[idx] = ownerId;
-        this.data[idx + 1] = damage;
-        this.data[idx + 2] = duration;
-        this.data[idx + 3] = typeId;
-    }
-}
-
-// =============================================================================
-// CONFIG STORE
-// =============================================================================
-
-export class ConfigStore {
-    // [magneticRadius, damageMult, speedMult, pickupRange, visionRange, _pad, _pad, _pad]
-    public static readonly STRIDE = 8;
-    public static readonly data = new Float32Array(MAX_ENTITIES * ConfigStore.STRIDE);
+export class ConfigAccess {
+    static readonly STRIDE = STRIDES.CONFIG;
 
     static set(
+        world: WorldState,
         id: number,
         magneticRadius: number,
         damageMult: number,
         speedMult: number,
         pickupRange: number,
         visionRange: number
-    ) {
-        if (!isValidEntityId(id)) return;
-        const idx = id * ConfigStore.STRIDE;
-        this.data[idx] = magneticRadius;
-        this.data[idx + 1] = damageMult;
-        this.data[idx + 2] = speedMult;
-        this.data[idx + 3] = pickupRange;
-        this.data[idx + 4] = visionRange;
+    ): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.CONFIG;
+        const data = world.config;
+        data[idx] = magneticRadius;
+        data[idx + 1] = damageMult;
+        data[idx + 2] = speedMult;
+        data[idx + 3] = pickupRange;
+        data[idx + 4] = visionRange;
     }
 
-    // Accessors
-    static getMagneticRadius(id: number): number {
-        return this.data[id * ConfigStore.STRIDE];
+    static getMagneticRadius(world: WorldState, id: number): number {
+        return world.config[id * STRIDES.CONFIG];
     }
 
-    static getMagnetRadius(id: number): number {
-        return this.data[id * ConfigStore.STRIDE];
+    static getSpeedMultiplier(world: WorldState, id: number): number {
+        return world.config[id * STRIDES.CONFIG + 2] || 1;
     }
 
-    static getDamageMultiplier(id: number): number {
-        return this.data[id * ConfigStore.STRIDE + 1];
+    static getMaxSpeed(world: WorldState, id: number): number {
+        return 150 * (world.config[id * STRIDES.CONFIG + 2] || 1);
     }
 
-    static getSpeedMultiplier(id: number): number {
-        return this.data[id * ConfigStore.STRIDE + 2] || 1;
+    static setSpeedMultiplier(world: WorldState, id: number, value: number): void {
+        world.config[id * STRIDES.CONFIG + 2] = value;
     }
 
-    static getMaxSpeed(id: number): number {
-        // Alias for backward compatibility
-        return 150 * (this.data[id * ConfigStore.STRIDE + 2] || 1);
+    static setMaxSpeed(world: WorldState, id: number, value: number): void {
+        world.config[id * STRIDES.CONFIG + 2] = value / 150;
     }
 
-    // Setters
-    static setMagneticRadius(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE] = value;
-    }
-
-    static setMagnetRadius(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE] = value;
-    }
-
-    static setDamageMultiplier(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE + 1] = value;
-    }
-
-    static setSpeedMultiplier(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE + 2] = value;
-    }
-
-    static setMaxSpeed(id: number, value: number) {
-        // Derive speed multiplier from max speed
-        this.data[id * ConfigStore.STRIDE + 2] = value / 150;
-    }
-
-    static setPickupRange(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE + 3] = value;
-    }
-
-    static setVisionRange(id: number, value: number) {
-        this.data[id * ConfigStore.STRIDE + 4] = value;
+    static setMagnetRadius(world: WorldState, id: number, value: number): void {
+        world.config[id * STRIDES.CONFIG] = value;
     }
 }
 
 // =============================================================================
-// INPUT STORE
+// INPUT ACCESS (Instance-based)
 // =============================================================================
 
-export class InputStore {
-    // [targetX, targetY, actions (bitmask), _pad]
-    public static readonly STRIDE = 4;
-    public static readonly data = new Float32Array(MAX_ENTITIES * InputStore.STRIDE);
+export class InputAccess {
+    static readonly STRIDE = STRIDES.INPUT;
 
-    static setTarget(id: number, x: number, y: number) {
-        if (!isValidEntityId(id)) return;
-        const idx = id * InputStore.STRIDE;
-        this.data[idx] = x;
-        this.data[idx + 1] = y;
+    static setTarget(world: WorldState, id: number, x: number, y: number): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.INPUT;
+        world.input[idx] = x;
+        world.input[idx + 1] = y;
     }
 
-    static getTarget(id: number, out: { x: number; y: number }) {
-        if (!isValidEntityId(id)) return;
-        const idx = id * InputStore.STRIDE;
-        out.x = this.data[idx];
-        out.y = this.data[idx + 1];
+    static getTarget(world: WorldState, id: number, out: { x: number; y: number }): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.INPUT;
+        out.x = world.input[idx];
+        out.y = world.input[idx + 1];
     }
 
-    static setAction(id: number, bit: number, active: boolean): void {
-        if (!isValidEntityId(id)) return;
+    static setAction(world: WorldState, id: number, bit: number, active: boolean): void {
+        if (!world.isValidEntityId(id)) return;
         if (bit < 0 || bit > 31) return;
-        const idx = id * InputStore.STRIDE;
-        const currentActions = this.data[idx + 2];
+        const idx = id * STRIDES.INPUT + 2;
         const bitMask = 1 << bit;
-        this.data[idx + 2] = active ? (currentActions | bitMask) : (currentActions & ~bitMask);
+        world.input[idx] = active ? (world.input[idx] | bitMask) : (world.input[idx] & ~bitMask);
     }
 
-    static isActionActive(id: number, actionBit: number): boolean {
-        const idx = id * InputStore.STRIDE + 2;
-        return (this.data[idx] & (1 << actionBit)) !== 0;
+    static isActionActive(world: WorldState, id: number, actionBit: number): boolean {
+        const idx = id * STRIDES.INPUT + 2;
+        return (world.input[idx] & (1 << actionBit)) !== 0;
     }
 
-    static consumeAction(id: number, actionBit: number): boolean {
-        const idx = id * InputStore.STRIDE + 2;
+    static consumeAction(world: WorldState, id: number, actionBit: number): boolean {
+        const idx = id * STRIDES.INPUT + 2;
         const mask = 1 << actionBit;
-        if ((this.data[idx] & mask) !== 0) {
-            this.data[idx] &= ~mask;
+        if ((world.input[idx] & mask) !== 0) {
+            world.input[idx] &= ~mask;
             return true;
         }
         return false;
     }
 
-    static getActions(id: number): number {
-        return this.data[id * InputStore.STRIDE + 2];
+    static getActions(world: WorldState, id: number): number {
+        return world.input[id * STRIDES.INPUT + 2];
     }
 
-    static setActions(id: number, actions: number) {
-        this.data[id * InputStore.STRIDE + 2] = actions;
+    static setActions(world: WorldState, id: number, actions: number): void {
+        world.input[id * STRIDES.INPUT + 2] = actions;
     }
 }
 
 // =============================================================================
-// PIGMENT STORE (CJR-specific)
+// PIGMENT ACCESS (Instance-based)
 // =============================================================================
 
-export class PigmentStore {
-    public static readonly STRIDE = 8;
-    public static readonly data = new Float32Array(MAX_ENTITIES * PigmentStore.STRIDE);
-
-    // Offset constants
+export class PigmentAccess {
+    static readonly STRIDE = STRIDES.PIGMENT;
     static readonly R = 0;
     static readonly G = 1;
     static readonly B = 2;
@@ -461,111 +371,530 @@ export class PigmentStore {
     static readonly MATCH = 6;
     static readonly COLOR_INT = 7;
 
-    static init(id: number, r: number, g: number, b: number,
-        targetR: number, targetG: number, targetB: number): void {
-        if (!isValidEntityId(id)) return;
-        const idx = id * PigmentStore.STRIDE;
-
-        this.data[idx + PigmentStore.R] = r;
-        this.data[idx + PigmentStore.G] = g;
-        this.data[idx + PigmentStore.B] = b;
-        this.data[idx + PigmentStore.TARGET_R] = targetR;
-        this.data[idx + PigmentStore.TARGET_G] = targetG;
-        this.data[idx + PigmentStore.TARGET_B] = targetB;
-
-        this.updateMatch(id);
-        this.updateColorInt(id);
+    static init(
+        world: WorldState,
+        id: number,
+        r: number, g: number, b: number,
+        targetR: number, targetG: number, targetB: number
+    ): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PIGMENT;
+        const data = world.pigment;
+        data[idx + PigmentAccess.R] = r;
+        data[idx + PigmentAccess.G] = g;
+        data[idx + PigmentAccess.B] = b;
+        data[idx + PigmentAccess.TARGET_R] = targetR;
+        data[idx + PigmentAccess.TARGET_G] = targetG;
+        data[idx + PigmentAccess.TARGET_B] = targetB;
+        PigmentAccess.updateMatch(world, id);
+        PigmentAccess.updateColorInt(world, id);
     }
 
-    static set(id: number, r: number, g: number, b: number): void {
-        if (!isValidEntityId(id)) return;
-        const idx = id * PigmentStore.STRIDE;
-
-        this.data[idx + PigmentStore.R] = r;
-        this.data[idx + PigmentStore.G] = g;
-        this.data[idx + PigmentStore.B] = b;
-
-        this.updateMatch(id);
-        this.updateColorInt(id);
+    static set(world: WorldState, id: number, r: number, g: number, b: number): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PIGMENT;
+        const data = world.pigment;
+        data[idx + PigmentAccess.R] = r;
+        data[idx + PigmentAccess.G] = g;
+        data[idx + PigmentAccess.B] = b;
+        PigmentAccess.updateMatch(world, id);
+        PigmentAccess.updateColorInt(world, id);
     }
 
-    static mix(id: number, addR: number, addG: number, addB: number, ratio: number): void {
-        if (!isValidEntityId(id)) return;
-        const idx = id * PigmentStore.STRIDE;
-
-        this.data[idx + PigmentStore.R] += (addR - this.data[idx + PigmentStore.R]) * ratio;
-        this.data[idx + PigmentStore.G] += (addG - this.data[idx + PigmentStore.G]) * ratio;
-        this.data[idx + PigmentStore.B] += (addB - this.data[idx + PigmentStore.B]) * ratio;
-
+    static mix(world: WorldState, id: number, addR: number, addG: number, addB: number, ratio: number): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PIGMENT;
+        const data = world.pigment;
+        data[idx + PigmentAccess.R] += (addR - data[idx + PigmentAccess.R]) * ratio;
+        data[idx + PigmentAccess.G] += (addG - data[idx + PigmentAccess.G]) * ratio;
+        data[idx + PigmentAccess.B] += (addB - data[idx + PigmentAccess.B]) * ratio;
         // Clamp
-        this.data[idx + PigmentStore.R] = Math.max(0, Math.min(1, this.data[idx + PigmentStore.R]));
-        this.data[idx + PigmentStore.G] = Math.max(0, Math.min(1, this.data[idx + PigmentStore.G]));
-        this.data[idx + PigmentStore.B] = Math.max(0, Math.min(1, this.data[idx + PigmentStore.B]));
-
-        this.updateMatch(id);
-        this.updateColorInt(id);
+        data[idx + PigmentAccess.R] = Math.max(0, Math.min(1, data[idx + PigmentAccess.R]));
+        data[idx + PigmentAccess.G] = Math.max(0, Math.min(1, data[idx + PigmentAccess.G]));
+        data[idx + PigmentAccess.B] = Math.max(0, Math.min(1, data[idx + PigmentAccess.B]));
+        PigmentAccess.updateMatch(world, id);
+        PigmentAccess.updateColorInt(world, id);
     }
 
-    static updateMatch(id: number): void {
-        const idx = id * PigmentStore.STRIDE;
-        const dr = this.data[idx + PigmentStore.R] - this.data[idx + PigmentStore.TARGET_R];
-        const dg = this.data[idx + PigmentStore.G] - this.data[idx + PigmentStore.TARGET_G];
-        const db = this.data[idx + PigmentStore.B] - this.data[idx + PigmentStore.TARGET_B];
+    static updateMatch(world: WorldState, id: number): void {
+        const idx = id * STRIDES.PIGMENT;
+        const data = world.pigment;
+        const dr = data[idx + PigmentAccess.R] - data[idx + PigmentAccess.TARGET_R];
+        const dg = data[idx + PigmentAccess.G] - data[idx + PigmentAccess.TARGET_G];
+        const db = data[idx + PigmentAccess.B] - data[idx + PigmentAccess.TARGET_B];
         const distSq = dr * dr + dg * dg + db * db;
         const thresholdSq = 0.09;
-        this.data[idx + PigmentStore.MATCH] = distSq >= thresholdSq ? 0 : 1.0 - distSq / thresholdSq;
+        data[idx + PigmentAccess.MATCH] = distSq >= thresholdSq ? 0 : 1.0 - distSq / thresholdSq;
     }
 
-    static updateColorInt(id: number): void {
-        const idx = id * PigmentStore.STRIDE;
-        const r = Math.max(0, Math.min(255, Math.floor(this.data[idx + PigmentStore.R] * 255)));
-        const g = Math.max(0, Math.min(255, Math.floor(this.data[idx + PigmentStore.G] * 255)));
-        const b = Math.max(0, Math.min(255, Math.floor(this.data[idx + PigmentStore.B] * 255)));
-        this.data[idx + PigmentStore.COLOR_INT] = (r << 16) | (g << 8) | b;
+    static updateColorInt(world: WorldState, id: number): void {
+        const idx = id * STRIDES.PIGMENT;
+        const data = world.pigment;
+        const r = Math.max(0, Math.min(255, Math.floor(data[idx + PigmentAccess.R] * 255)));
+        const g = Math.max(0, Math.min(255, Math.floor(data[idx + PigmentAccess.G] * 255)));
+        const b = Math.max(0, Math.min(255, Math.floor(data[idx + PigmentAccess.B] * 255)));
+        data[idx + PigmentAccess.COLOR_INT] = (r << 16) | (g << 8) | b;
     }
 
-    static getPigment(id: number): { r: number; g: number; b: number } {
-        const idx = id * PigmentStore.STRIDE;
+    static getPigment(world: WorldState, id: number): { r: number; g: number; b: number } {
+        const idx = id * STRIDES.PIGMENT;
         return {
-            r: this.data[idx + PigmentStore.R],
-            g: this.data[idx + PigmentStore.G],
-            b: this.data[idx + PigmentStore.B],
+            r: world.pigment[idx + PigmentAccess.R],
+            g: world.pigment[idx + PigmentAccess.G],
+            b: world.pigment[idx + PigmentAccess.B],
         };
     }
 
-    static getMatch(id: number): number {
-        return this.data[id * PigmentStore.STRIDE + PigmentStore.MATCH];
+    static getMatch(world: WorldState, id: number): number {
+        return world.pigment[id * STRIDES.PIGMENT + PigmentAccess.MATCH];
     }
 
-    static getColorInt(id: number): number {
-        return this.data[id * PigmentStore.STRIDE + PigmentStore.COLOR_INT];
+    static getColorInt(world: WorldState, id: number): number {
+        return world.pigment[id * STRIDES.PIGMENT + PigmentAccess.COLOR_INT];
     }
 }
 
 // =============================================================================
-// ENTITY LOOKUP (Bridge array: DOD Index -> Entity Object)
+// TATTOO ACCESS (Instance-based)
 // =============================================================================
 
-// EntityLookup stores entity objects for reverse lookup (DOD index -> entity)
-// Uses 'unknown' type to allow any entity shape from different game modules
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const EntityLookup: (unknown | null)[] = new Array(MAX_ENTITIES).fill(null);
+export class TattooAccess {
+    static readonly STRIDE = STRIDES.TATTOO;
+
+    static set(world: WorldState, id: number, flags: number, procChance: number): void {
+        if (!world.isValidEntityId(id)) return;
+        world.tattooFlags[id] = flags;
+        const idx = id * STRIDES.TATTOO;
+        world.tattoo[idx] = 0; // timer1
+        world.tattoo[idx + 1] = 0; // timer2
+        world.tattoo[idx + 2] = procChance;
+    }
+
+    static getFlags(world: WorldState, id: number): number {
+        return world.tattooFlags[id];
+    }
+
+    static hasFlag(world: WorldState, id: number, flag: number): boolean {
+        return (world.tattooFlags[id] & flag) !== 0;
+    }
+}
+
+// =============================================================================
+// PROJECTILE ACCESS (Instance-based)
+// =============================================================================
+
+export class ProjectileAccess {
+    static readonly STRIDE = STRIDES.PROJECTILE;
+
+    static set(world: WorldState, id: number, ownerId: number, damage: number, duration: number, typeId: number = 0): void {
+        if (!world.isValidEntityId(id)) return;
+        const idx = id * STRIDES.PROJECTILE;
+        const data = world.projectile;
+        data[idx] = ownerId;
+        data[idx + 1] = damage;
+        data[idx + 2] = duration;
+        data[idx + 3] = typeId;
+    }
+
+    static getOwnerId(world: WorldState, id: number): number {
+        return world.projectile[id * STRIDES.PROJECTILE];
+    }
+
+    static getDamage(world: WorldState, id: number): number {
+        return world.projectile[id * STRIDES.PROJECTILE + 1];
+    }
+
+    static getDuration(world: WorldState, id: number): number {
+        return world.projectile[id * STRIDES.PROJECTILE + 2];
+    }
+}
+
+// =============================================================================
+// =============================================================================
+// BACKWARD COMPATIBLE STATIC STORES (use defaultWorld)
+// =============================================================================
+// =============================================================================
+
+// =============================================================================
+// TRANSFORM STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class TransformStore {
+    public static readonly STRIDE = STRIDES.TRANSFORM;
+    public static readonly data = defaultWorld.transform;
+
+    static set(id: number, x: number, y: number, rotation: number, scale: number = 1.0): void {
+        TransformAccess.set(defaultWorld, id, x, y, rotation, scale);
+    }
+
+    static setPosition(id: number, x: number, y: number): void {
+        TransformAccess.setPosition(defaultWorld, id, x, y);
+    }
+
+    static getX(id: number): number {
+        return TransformAccess.getX(defaultWorld, id);
+    }
+
+    static getY(id: number): number {
+        return TransformAccess.getY(defaultWorld, id);
+    }
+}
+
+// =============================================================================
+// PHYSICS STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class PhysicsStore {
+    public static readonly STRIDE = STRIDES.PHYSICS;
+    public static readonly data = defaultWorld.physics;
+
+    static set(
+        id: number,
+        vx: number,
+        vy: number,
+        mass: number,
+        radius: number,
+        restitution: number = 0.5,
+        friction: number = 0.9
+    ): void {
+        PhysicsAccess.set(defaultWorld, id, vx, vy, mass, radius, restitution, friction);
+    }
+
+    static setVelocity(id: number, vx: number, vy: number): void {
+        PhysicsAccess.setVelocity(defaultWorld, id, vx, vy);
+    }
+
+    static getVelocityX(id: number): number {
+        return PhysicsAccess.getVelocityX(defaultWorld, id);
+    }
+
+    static getVelocityY(id: number): number {
+        return PhysicsAccess.getVelocityY(defaultWorld, id);
+    }
+
+    static getRadius(id: number): number {
+        return PhysicsAccess.getRadius(defaultWorld, id);
+    }
+}
+
+// =============================================================================
+// STATE STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class StateStore {
+    public static readonly flags = defaultWorld.stateFlags;
+
+    static setFlag(id: number, flag: EntityFlags): void {
+        StateAccess.setFlag(defaultWorld, id, flag);
+    }
+
+    static clearFlag(id: number, flag: EntityFlags): void {
+        StateAccess.clearFlag(defaultWorld, id, flag);
+    }
+
+    static hasFlag(id: number, flag: EntityFlags): boolean {
+        return StateAccess.hasFlag(defaultWorld, id, flag);
+    }
+
+    static isActive(id: number): boolean {
+        return StateAccess.isActive(defaultWorld, id);
+    }
+}
+
+// =============================================================================
+// STATS STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class StatsStore {
+    public static readonly STRIDE = STRIDES.STATS;
+    public static readonly data = defaultWorld.stats;
+
+    static set(
+        id: number,
+        currentHealth: number,
+        maxHealth: number,
+        score: number,
+        matchPercent: number,
+        defense: number = 1,
+        damageMultiplier: number = 1
+    ): void {
+        StatsAccess.set(defaultWorld, id, currentHealth, maxHealth, score, matchPercent, defense, damageMultiplier);
+    }
+
+    static setDefense(id: number, value: number): void {
+        if (!isValidEntityId(id)) return;
+        defaultWorld.stats[id * STRIDES.STATS + 4] = value;
+    }
+
+    static setDamageMultiplier(id: number, value: number): void {
+        if (!isValidEntityId(id)) return;
+        defaultWorld.stats[id * STRIDES.STATS + 5] = value;
+    }
+
+    static setCurrentHealth(id: number, value: number): void {
+        StatsAccess.setCurrentHealth(defaultWorld, id, value);
+    }
+
+    static setMaxHealth(id: number, value: number): void {
+        StatsAccess.setMaxHealth(defaultWorld, id, value);
+    }
+
+    static getCurrentHealth(id: number): number {
+        return StatsAccess.getCurrentHealth(defaultWorld, id);
+    }
+
+    static getMaxHealth(id: number): number {
+        return StatsAccess.getMaxHealth(defaultWorld, id);
+    }
+
+    static getScore(id: number): number {
+        return StatsAccess.getScore(defaultWorld, id);
+    }
+
+    static getMatchPercent(id: number): number {
+        return StatsAccess.getMatchPercent(defaultWorld, id);
+    }
+
+    static getDefense(id: number): number {
+        if (!isValidEntityId(id)) return 1;
+        return defaultWorld.stats[id * STRIDES.STATS + 4];
+    }
+
+    static getDamageMultiplier(id: number): number {
+        if (!isValidEntityId(id)) return 1;
+        return defaultWorld.stats[id * STRIDES.STATS + 5];
+    }
+}
+
+// =============================================================================
+// SKILL STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class SkillStore {
+    public static readonly STRIDE = STRIDES.SKILL;
+    public static readonly data = defaultWorld.skills;
+
+    static set(id: number, cooldown: number, maxCooldown: number, activeTimer: number, shapeId: number = 0): void {
+        SkillAccess.set(defaultWorld, id, cooldown, maxCooldown, activeTimer, shapeId);
+    }
+
+    static getCooldown(id: number): number {
+        return SkillAccess.getCooldown(defaultWorld, id);
+    }
+
+    static setCooldown(id: number, value: number): void {
+        SkillAccess.setCooldown(defaultWorld, id, value);
+    }
+
+    static getMaxCooldown(id: number): number {
+        return SkillAccess.getMaxCooldown(defaultWorld, id);
+    }
+
+    static setMaxCooldown(id: number, value: number): void {
+        SkillAccess.setMaxCooldown(defaultWorld, id, value);
+    }
+
+    static getActiveTimer(id: number): number {
+        return SkillAccess.getActiveTimer(defaultWorld, id);
+    }
+
+    static setActiveTimer(id: number, value: number): void {
+        SkillAccess.setActiveTimer(defaultWorld, id, value);
+    }
+}
+
+// =============================================================================
+// TATTOO STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class TattooStore {
+    public static readonly STRIDE = STRIDES.TATTOO;
+    public static readonly data = defaultWorld.tattoo;
+    public static readonly flags = defaultWorld.tattooFlags;
+
+    static set(id: number, flags: number, procChance: number): void {
+        TattooAccess.set(defaultWorld, id, flags, procChance);
+    }
+}
+
+// =============================================================================
+// PROJECTILE STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class ProjectileStore {
+    public static readonly STRIDE = STRIDES.PROJECTILE;
+    public static readonly data = defaultWorld.projectile;
+
+    static set(id: number, ownerId: number, damage: number, duration: number, typeId: number = 0): void {
+        ProjectileAccess.set(defaultWorld, id, ownerId, damage, duration, typeId);
+    }
+}
+
+// =============================================================================
+// CONFIG STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class ConfigStore {
+    public static readonly STRIDE = STRIDES.CONFIG;
+    public static readonly data = defaultWorld.config;
+
+    static set(
+        id: number,
+        magneticRadius: number,
+        damageMult: number,
+        speedMult: number,
+        pickupRange: number,
+        visionRange: number
+    ): void {
+        ConfigAccess.set(defaultWorld, id, magneticRadius, damageMult, speedMult, pickupRange, visionRange);
+    }
+
+    static getMagneticRadius(id: number): number {
+        return ConfigAccess.getMagneticRadius(defaultWorld, id);
+    }
+
+    static getMagnetRadius(id: number): number {
+        return ConfigAccess.getMagneticRadius(defaultWorld, id);
+    }
+
+    static getDamageMultiplier(id: number): number {
+        return defaultWorld.config[id * STRIDES.CONFIG + 1];
+    }
+
+    static getSpeedMultiplier(id: number): number {
+        return ConfigAccess.getSpeedMultiplier(defaultWorld, id);
+    }
+
+    static getMaxSpeed(id: number): number {
+        return ConfigAccess.getMaxSpeed(defaultWorld, id);
+    }
+
+    static setMagneticRadius(id: number, value: number): void {
+        ConfigAccess.setMagnetRadius(defaultWorld, id, value);
+    }
+
+    static setMagnetRadius(id: number, value: number): void {
+        ConfigAccess.setMagnetRadius(defaultWorld, id, value);
+    }
+
+    static setDamageMultiplier(id: number, value: number): void {
+        defaultWorld.config[id * STRIDES.CONFIG + 1] = value;
+    }
+
+    static setSpeedMultiplier(id: number, value: number): void {
+        ConfigAccess.setSpeedMultiplier(defaultWorld, id, value);
+    }
+
+    static setMaxSpeed(id: number, value: number): void {
+        ConfigAccess.setMaxSpeed(defaultWorld, id, value);
+    }
+
+    static setPickupRange(id: number, value: number): void {
+        defaultWorld.config[id * STRIDES.CONFIG + 3] = value;
+    }
+
+    static setVisionRange(id: number, value: number): void {
+        defaultWorld.config[id * STRIDES.CONFIG + 4] = value;
+    }
+}
+
+// =============================================================================
+// INPUT STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class InputStore {
+    public static readonly STRIDE = STRIDES.INPUT;
+    public static readonly data = defaultWorld.input;
+
+    static setTarget(id: number, x: number, y: number): void {
+        InputAccess.setTarget(defaultWorld, id, x, y);
+    }
+
+    static getTarget(id: number, out: { x: number; y: number }): void {
+        InputAccess.getTarget(defaultWorld, id, out);
+    }
+
+    static setAction(id: number, bit: number, active: boolean): void {
+        InputAccess.setAction(defaultWorld, id, bit, active);
+    }
+
+    static isActionActive(id: number, actionBit: number): boolean {
+        return InputAccess.isActionActive(defaultWorld, id, actionBit);
+    }
+
+    static consumeAction(id: number, actionBit: number): boolean {
+        return InputAccess.consumeAction(defaultWorld, id, actionBit);
+    }
+
+    static getActions(id: number): number {
+        return InputAccess.getActions(defaultWorld, id);
+    }
+
+    static setActions(id: number, actions: number): void {
+        InputAccess.setActions(defaultWorld, id, actions);
+    }
+}
+
+// =============================================================================
+// PIGMENT STORE (Static - Backward Compatible)
+// =============================================================================
+
+export class PigmentStore {
+    public static readonly STRIDE = STRIDES.PIGMENT;
+    public static readonly data = defaultWorld.pigment;
+
+    static readonly R = PigmentAccess.R;
+    static readonly G = PigmentAccess.G;
+    static readonly B = PigmentAccess.B;
+    static readonly TARGET_R = PigmentAccess.TARGET_R;
+    static readonly TARGET_G = PigmentAccess.TARGET_G;
+    static readonly TARGET_B = PigmentAccess.TARGET_B;
+    static readonly MATCH = PigmentAccess.MATCH;
+    static readonly COLOR_INT = PigmentAccess.COLOR_INT;
+
+    static init(id: number, r: number, g: number, b: number, targetR: number, targetG: number, targetB: number): void {
+        PigmentAccess.init(defaultWorld, id, r, g, b, targetR, targetG, targetB);
+    }
+
+    static set(id: number, r: number, g: number, b: number): void {
+        PigmentAccess.set(defaultWorld, id, r, g, b);
+    }
+
+    static mix(id: number, addR: number, addG: number, addB: number, ratio: number): void {
+        PigmentAccess.mix(defaultWorld, id, addR, addG, addB, ratio);
+    }
+
+    static updateMatch(id: number): void {
+        PigmentAccess.updateMatch(defaultWorld, id);
+    }
+
+    static updateColorInt(id: number): void {
+        PigmentAccess.updateColorInt(defaultWorld, id);
+    }
+
+    static getPigment(id: number): { r: number; g: number; b: number } {
+        return PigmentAccess.getPigment(defaultWorld, id);
+    }
+
+    static getMatch(id: number): number {
+        return PigmentAccess.getMatch(defaultWorld, id);
+    }
+
+    static getColorInt(id: number): number {
+        return PigmentAccess.getColorInt(defaultWorld, id);
+    }
+}
+
+// =============================================================================
+// ENTITY LOOKUP (Static - Backward Compatible)
+// =============================================================================
+
+export const EntityLookup: (unknown | null)[] = defaultWorld.entityLookup;
 
 // =============================================================================
 // RESET ALL STORES
 // =============================================================================
 
-export function resetAllStores() {
-    TransformStore.data.fill(0);
-    PhysicsStore.data.fill(0);
-    StatsStore.data.fill(0);
-    SkillStore.data.fill(0);
-    TattooStore.data.fill(0);
-    TattooStore.flags.fill(0);
-    ProjectileStore.data.fill(0);
-    ConfigStore.data.fill(0);
-    InputStore.data.fill(0);
-    PigmentStore.data.fill(0);
-    StateStore.flags.fill(0);
-    EntityLookup.fill(null);
+export function resetAllStores(): void {
+    defaultWorld.reset();
 }

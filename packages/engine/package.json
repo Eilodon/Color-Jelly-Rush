@@ -19,6 +19,7 @@
         "./cjr": "./src/modules/cjr/index.ts"
     },
     "scripts": {
+        "gen": "node scripts/generate.js",
         "typecheck": "tsc --noEmit",
         "build": "tsc",
         "dev": "tsc --watch",

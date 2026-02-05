@@ -1,0 +1,193 @@
+
+
+# 🏛️ MASTER PLAN V3.3: EIDOLON PLATFORM REVOLUTION (FINAL)
+
+**MỤC TIÊU TỐI THƯỢNG:**
+Biến `packages/engine` thành một **"Máy in game" (Game Printer)** đa dụng.
+Engine không được biết `Jelly` là gì. `Jelly` chỉ là dữ liệu được nạp vào.
+
+---
+
+## PHẦN 1: CẤU TRÚC VẬT LÝ & QUY HOẠCH (PHYSICAL ARCHITECTURE)
+
+Chúng ta tái cấu trúc Monorepo để tạo ra một **Shared Kernel** (Hạt nhân dùng chung) cho cả Client, Server và Tools.
+
+### 1. Cấu Trúc Thư Mục (Directory Map)
+
+```text
+packages/engine/src/
+├── kernel/                 (🧠 THE BRAIN - 100% AGNOSTIC & SHARED)
+│   ├── memory/
+│   │   ├── MemoryBlock.ts  (ArrayBuffer liền mạch, Zero-GC, Resizable)
+│   │   └── Allocator.ts    (Quản lý Generation ID, chống lỗi ABA)
+│   ├── core/
+│   │   ├── Registry.ts     (Map "String" -> "ID". Dynamic Component Registration)
+│   │   └── Entity.ts       (Wrapper nhẹ xung quanh ID)
+│   ├── systems/
+│   │   └── SystemManager.ts(Quản lý vòng lặp và thứ tự ưu tiên)
+│   └── io/
+│       └── BlueprintLoader.ts (🔌 SERIALIZER: Biến JSON Editor thành Memory)
+│
+├── modules/                (🧩 GAME CARTRIDGES - Nơi Logic Game trú ngụ)
+│   └── cjr/                (Toàn bộ Code CJR cũ dời về đây)
+│       ├── definitions/    (Schema: Pigment, Tattoo,Stats)
+│       ├── systems/        (RingSystem, WaveSpawner, MixingSystem)
+│       ├── stores/         (TattooStore cũ - được bọc lại)
+│       └── index.ts        (Export CJRModule implementation)
+│
+├── interfaces/             (📜 THE LAW - Hợp đồng giao tiếp)
+│   └── IGameModule.ts      (Bắt buộc mọi Game phải tuân thủ)
+│
+├── legacy/                 (⚠️ QUARANTINE - Khu vực cách ly Code cũ)
+│   └── dod/                (ComponentStores.ts trỏ về MemoryBlock mới)
+│
+└── index.ts                (Chỉ Export Kernel & Interfaces. KHÔNG Export CJR)
+
+```
+
+---
+
+## PHẦN 2: CÔNG NGHỆ LÕI (CORE TECHNOLOGY STACK)
+
+### 1. Registry "Mù" (The Blind Registry)
+
+* **Vấn đề cũ:** Engine import cứng `EntityType.JELLY`.
+* **Giải pháp V3.3:** Engine chỉ quản lý ID và String Key.
+```typescript
+// Engine không cần biết Component làm gì, chỉ cần biết size
+const posID = registry.register("Position", { size: 8 }); // x, y
+const colorID = registry.register("Pigment", { size: 3 }); // r, g, b
+
+```
+
+
+
+### 2. Bộ Nhớ Zero-GC (The Memory Block)
+
+* **Công nghệ:** `ArrayBuffer` duy nhất cho toàn bộ Game State.
+* **Cơ chế:**
+* Dữ liệu tất cả Component của 1 Entity nằm liền nhau (Archetype) hoặc phân tán (Sparse Set) tùy chiến lược, nhưng đều nằm trên `MemoryBlock`.
+* **Pointer Caching:** Trong vòng lặp `update`, System lấy con trỏ `Float32Array` ra một lần duy nhất, sau đó duyệt mảng. Không gọi hàm `get()` liên tục.
+
+
+
+### 3. Blueprint Loader (The Bridge)
+
+* **Nhiệm vụ:** Đọc file `level_1.json` (OOP JSON) và nạp vào `MemoryBlock` (Binary).
+* **Quy trình:**
+1. Parse JSON.
+2. Dùng `registry.lookup("pigment")` để lấy ID.
+3. `kernel.createEntity()` -> Nhận về Index bộ nhớ.
+4. Ghi dữ liệu JSON vào địa chỉ bộ nhớ đó.
+
+
+
+---
+
+## PHẦN 3: HỢP NHẤT CLIENT-SERVER (UNIFIED SIMULATION)
+
+**Nguyên tắc vàng:** "Một Mã Nguồn, Hai Nơi Chạy".
+
+### 1. Server (Authoritative Host)
+
+* Chạy `EidolonEngine` với `CJRModule`.
+* Xử lý Input chuẩn.
+* Gửi Snapshot trạng thái xuống Client.
+
+### 2. Client (Shadow Simulation)
+
+* **BỎ:** `OptimizedEngine` (Code riêng của Client cũ).
+* **THÊM:** `EidolonClient` import trực tiếp `packages/engine`.
+* **Luồng xử lý:**
+1. **Prediction:** Nhận Input -> Gọi `kernel.update()` (Chạy logic giống hệt Server trên máy local).
+2. **Correction:** Nhận Snapshot Server -> So sánh Hash của `MemoryBlock`. Nếu lệch -> Rollback và Re-simulate.
+3. **Rendering:** `RenderSystem` đọc `MemoryBlock` (X, Y, Rotation) -> Cập nhật `Pixi.Sprite`.
+
+
+
+---
+
+## PHẦN 4: MẠNG LƯỚI KÉP (HYBRID NETWORKING)
+
+Tối ưu hóa băng thông bằng cách chia làn đường dữ liệu.
+
+| Kênh (Lane) | Công nghệ | Dữ liệu (Payload) | Tần suất |
+| --- | --- | --- | --- |
+| **Fast Lane** | **Binary Stream** | `Transform` (x, y, vx, vy), `Rotation` | 20-60Hz |
+| **Smart Lane** | **Bitmask Patch** | `Stats` (HP, Mana), `Inventory`, `State` | On-Change |
+
+* **Fast Lane:** Server cắt lát (Slice) `MemoryBlock` chứa Position và gửi thẳng (Zero-Serialization).
+* **Smart Lane:** Hệ thống `DirtyBit` kiểm tra xem Entity nào thay đổi chỉ số phụ, đóng gói Bitmask và gửi đi.
+
+---
+
+## PHẦN 5: GIAO DIỆN MODULE (THE CONTRACT)
+
+Để tách Logic khỏi Engine, mọi Game phải cài đặt Interface này:
+
+```typescript
+export interface IGameModule {
+    id: string; // "cjr_v1"
+
+    // 1. Đăng ký dữ liệu (Schema)
+    registerComponents(registry: Registry): void;
+    
+    // 2. Cung cấp Logic
+    getSystems(): ISystem[];
+
+    // 3. Mapping Tài nguyên (Fix điểm mù Asset)
+    getAssetManifest(): Record<string, string>; // "jelly_red" -> "assets/red.png"
+
+    // 4. Mapping Input (Fix điểm mù Input)
+    getInputMap(): Record<string, string[]>; // "FIRE" -> ["Space", "Tap"]
+}
+
+```
+
+---
+
+## PHẦN 6: LỘ TRÌNH THỰC THI CHIẾN DỊCH (EXECUTION ROADMAP)
+
+Chúng ta áp dụng chiến thuật **"Strangler Fig"** (Cây đa bóp cổ).
+
+### 🟢 GIAI ĐOẠN 1: PHẪU THUẬT TÁCH RỜI (ISOLATION)
+
+* **Mục tiêu:** Engine sạch bóng quân thù (CJR Logic).
+* **Hành động:**
+1. Tạo `IGameModule.ts`.
+2. Move toàn bộ `src/cjr` vào `modules/cjr`.
+3. Ngắt `export * from './cjr'` ở root.
+4. Client và Server sẽ báo lỗi -> Đây là lúc ta thấy rõ các điểm phụ thuộc cần sửa.
+
+
+
+### 🟡 GIAI ĐOẠN 2: XÂY DỰNG HẠT NHÂN (KERNEL GENESIS)
+
+* **Mục tiêu:** Engine có bộ nhớ và hệ thống quản lý mới.
+* **Hành động:**
+1. Implement `MemoryBlock` (Zero-GC).
+2. Implement `Registry` (Dynamic).
+3. Viết `LegacyBridge`: Hack `ComponentStores` cũ để trỏ vào `MemoryBlock` mới (Giữ game chạy được).
+
+
+
+### 🟠 GIAI ĐOẠN 3: ĐỒNG BỘ CLIENT (UNIFICATION)
+
+* **Mục tiêu:** Client và Server dùng chung não.
+* **Hành động:**
+1. Client import `packages/engine`.
+2. Viết `EidolonClient` thay thế `OptimizedEngine`.
+3. Kết nối `RenderSystem` của PixiJS vào `MemoryBlock`.
+
+
+
+### 🔴 GIAI ĐOẠN 4: NETWORKING & TOOLING (OPTIMIZATION)
+
+* **Mục tiêu:** Hiệu năng tối đa & Nạp liệu tự động.
+* **Hành động:**
+1. Triển khai **Hybrid Networking**.
+2. Hoàn thiện `BlueprintLoader` để đọc JSON từ Level Editor.
+
+
+
+

@@ -17,6 +17,8 @@
  * 2. Interpolation for remote entities (smooth movement)
  * 3. Render sync (DOD → Render objects)
  * 4. Visual effects (particles, screen shake)
+ * 
+ * EIDOLON-V FIX: Zero-allocation render loop using activeEntityIds array
  */
 
 import { BaseSimulation, type ISimulationConfig } from '../core/BaseSimulation';
@@ -70,6 +72,10 @@ export abstract class ClientRunner extends BaseSimulation {
 
     // Entity lookup for render sync
     protected entityLookup: IEntityLookup = {};
+
+    // EIDOLON-V FIX: Zero-allocation entity ID tracking
+    // Pre-allocated array to avoid GC pressure in render loop
+    protected activeEntityIds: number[] = [];
 
     // Camera state
     protected camera: ICameraState = { x: 0, y: 0, zoom: 1 };
@@ -128,6 +134,9 @@ export abstract class ClientRunner extends BaseSimulation {
         if (this.entityLookup[entityId]) {
             this.entityLookup[entityId] = null;
         }
+
+        // Remove from active list using swap-pop (O(1))
+        this.removeFromActiveList(entityId);
 
         // Emit death event for VFX
         this.onEntityDeathVisual(entityId);
@@ -198,24 +207,28 @@ export abstract class ClientRunner extends BaseSimulation {
     }
 
     /**
-     * Interpolate entity positions for smooth rendering
+     * EIDOLON-V FIX: Zero-allocation interpolation loop
+     * Uses pre-cached activeEntityIds instead of Object.keys()
      */
     protected interpolateEntities(alpha: number): void {
         const flags = StateStore.flags;
+        const len = this.activeEntityIds.length;
 
-        for (let i = 0; i < Object.keys(this.entityLookup).length; i++) {
-            const entity = this.entityLookup[i];
+        for (let i = 0; i < len; i++) {
+            const entityId = this.activeEntityIds[i];
+            const entity = this.entityLookup[entityId];
+
             if (!entity || entity.isDead) continue;
 
             // Skip if not active in DOD
-            if ((flags[i] & EntityFlags.ACTIVE) === 0) continue;
+            if ((flags[entityId] & EntityFlags.ACTIVE) === 0) continue;
 
             // Get current DOD position
-            const currentX = TransformStore.getX(i);
-            const currentY = TransformStore.getY(i);
+            const currentX = TransformStore.getX(entityId);
+            const currentY = TransformStore.getY(entityId);
 
             // Get previous position
-            const prev = this.previousPositions.get(i);
+            const prev = this.previousPositions.get(entityId);
             if (prev) {
                 // Interpolate between previous and current
                 entity.position.x = prev.x + (currentX - prev.x) * alpha;
@@ -223,7 +236,7 @@ export abstract class ClientRunner extends BaseSimulation {
             }
 
             // Store current for next frame
-            this.previousPositions.set(i, { x: currentX, y: currentY });
+            this.previousPositions.set(entityId, { x: currentX, y: currentY });
         }
     }
 
@@ -244,17 +257,40 @@ export abstract class ClientRunner extends BaseSimulation {
 
     /**
      * Register entity for render sync
+     * EIDOLON-V FIX: Also adds to activeEntityIds for zero-allocation loop
      */
     registerEntity(entityId: number, entity: IEntityLookup[number]): void {
         this.entityLookup[entityId] = entity;
+
+        // Add to active list if not already present
+        if (!this.activeEntityIds.includes(entityId)) {
+            this.activeEntityIds.push(entityId);
+        }
     }
 
     /**
      * Unregister entity
+     * EIDOLON-V FIX: Uses swap-pop for O(1) removal
      */
     unregisterEntity(entityId: number): void {
         delete this.entityLookup[entityId];
         this.previousPositions.delete(entityId);
+        this.removeFromActiveList(entityId);
+    }
+
+    /**
+     * Remove entity from active list using swap-pop (O(1) instead of splice O(n))
+     */
+    private removeFromActiveList(entityId: number): void {
+        const idx = this.activeEntityIds.indexOf(entityId);
+        if (idx !== -1) {
+            // Swap with last element and pop
+            const lastIdx = this.activeEntityIds.length - 1;
+            if (idx !== lastIdx) {
+                this.activeEntityIds[idx] = this.activeEntityIds[lastIdx];
+            }
+            this.activeEntityIds.pop();
+        }
     }
 
     /**
@@ -266,16 +302,19 @@ export abstract class ClientRunner extends BaseSimulation {
 
     /**
      * Get entity in viewport count for debugging
+     * EIDOLON-V FIX: Uses activeEntityIds instead of Object.keys()
      */
     getViewportEntityCount(): number {
         let count = 0;
         const flags = StateStore.flags;
+        const len = this.activeEntityIds.length;
 
-        for (let i = 0; i < Object.keys(this.entityLookup).length; i++) {
-            if ((flags[i] & EntityFlags.ACTIVE) === 0) continue;
+        for (let i = 0; i < len; i++) {
+            const entityId = this.activeEntityIds[i];
+            if ((flags[entityId] & EntityFlags.ACTIVE) === 0) continue;
 
-            const x = TransformStore.getX(i);
-            const y = TransformStore.getY(i);
+            const x = TransformStore.getX(entityId);
+            const y = TransformStore.getY(entityId);
 
             if (this.isInViewport(x, y)) {
                 count++;
@@ -283,5 +322,12 @@ export abstract class ClientRunner extends BaseSimulation {
         }
 
         return count;
+    }
+
+    /**
+     * Get total active entity count
+     */
+    getActiveEntityCount(): number {
+        return this.activeEntityIds.length;
     }
 }

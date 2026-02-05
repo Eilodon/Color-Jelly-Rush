@@ -27,6 +27,12 @@ const CJR_VERSION = '1.0.0';
 
 /**
  * CJR-specific component schemas
+ * 
+ * NOTE: These schemas should match packages/engine/scripts/schema.config.js
+ * Run `npm run gen` in packages/engine to regenerate accessor code.
+ * 
+ * The generated code in src/generated/ is the actual runtime implementation.
+ * These schemas here are for documentation and dev tools integration.
  */
 const CJR_COMPONENT_SCHEMAS: IComponentSchema[] = [
     {
@@ -34,69 +40,40 @@ const CJR_COMPONENT_SCHEMAS: IComponentSchema[] = [
         displayName: 'Color Pigment',
         description: 'RGB color pigment for color mixing mechanics',
         fields: [
-            { name: 'r', type: 'f32', offset: 0, default: 0.5, min: 0, max: 1 },
-            { name: 'g', type: 'f32', offset: 4, default: 0.5, min: 0, max: 1 },
-            { name: 'b', type: 'f32', offset: 8, default: 0.5, min: 0, max: 1 },
+            { name: 'r', type: 'f32', offset: 0, default: 1, min: 0, max: 1 },
+            { name: 'g', type: 'f32', offset: 4, default: 1, min: 0, max: 1 },
+            { name: 'b', type: 'f32', offset: 8, default: 1, min: 0, max: 1 },
+            { name: 'targetR', type: 'f32', offset: 12, default: 1 },
+            { name: 'targetG', type: 'f32', offset: 16, default: 1 },
+            { name: 'targetB', type: 'f32', offset: 20, default: 1 },
+            { name: 'matchPercent', type: 'f32', offset: 24, default: 0 },
+            { name: 'colorInt', type: 'f32', offset: 28, default: 0 },
         ],
-        stride: 12,
+        stride: 32, // 8 fields × 4 bytes - matches schema.config.js
         tags: ['cjr', 'color'],
-    },
-    {
-        id: 'TargetPigment',
-        displayName: 'Target Color',
-        description: 'Target color the player must match',
-        fields: [
-            { name: 'r', type: 'f32', offset: 0, default: 1.0, min: 0, max: 1 },
-            { name: 'g', type: 'f32', offset: 4, default: 0.0, min: 0, max: 1 },
-            { name: 'b', type: 'f32', offset: 8, default: 0.0, min: 0, max: 1 },
-        ],
-        stride: 12,
-        tags: ['cjr', 'color'],
-    },
-    {
-        id: 'Ring',
-        displayName: 'Ring State',
-        description: 'Ring progression state (1=outer, 2=mid, 3=inner)',
-        fields: [
-            { name: 'currentRing', type: 'u8', offset: 0, default: 1, min: 1, max: 3 },
-            { name: 'matchPercent', type: 'f32', offset: 4, default: 0, min: 0, max: 1 },
-        ],
-        stride: 8,
-        tags: ['cjr', 'progression'],
     },
     {
         id: 'Tattoo',
         displayName: 'Tattoo State',
-        description: 'Tattoo/mutation ability flags and timers',
+        description: 'Tattoo/mutation ability timers and proc chance',
         fields: [
-            { name: 'flags', type: 'u32', offset: 0, default: 0 },
-            { name: 'procChance', type: 'f32', offset: 4, default: 0 },
-            { name: 'timer1', type: 'f32', offset: 8, default: 0 },
-            { name: 'timer2', type: 'f32', offset: 12, default: 0 },
+            { name: 'timer1', type: 'f32', offset: 0, default: 0 },
+            { name: 'timer2', type: 'f32', offset: 4, default: 0 },
+            { name: 'procChance', type: 'f32', offset: 8, default: 0 },
         ],
-        stride: 16,
+        stride: 16, // 4 fields × 4 bytes - matches schema.config.js
         tags: ['cjr', 'ability'],
-    },
-    {
-        id: 'FoodPickup',
-        displayName: 'Food Pickup',
-        description: 'Consumable food entity data',
-        fields: [
-            { name: 'kind', type: 'u8', offset: 0, default: 0 }, // 0=pigment, 1=neutral, 2=solvent, etc
-            { name: 'value', type: 'f32', offset: 4, default: 1 },
-        ],
-        stride: 8,
-        tags: ['cjr', 'pickup'],
     },
     {
         id: 'Skill',
         displayName: 'Skill',
         description: 'Generic skill cooldown and state',
-        stride: 12, // 3 floats × 4 bytes
+        stride: 16, // 4 fields × 4 bytes - matches schema.config.js
         fields: [
             { name: 'cooldown', type: 'f32', offset: 0 },
             { name: 'maxCooldown', type: 'f32', offset: 4 },
             { name: 'activeTimer', type: 'f32', offset: 8 },
+            { name: 'shapeId', type: 'f32', offset: 12 },
         ],
         tags: ['cjr', 'skills'],
     },
@@ -104,12 +81,27 @@ const CJR_COMPONENT_SCHEMAS: IComponentSchema[] = [
         id: 'Projectile',
         displayName: 'Projectile',
         description: 'Projectile physics properties',
-        stride: 16, // 4 floats × 4 bytes
+        stride: 16, // 4 fields × 4 bytes - matches schema.config.js
         fields: [
             { name: 'ownerId', type: 'f32', offset: 0 },
             { name: 'damage', type: 'f32', offset: 4 },
             { name: 'duration', type: 'f32', offset: 8 },
             { name: 'typeId', type: 'f32', offset: 12 },
+        ],
+        tags: ['cjr', 'combat'],
+    },
+    {
+        id: 'Stats',
+        displayName: 'Entity Stats',
+        description: 'Health, score, and combat stats',
+        stride: 32, // 8 fields × 4 bytes - matches schema.config.js
+        fields: [
+            { name: 'hp', type: 'f32', offset: 0, default: 100 },
+            { name: 'maxHp', type: 'f32', offset: 4, default: 100 },
+            { name: 'score', type: 'f32', offset: 8, default: 0 },
+            { name: 'matchPercent', type: 'f32', offset: 12, default: 0 },
+            { name: 'defense', type: 'f32', offset: 16, default: 1 },
+            { name: 'damageMultiplier', type: 'f32', offset: 20, default: 1 },
         ],
         tags: ['cjr', 'combat'],
     },

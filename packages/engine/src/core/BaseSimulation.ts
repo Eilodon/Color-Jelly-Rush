@@ -8,19 +8,22 @@
  * BaseSimulation provides the foundation for both:
  * - ClientRunner: extends with prediction, interpolation, render sync
  * - ServerRunner: extends with authoritative state, network sync
+ * 
+ * EIDOLON-V REFACTOR: Now uses instance-based WorldState instead of static stores.
  */
 
 import { PhysicsSystem, MovementSystem } from '../systems';
 import { SkillSystem } from '../systems/SkillSystem';
 import { eventBuffer } from '../events';
-import { resetAllStores } from '../dod/ComponentStores';
 import { EntityFlags, MAX_ENTITIES } from '../dod/EntityFlags';
-import { StateStore } from '../dod/ComponentStores';
+import { WorldState, defaultWorld } from '../dod/WorldState';
 import { DirtyTracker, DirtyMask } from '../networking/DirtyTracker';
 
 export interface ISimulationConfig {
     tickRate: number;
     maxEntities?: number;
+    /** Optional: provide custom WorldState (for multi-instance servers) */
+    world?: WorldState;
 }
 
 export interface ISimulationContext {
@@ -34,7 +37,7 @@ export interface ISimulationContext {
  *
  * Responsibilities:
  * 1. Fixed-timestep physics simulation
- * 2. DOD store management
+ * 2. DOD store management via WorldState
  * 3. Entity lifecycle (spawn/despawn)
  * 4. Dirty tracking for network sync
  * 5. Event emission for gameplay events
@@ -49,6 +52,9 @@ export abstract class BaseSimulation {
     protected context: ISimulationContext;
     protected dirtyTracker: DirtyTracker;
 
+    /** EIDOLON-V: Instance-based world state */
+    protected world: WorldState;
+
     // Fixed timestep configuration
     protected static readonly FIXED_DT = 1 / 60;
     protected static readonly MAX_ACCUMULATOR = 0.25;
@@ -61,12 +67,23 @@ export abstract class BaseSimulation {
             maxEntities: MAX_ENTITIES,
             ...config,
         };
+
+        // Use provided WorldState or fall back to defaultWorld
+        this.world = config.world ?? defaultWorld;
+
         this.context = {
             gameTime: 0,
             dt: 1 / config.tickRate,
             frameCount: 0,
         };
         this.dirtyTracker = new DirtyTracker(this.config.maxEntities);
+    }
+
+    /**
+     * Get the WorldState instance for this simulation
+     */
+    getWorld(): WorldState {
+        return this.world;
     }
 
     /**
@@ -90,7 +107,7 @@ export abstract class BaseSimulation {
      * Reset simulation state
      */
     reset(): void {
-        resetAllStores();
+        this.world.reset();
         this.dirtyTracker.clearAll();
         eventBuffer.clear();
         this.context.gameTime = 0;
@@ -104,9 +121,7 @@ export abstract class BaseSimulation {
      * @param dt Delta time from external clock
      */
     update(dt: number): void {
-        // EIDOLON-V DEBUG: Verify update is called (REMOVE AFTER DEBUG)
         if (!this.running) {
-            console.log('[DEBUG] BaseSimulation.update: SKIPPED - running=false');
             return;
         }
 
@@ -143,7 +158,7 @@ export abstract class BaseSimulation {
      * Override this for custom game logic
      */
     protected tick(dt: number): void {
-        // 1. Physics (always run)
+        // 1. Physics (always run) - pass WorldState
         this.updatePhysics(dt);
 
         // 2. Core systems
@@ -157,16 +172,13 @@ export abstract class BaseSimulation {
 
         // 5. Lifecycle
         this.updateLifecycle(dt);
-
-        // Emit tick event (noop for now)
-        // eventBuffer.push(EngineEventType.NONE, 0, 0, 0, 0);
     }
 
     /**
      * Update physics systems
      */
     protected updatePhysics(dt: number): void {
-        PhysicsSystem.update(dt);
+        PhysicsSystem.update(this.world, dt);
     }
 
     /**
@@ -174,8 +186,10 @@ export abstract class BaseSimulation {
      */
     protected updateSystems(dt: number): void {
         // Update all entities' movement
-        const flags = StateStore.flags;
-        for (let i = 0; i < MAX_ENTITIES; i++) {
+        const flags = this.world.stateFlags;
+        const maxEntities = this.world.maxEntities;
+
+        for (let i = 0; i < maxEntities; i++) {
             if ((flags[i] & EntityFlags.ACTIVE) !== 0) {
                 MovementSystem.update(i, dt);
             }
@@ -202,8 +216,10 @@ export abstract class BaseSimulation {
      */
     protected updateLifecycle(_dt: number): void {
         // Mark dead entities for cleanup
-        const flags = StateStore.flags;
-        for (let i = 0; i < MAX_ENTITIES; i++) {
+        const flags = this.world.stateFlags;
+        const maxEntities = this.world.maxEntities;
+
+        for (let i = 0; i < maxEntities; i++) {
             if ((flags[i] & EntityFlags.DEAD) !== 0) {
                 this.onEntityDeath(i);
             }

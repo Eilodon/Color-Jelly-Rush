@@ -1,40 +1,46 @@
 /**
  * @cjr/engine - MovementSystem
- * Pure movement logic - no VFX dependencies
+ * Pure movement logic - game-agnostic, no hardcoded constants
+ * 
+ * EIDOLON-V FIX: Removed dependency on game-specific constants.
+ * MAX_SPEED is now read from ConfigStore per-entity.
  */
 
 import { PhysicsStore, TransformStore, InputStore, ConfigStore, StateStore } from '../dod/ComponentStores';
 import { MAX_ENTITIES, EntityFlags } from '../dod/EntityFlags';
-// EIDOLON-V FIX: Import from unified config SSOT
-import { MAX_SPEED_BASE } from '../config/constants';
+
+// Default values for when ConfigStore has no data
+const DEFAULT_MAX_SPEED = 150;
+const DEFAULT_ACCELERATION = 2000;
 
 export class MovementSystem {
-    // EIDOLON-V DEBUG: Frame counter (REMOVE AFTER DEBUG)
-    private static debugFrameCount = 0;
-
     /**
      * DOD Movement Logic (Pure Index-Based)
+     * 
+     * @param id Entity ID
+     * @param dt Delta time
+     * @param defaultMaxSpeed Optional default max speed (injected by game module)
      */
-    static update(id: number, dt: number) {
+    static update(id: number, dt: number, defaultMaxSpeed: number = DEFAULT_MAX_SPEED) {
         // 1. Read inputs from InputStore
         const iIdx = id * InputStore.STRIDE;
         const tx = InputStore.data[iIdx];
         const ty = InputStore.data[iIdx + 1];
 
-        // 2. Read state/config
+        // 2. Read speed config from ConfigStore (game-agnostic)
+        // ConfigStore.data layout: [maxSpeed, speedMult, magnetRadius, ...]
         const speedMult = ConfigStore.getSpeedMultiplier(id) || 1;
-        const effectiveMaxSpeed = MAX_SPEED_BASE * speedMult;
+        const configMaxSpeed = ConfigStore.getMaxSpeed(id);
+
+        // Use configured max speed if set, otherwise use injected default
+        const baseMaxSpeed = configMaxSpeed > 0 ? configMaxSpeed : defaultMaxSpeed;
+        const effectiveMaxSpeed = baseMaxSpeed * speedMult;
 
         const tIdx = id * 8;
         const pIdx = id * 8;
 
         const px = TransformStore.data[tIdx];
         const py = TransformStore.data[tIdx + 1];
-
-        // EIDOLON-V DEBUG: Log player movement data (REMOVE AFTER DEBUG)
-        if (id === 0 && this.debugFrameCount++ < 10) {
-            console.log(`[DEBUG] Movement id=0: target=(${tx.toFixed(1)}, ${ty.toFixed(1)}) pos=(${px.toFixed(1)}, ${py.toFixed(1)}) dt=${dt.toFixed(4)}`);
-        }
 
         // 3. Calculate direction
         const dx = tx - px;
@@ -49,7 +55,7 @@ export class MovementSystem {
         const dist = Math.sqrt(distSq);
 
         // Simple seek behavior with acceleration
-        const accel = 2000;
+        const accel = DEFAULT_ACCELERATION;
         const ax = (dx / dist) * accel * dt;
         const ay = (dy / dist) * accel * dt;
 
@@ -72,25 +78,29 @@ export class MovementSystem {
 
     /**
      * Update all active entities
+     * 
+     * @param dt Delta time
+     * @param defaultMaxSpeed Optional default max speed for all entities
      */
-    static updateAll(dt: number) {
+    static updateAll(dt: number, defaultMaxSpeed: number = DEFAULT_MAX_SPEED) {
         const count = MAX_ENTITIES;
         const flags = StateStore.flags;
 
         for (let id = 0; id < count; id++) {
             if ((flags[id] & EntityFlags.ACTIVE) !== 0) {
-                this.update(id, dt);
+                this.update(id, dt, defaultMaxSpeed);
             }
         }
     }
 
     /**
      * Apply input with explicit target/config (for external callers)
+     * This is the fully decoupled version - no global dependencies
      */
     static applyInputDOD(
         id: number,
         target: { x: number; y: number },
-        config: { maxSpeed: number; speedMultiplier: number },
+        config: { maxSpeed: number; speedMultiplier: number; acceleration?: number },
         dt: number
     ) {
         const pIdx = id * 8;
@@ -105,7 +115,7 @@ export class MovementSystem {
         if (distSq < 1) return;
 
         const dist = Math.sqrt(distSq);
-        const accel = 2000;
+        const accel = config.acceleration ?? DEFAULT_ACCELERATION;
         const ax = (dx / dist) * accel * dt;
         const ay = (dy / dist) * accel * dt;
 
