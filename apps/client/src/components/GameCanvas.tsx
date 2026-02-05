@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { GameState } from '../types';
-import { MAP_RADIUS, WORLD_WIDTH, WORLD_HEIGHT } from '../constants';
+import { MAP_RADIUS } from '../constants';
 import { COLOR_PALETTE_HEX as COLOR_PALETTE } from '../constants';
 import { intToHex } from '../game/cjr/colorMath'; // EIDOLON-V: Import color helper
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -9,7 +9,7 @@ import { Canvas2DRingRenderer } from '../game/renderer/RingRenderer';
 // EIDOLON-V FIX: Use index-based API (faster, no Map lookup)
 import { getInterpolatedPositionByIndex } from '../game/engine/RenderBridge';
 // EIDOLON-V FIX #4: Direct DOD rendering without JS object intermediaries
-import { renderEntitiesFromDOD, cullEntities } from '../game/engine/DODEntityRenderer';
+import { renderEntitiesFromDOD } from '../game/engine/DODEntityRenderer';
 // IMPERATOR Phase 4: Standalone ParticleSystem (decoupled from React state)
 import { particleSystem } from '../game/vfx/ParticleSystem';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
@@ -20,14 +20,14 @@ interface GameCanvasProps {
   alphaRef: React.MutableRefObject<number>;
   width: number;
   height: number;
-  onMouseMove?: (x: number, y: number) => void;
+  onMouseMove?: (_x: number, _y: number) => void;
   onMouseDown?: () => void;
   onMouseUp?: () => void;
   enablePointerInput?: boolean;
 }
 
 // Helper to get color string from number or string
-const getColor = (c: any, defaultColor: string = '#ffffff'): string => {
+const getColor = (c: unknown, defaultColor: string = '#ffffff'): string => {
   if (typeof c === 'number') return intToHex(c);
   if (typeof c === 'string') return c;
   return defaultColor;
@@ -61,7 +61,7 @@ const drawPolygon = (
 // EIDOLON-V: Manual Transform Pattern - eliminates save/restore stack overhead
 // Each strategy: translate → draw → reverse translate (immediate reset)
 const DrawStrategies = {
-  Player: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
+  Player: (ctx: CanvasRenderingContext2D, p: { color?: number | string; radius: number; name?: string }, x: number, y: number) => {
     ctx.translate(x, y);
 
     // Draw Body
@@ -86,7 +86,7 @@ const DrawStrategies = {
     ctx.translate(-x, -y);
   },
 
-  Food: (ctx: CanvasRenderingContext2D, f: any, x: number, y: number) => {
+  Food: (ctx: CanvasRenderingContext2D, f: { kind?: string; radius: number; color?: number | string }, x: number, y: number) => {
     ctx.translate(x, y);
 
     const kind = f.kind;
@@ -121,7 +121,7 @@ const DrawStrategies = {
     ctx.translate(-x, -y);
   },
 
-  Projectile: (ctx: CanvasRenderingContext2D, p: any, x: number, y: number) => {
+  Projectile: (ctx: CanvasRenderingContext2D, p: { color?: number | string; radius: number }, x: number, y: number) => {
     ctx.translate(x, y);
     ctx.fillStyle = getColor(p.color, '#ff0000');
     ctx.beginPath();
@@ -132,87 +132,12 @@ const DrawStrategies = {
   },
 };
 
-const drawParticle = (ctx: CanvasRenderingContext2D, p: any) => {
-  if (p.isIcon && p.iconSymbol) {
-    ctx.globalAlpha = Math.max(0, Math.min(1, p.fadeOut ? p.life / p.maxLife : 1));
-    ctx.fillStyle = getColor(p.iconColor || p.color, '#ffffff');
-    ctx.font = `${p.fontSize || 24}px serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(p.iconSymbol, p.position.x, p.position.y);
-    ctx.globalAlpha = 1;
-    return;
-  }
-
-  const baseAlpha = p.fadeOut ? p.life / p.maxLife : 1;
-  const opacity = p.bubbleOpacity ?? p.waveOpacity ?? p.auraIntensity ?? 1;
-  const alpha = Math.max(0, Math.min(1, baseAlpha * opacity));
-
-  // Resolve raw color first (could be number)
-  const rawColor =
-    p.color ||
-    p.rippleColor ||
-    p.pulseColor ||
-    p.shockwaveColor ||
-    p.waveColor ||
-    p.auraColor ||
-    p.bubbleColor ||
-    p.shieldColor ||
-    p.fieldColor ||
-    p.orbColor ||
-    0xffffff;
-
-  const color = getColor(rawColor, '#ffffff');
-
-  ctx.globalAlpha = alpha;
-
-  if (p.style === 'line') {
-    const len = p.lineLength || p.radius * 2;
-    const angle = p.angle || 0;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = p.lineWidth || 2;
-    ctx.beginPath();
-    ctx.moveTo(p.position.x, p.position.y);
-    ctx.lineTo(p.position.x + Math.cos(angle) * len, p.position.y + Math.sin(angle) * len);
-    ctx.stroke();
-  } else if (p.style === 'ring' || p.isRipple || p.isPulse || p.isShockwave || p.isCleansingWave) {
-    const ringRadius =
-      p.rippleRadius || p.pulseRadius || p.shockwaveRadius || (p.isCleansingWave ? p.radius : 0);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = p.lineWidth || 2;
-    ctx.beginPath();
-    ctx.arc(p.position.x, p.position.y, ringRadius || p.radius, 0, Math.PI * 2);
-    ctx.stroke();
-  } else {
-    // Default / Geometric
-    const sides = p.geometricSides || (p.isHexagonShield ? 6 : 0);
-    if (p.isGeometric || p.isHexagonShield || sides > 0) {
-      const radius = p.geometricRadius || p.radius;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      for (let i = 0; i < sides; i++) {
-        const angle = (i / sides) * Math.PI * 2 - Math.PI / 2 + (p.angle || 0);
-        const px = p.position.x + Math.cos(angle) * radius;
-        const py = p.position.y + Math.sin(angle) * radius;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      if (p.isHexagonShield) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } else {
-        ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(p.position.x, p.position.y, p.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
-};
+// const drawParticle = (ctx: CanvasRenderingContext2D, p: unknown) => {
+//   // Particle drawing logic - currently unused but kept for future VFX expansion
+//   if (p && typeof p === 'object' && 'isIcon' in p && p.isIcon) {
+//     // Icon rendering would go here
+//   }
+// };
 
 // ------------------------------------------------------------------
 // GAME CANVAS COMPONENT
@@ -346,10 +271,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.strokeStyle = '#222';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      // Simple Grid
+      // Simple Grid - offset variables calculated but unused (for potential scrolling effect)
       const gridSize = 300;
-      const offsetX = state.camera.x % gridSize;
-      const offsetY = state.camera.y % gridSize;
+      // const offsetX = state.camera.x % gridSize; // Reserved for parallax
+      // const offsetY = state.camera.y % gridSize;
       const startX = state.camera.x - width / 2;
       const startY = state.camera.y - height / 2;
 
@@ -443,7 +368,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           const px = pos.x;
           const py = pos.y;
 
-          const intensity = (p as any).aberrationIntensity || 0;
+          const intensity = (p as { aberrationIntensity?: number }).aberrationIntensity || 0;
           // EIDOLON-V: Disable shake for users with reduced motion preference
           const shake = reducedMotion ? 0 : intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
           const drawX = px + shake;
@@ -487,7 +412,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     render();
     return () => cancelAnimationFrame(animationId);
-  }, [gameStateRef, width, height]);
+  }, [gameStateRef, width, height, alphaRef, reducedMotion]);
 
   return <canvas ref={canvasRef} width={width} height={height} className="block" />;
 };

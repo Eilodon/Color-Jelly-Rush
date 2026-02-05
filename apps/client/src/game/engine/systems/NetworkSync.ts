@@ -51,7 +51,7 @@ export class NetworkSync {
    */
   public async connect(name: string, shape: string): Promise<boolean> {
     clientLogger.info('Connecting to multiplayer...', { name, shape });
-    return this.networkClient.connectWithRetry(name, shape as any);
+    return this.networkClient.connectWithRetry(name, shape as 'circle' | 'square' | 'triangle');
   }
 
   /**
@@ -84,8 +84,9 @@ export class NetworkSync {
    * Update network interpolation state
    * Call this every frame to interpolate remote player positions
    */
-  public update(state: GameState, dt: number): void {
+  public update(state: GameState, _dt: number): void {
     // NetworkClient handles interpolation internally via interpolateState
+    void _dt; // Explicitly mark as intentionally unused (reserved for future prediction)
     this.networkClient.interpolateState(state, performance.now());
   }
 

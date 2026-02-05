@@ -11,15 +11,10 @@ import {
   PhysicsStore,
   StateStore,
   StatsStore,
+  MAX_ENTITIES,
   EntityFlags,
-  MovementSystem,
-  PhysicsSystem,
-  SkillSystem,
 } from '@cjr/engine';
 import { GameState } from '../../../types';
-import { getCurrentEngine } from '../context';
-import { entityManager } from '../dod/EntityManager';
-import { clientLogger } from '../../../core/logging/ClientLogger';
 
 export class PhysicsCoordinator {
   private lastUpdateTime = 0;
@@ -29,17 +24,9 @@ export class PhysicsCoordinator {
    * Reads input from DOD InputStore, updates physics, writes to TransformStore
    */
   public updateSingleplayer(dt: number, state: GameState): void {
-    const engine = getCurrentEngine();
-    if (!engine) return;
-
-    // Update physics world (integrates velocities, applies friction)
-    PhysicsSystem.update(engine.world, dt);
-
-    // Update movement (applies input targets to velocities)
-    MovementSystem.update(engine.world, dt);
-
-    // Update skills (cooldowns, effects)
-    SkillSystem.update(engine.world, dt);
+    void dt; // dt handled by CJRClientRunner.update()
+    // Physics update is handled by cjrClientRunner in GameStateManager
+    // This coordinator just syncs data from DOD stores to state objects
 
     // Sync player position from DOD store to state object
     // Note: This is only for UI/debugging - rendering uses DOD directly
@@ -75,7 +62,7 @@ export class PhysicsCoordinator {
    * Check and sync death states from DOD to game state
    */
   public syncDeathStates(state: GameState): void {
-    const maxEntities = entityManager.getMaxEntities();
+    const maxEntities = MAX_ENTITIES;
 
     for (let i = 0; i < maxEntities; i++) {
       const flags = StateStore.flags[i];
@@ -121,7 +108,7 @@ export class PhysicsCoordinator {
     lastUpdateTime: number;
   } {
     let activeEntities = 0;
-    const maxEntities = entityManager.getMaxEntities();
+    const maxEntities = MAX_ENTITIES;
 
     for (let i = 0; i < maxEntities; i++) {
       if (StateStore.flags[i] & EntityFlags.ACTIVE) {

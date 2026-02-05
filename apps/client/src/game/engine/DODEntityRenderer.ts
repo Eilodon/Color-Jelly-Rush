@@ -16,11 +16,10 @@ import {
   PhysicsStore,
   StateStore,
   StatsStore,
-  ConfigStore,
+  MAX_ENTITIES,
   EntityFlags,
   CJRFoodFlags,
 } from '@cjr/engine';
-import { entityManager } from './dod/EntityManager';
 import { getInterpolatedPositionByIndex, type RenderPoint } from './RenderBridge';
 
 // Render data structure - populated directly from DOD stores
@@ -147,7 +146,7 @@ export const collectRenderDataBatch = (
 ): DODRenderData[] => {
   output.length = 0; // Clear array without reallocating
 
-  const maxEntities = entityManager.getMaxEntities();
+  const maxEntities = MAX_ENTITIES;
 
   for (let i = 0; i < maxEntities; i++) {
     const flags = StateStore.flags[i];
@@ -174,7 +173,7 @@ export const renderEntitiesFromDOD = (
   width: number,
   height: number
 ): void => {
-  const maxEntities = entityManager.getMaxEntities();
+  const maxEntities = MAX_ENTITIES;
 
   for (let i = 0; i < maxEntities; i++) {
     const flags = StateStore.flags[i];
@@ -317,7 +316,7 @@ export const cullEntities = (
   const visibleIndices: number[] = [];
   let culledCount = 0;
 
-  const maxEntities = entityManager.getMaxEntities();
+  const maxEntities = MAX_ENTITIES;
   const halfWidth = width / 2 + padding;
   const halfHeight = height / 2 + padding;
 
@@ -354,4 +353,5 @@ export const cullEntities = (
   return { visibleIndices, culledCount };
 };
 
-export { DODRenderData };
+// Type re-export for external consumers
+export type { DODRenderData };
