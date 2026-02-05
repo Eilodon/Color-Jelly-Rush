@@ -113,8 +113,14 @@ const farmerBehavior: PersonalityBehavior = {
       bot.aiState = 'forage';
       bot.targetEntityId = nearestFood.id;
     } else {
-      // Wander
+      // EIDOLON-V FIX: Wander with random direction change
+      // Generate smooth wander movement instead of keeping old velocity
       bot.aiState = 'wander';
+
+      // Use position-based pseudo-random for consistent wander direction
+      const wanderAngle = Math.atan2(botPos.y, botPos.x) + Math.sin(state.gameTime * 0.5 + bot.id.charCodeAt(0)) * 0.8;
+      const wanderSpeed = 60; // Slower wander speed
+      setBotVel(bot, Math.cos(wanderAngle) * wanderSpeed, Math.sin(wanderAngle) * wanderSpeed);
     }
   },
 };
@@ -164,6 +170,12 @@ const hunterBehavior: PersonalityBehavior = {
       const mag = Math.hypot(dir.x, dir.y) || 0.001;
       setBotVel(bot, (dir.x / mag) * 100, (dir.y / mag) * 100);
       bot.aiState = 'forage';
+    } else {
+      // EIDOLON-V FIX: Fallback to patrol/wander when no targets
+      bot.aiState = 'wander';
+      const wanderAngle = Math.atan2(botPos.y, botPos.x) + Math.sin(state.gameTime * 0.3 + bot.id.charCodeAt(0)) * 1.2;
+      const wanderSpeed = 80; // Hunter patrols faster
+      setBotVel(bot, Math.cos(wanderAngle) * wanderSpeed, Math.sin(wanderAngle) * wanderSpeed);
     }
   },
 };

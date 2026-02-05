@@ -7,7 +7,8 @@ import { intToHex } from '../game/cjr/colorMath'; // EIDOLON-V: Import color hel
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
 import { Canvas2DRingRenderer } from '../game/renderer/RingRenderer';
-import { getInterpolatedPosition } from '../game/engine/RenderBridge';
+// EIDOLON-V FIX: Use index-based API (faster, no Map lookup)
+import { getInterpolatedPositionByIndex, type RenderPoint } from '../game/engine/RenderBridge';
 // IMPERATOR Phase 4: Standalone ParticleSystem (decoupled from React state)
 import { particleSystem } from '../game/vfx/ParticleSystem';
 // Note: We are gradually migrating to RenderTypes but keeping compatibility for now
@@ -377,20 +378,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       // EIDOLON-V: DrawStrategies now include reverse translate - no save/restore needed
 
       // Food (Draw FIRST so it is BELOW players)
+      // EIDOLON-V FIX: Use index-based API for zero Map lookup
       for (let i = 0; i < state.food.length; i++) {
         const f = state.food[i];
         if (f.isDead) continue;
         const interpAlpha = alphaRef.current;
-        const pos = getInterpolatedPosition(f.id, interpAlpha, _renderPoint);
-        DrawStrategies.Food(ctx, f, pos ? pos.x : f.position.x, pos ? pos.y : f.position.y);
+        const pos = f.physicsIndex !== undefined
+          ? getInterpolatedPositionByIndex(f.physicsIndex, interpAlpha, _renderPoint)
+          : { x: f.position.x, y: f.position.y };
+        DrawStrategies.Food(ctx, f, pos.x, pos.y);
       }
 
       // Player
+      // EIDOLON-V FIX: Use index-based API for zero Map lookup
       if (!state.player.isDead) {
         const interpAlpha = alphaRef.current;
-        const pos = getInterpolatedPosition(state.player.id, interpAlpha, _renderPoint);
-        const baseX = pos ? pos.x : state.player.position.x;
-        const baseY = pos ? pos.y : state.player.position.y;
+        const pos = state.player.physicsIndex !== undefined
+          ? getInterpolatedPositionByIndex(state.player.physicsIndex, interpAlpha, _renderPoint)
+          : { x: state.player.position.x, y: state.player.position.y };
+        const baseX = pos.x;
+        const baseY = pos.y;
         const intensity = state.player.aberrationIntensity || 0;
         // EIDOLON-V: Disable shake for users with reduced motion preference
         const shake = reducedMotion ? 0 : intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
@@ -398,13 +405,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Bots
+      // EIDOLON-V FIX: Use index-based API for zero Map lookup
       for (let i = 0; i < state.bots.length; i++) {
         const b = state.bots[i];
         if (b.isDead) continue;
         const interpAlpha = alphaRef.current;
-        const pos = getInterpolatedPosition(b.id, interpAlpha, _renderPoint);
-        const baseX = pos ? pos.x : b.position.x;
-        const baseY = pos ? pos.y : b.position.y;
+        const pos = b.physicsIndex !== undefined
+          ? getInterpolatedPositionByIndex(b.physicsIndex, interpAlpha, _renderPoint)
+          : { x: b.position.x, y: b.position.y };
+        const baseX = pos.x;
+        const baseY = pos.y;
         const intensity = b.aberrationIntensity || 0;
         // EIDOLON-V: Disable shake for users with reduced motion preference
         const shake = reducedMotion ? 0 : intensity > 0 ? (Math.random() - 0.5) * 4 : 0;
@@ -412,14 +422,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // Projectiles (EIDOLON ARCHITECT: Manual transforms - no save/restore)
+      // EIDOLON-V FIX: Use index-based API for zero Map lookup
       for (let i = 0; i < state.projectiles.length; i++) {
         const p = state.projectiles[i];
         if (p.isDead) continue;
 
         const alpha = alphaRef.current;
-        const pos = getInterpolatedPosition(p.id, alpha, _renderPoint);
-        const px = pos ? pos.x : p.position.x;
-        const py = pos ? pos.y : p.position.y;
+        const pos = p.physicsIndex !== undefined
+          ? getInterpolatedPositionByIndex(p.physicsIndex, alpha, _renderPoint)
+          : { x: p.position.x, y: p.position.y };
+        const px = pos.x;
+        const py = pos.y;
 
         const intensity = (p as any).aberrationIntensity || 0;
         // EIDOLON-V: Disable shake for users with reduced motion preference

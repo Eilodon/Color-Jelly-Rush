@@ -10,6 +10,8 @@ import {
   GameRoomState,
   PlayerState,
   BotState,
+  FoodState,
+  PigmentVec3,
 } from '../schema/GameState';
 import {
   MAP_RADIUS,
@@ -30,6 +32,9 @@ import {
   ConfigStore,
   checkRingTransition,
   calcMatchPercentFast,
+  updateWaveSpawner,
+  WAVE_CONFIG,
+  type IFood,
 } from '@cjr/engine';
 import { EntityFlags, MAX_ENTITIES } from '@cjr/engine/dod/EntityFlags';
 
@@ -68,6 +73,14 @@ export class GameRoom extends Room<GameRoomState> {
   private clientRates: Map<string, { count: number; resetTime: number }> = new Map();
   private readonly RATE_LIMIT_WINDOW = 1000;
   private readonly RATE_LIMIT_MAX = 60;
+
+  // EIDOLON-V FIX: Wave spawner state for food generation
+  private waveState = {
+    ring1: WAVE_CONFIG.INTERVAL[1],
+    ring2: WAVE_CONFIG.INTERVAL[2],
+    ring3: WAVE_CONFIG.INTERVAL[3],
+  };
+  private nextFoodId: number = 0;
 
   // EIDOLON-V P0 SECURITY: Entity handle validation to prevent ABA problem
   // Composite handle: (generation << 16) | index
@@ -292,8 +305,11 @@ export class GameRoom extends Room<GameRoomState> {
     this.applyInputsToDOD();
 
     // 2. Run DOD Physics Systems
-    PhysicsSystem.update(dtSec);
+    // EIDOLON-V FIX: Correct order - Movement THEN Physics
+    // MovementSystem converts input targets to velocities
+    // PhysicsSystem integrates velocity to position + applies friction
     MovementSystem.updateAll(dtSec);
+    PhysicsSystem.update(dtSec);
     SkillSystem.update(dtSec);
 
     // 3. Update Ring Logic (CJR specific)
@@ -301,6 +317,9 @@ export class GameRoom extends Room<GameRoomState> {
 
     // EIDOLON-V P2: 3.5 Check for player deaths
     this.checkPlayerDeaths();
+
+    // EIDOLON-V FIX: 3.6 Wave Spawner - Generate food
+    this.updateFoodSpawning(dtSec);
 
     // 4. Sync DOD stores back to Colyseus schema
     this.syncDODToSchema();
@@ -581,6 +600,44 @@ export class GameRoom extends Room<GameRoomState> {
     }
     this.state.bots.delete(botId);
     logger.info('Bot removed', { botId });
+  }
+
+  // EIDOLON-V FIX: Food spawning integration
+  private updateFoodSpawning(dtSec: number): void {
+    // Call wave spawner to get new food items
+    const spawnResult = updateWaveSpawner(this.waveState, dtSec);
+
+    // Add spawned food to Colyseus state
+    for (const food of spawnResult.foods) {
+      const foodState = new FoodState();
+      foodState.id = `food_${this.nextFoodId++}`;
+      foodState.x = food.position.x;
+      foodState.y = food.position.y;
+      foodState.radius = food.radius;
+      foodState.value = food.value;
+      foodState.kind = food.kind;
+      foodState.isDead = false;
+
+      // Set pigment if available
+      if (food.pigment) {
+        foodState.pigment.r = food.pigment.r;
+        foodState.pigment.g = food.pigment.g;
+        foodState.pigment.b = food.pigment.b;
+      }
+
+      this.state.food.set(foodState.id, foodState);
+    }
+
+    // Limit max food on map (prevent memory issues)
+    const MAX_FOOD = 200;
+    if (this.state.food.size > MAX_FOOD) {
+      // Remove oldest food items
+      const foodIds = Array.from(this.state.food.keys());
+      const toRemove = foodIds.slice(0, this.state.food.size - MAX_FOOD);
+      for (const id of toRemove) {
+        this.state.food.delete(id);
+      }
+    }
   }
 
   // EIDOLON-V P2: Check all players for death condition

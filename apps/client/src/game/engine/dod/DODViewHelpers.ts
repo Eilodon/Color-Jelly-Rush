@@ -4,9 +4,10 @@
  * EIDOLON-V Phase 3.2: Direct DOD reads for minimap/radar without object creation
  */
 
-import { TransformStore, PhysicsStore, StateStore } from './ComponentStores';
+// EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
+import { TransformStore, PhysicsStore, StateStore } from '@cjr/engine';
+import { EntityFlags } from '@cjr/engine/dod/EntityFlags';
 import { entityManager } from './EntityManager';
-import { EntityFlags } from './EntityFlags';
 
 // Pre-allocated output buffer for position sampling
 const _positionBuffer = new Float32Array(4096 * 2); // x,y pairs for up to 4096 entities

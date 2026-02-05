@@ -7,7 +7,8 @@
  */
 
 import { Player, Bot } from '../../../types';
-import { ConfigStore, StatsStore, TransformStore, PhysicsStore } from './ComponentStores';
+// EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
+import { ConfigStore, StatsStore, TransformStore, PhysicsStore } from '@cjr/engine';
 
 export const EntityStateBridge = {
   // =============================================
