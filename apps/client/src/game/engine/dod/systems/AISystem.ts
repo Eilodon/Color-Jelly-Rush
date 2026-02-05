@@ -15,6 +15,7 @@
  */
 
 import type { GameState, Bot } from '../../../../types';
+import { fastMath, PRNG } from '../../../math/FastMath';
 import { MAP_RADIUS } from '../../../../constants';
 import {
   TransformStore,
@@ -23,6 +24,7 @@ import {
   EntityLookup,
   InputStore,
   EntityFlags,
+  CJRFoodFlags,
 } from '@cjr/engine';
 import { SkillSystem } from './SkillSystem';
 import { updateBotPersonality } from '../../../cjr/botPersonalities';
@@ -127,7 +129,7 @@ export class AISystem {
 
     // DECISION TICK (Only run heavy logic occasionally)
     if (bot.aiReactionTimer <= 0) {
-      bot.aiReactionTimer = this.config.reactionTimeBase + Math.random() * this.config.reactionTimeVariance;
+      bot.aiReactionTimer = this.config.reactionTimeBase + PRNG.next() * this.config.reactionTimeVariance;
 
       // 2. SENSING
       this.sensingIndices.length = 0;
@@ -191,8 +193,8 @@ export class AISystem {
           let score = 10000 / (distSq + 100);
 
           // Check Food Type via Flags
-          if (flags & EntityFlags.FOOD_CATALYST) score *= 1.4;
-          else if (flags & EntityFlags.FOOD_SHIELD) score *= 1.2;
+          if (flags & CJRFoodFlags.FOOD_CATALYST) score *= 1.4;
+          else if (flags & CJRFoodFlags.FOOD_SHIELD) score *= 1.2;
 
           if (score > bestFoodScore) {
             bestFoodScore = score;
@@ -301,8 +303,8 @@ export class AISystem {
           ty = (-botY / dist) * speed;
         } else {
           // Random wander
-          tx = (Math.random() - 0.5) * speed;
-          ty = (Math.random() - 0.5) * speed;
+          tx = (PRNG.next() - 0.5) * speed;
+          ty = (PRNG.next() - 0.5) * speed;
         }
         break;
       }

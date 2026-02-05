@@ -369,7 +369,7 @@ export class NetworkClient {
             chaos: 0,
             kingForm: 0,
           },
-          rewindHistory: [],
+
           stationaryTime: 0,
           // EIDOLON-V P3-1: Type assertion safe because all required Player properties
           // are explicitly set above. This is intentional - we merge server data with defaults.

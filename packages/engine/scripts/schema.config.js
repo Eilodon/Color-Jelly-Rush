@@ -74,7 +74,7 @@ const SCHEMA = {
         fields: {
             targetX: { type: 'f32', default: 0 },
             targetY: { type: 'f32', default: 0 },
-            actions: { type: 'f32', default: 0 }, // Bitmask stored as float for TypedArray compat
+            actions: { type: 'u32', default: 0 }, // EIDOLON-V FIX: Uint32 for accurate bitmask
             _pad: { type: 'f32', default: 0 },
         }
     },

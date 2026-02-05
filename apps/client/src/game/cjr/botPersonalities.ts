@@ -2,7 +2,7 @@ import { Bot, Player, GameState, Food, Entity } from '../../types';
 import { RING_RADII } from '../../constants';
 import { getCurrentSpatialGrid } from '../engine/context';
 import { TransformStore, PhysicsStore } from '@cjr/engine';
-
+import { PRNG } from '../math/FastMath';
 /**
  * BOT PERSONALITIES - PR15
  *
@@ -349,7 +349,7 @@ export const assignRandomPersonality = (bot: Bot) => {
   ];
   const weights = [0.3, 0.2, 0.15, 0.15, 0.1, 0.1];
 
-  const rand = Math.random();
+  const rand = PRNG.next();
   let cumulative = 0;
 
   for (let i = 0; i < personalities.length; i++) {

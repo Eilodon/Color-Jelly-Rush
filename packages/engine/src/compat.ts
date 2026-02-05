@@ -239,10 +239,8 @@ export class ConfigStore {
     static setSpeedMultiplier(id: number, value: number) { ConfigAccess.setSpeedMult(defaultWorld, id, value); }
     static setMagnetRadius(id: number, value: number) { ConfigAccess.setMagneticRadius(defaultWorld, id, value); }
 
-    static set(id: number, maxSpeed: number, speedMult: number, magnetRadius: number) {
-        // Reuse magnet radius as maxSpeed if needed, or update schema
-        ConfigAccess.setSpeedMult(defaultWorld, id, speedMult);
-        ConfigAccess.setMagneticRadius(defaultWorld, id, magnetRadius);
+    static set(id: number, magneticRadius: number, damageMult: number, speedMult: number, pickupRange: number, visionRange: number) {
+        ConfigAccess.set(defaultWorld, id, magneticRadius, damageMult, speedMult, pickupRange, visionRange);
     }
 }
 

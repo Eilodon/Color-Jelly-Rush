@@ -25,14 +25,9 @@ export class Engine {
     private static readonly MAX_ACCUMULATOR = 0.25;  // Spiral of death prevention
 
     private tickRate: number;
-    private dt: number;
-    private time: number = 0;
-    private accumulator: number = 0;
-    private _interpolationAlpha: number = 0;  // For rendering interpolation
-
     constructor(config: IEngineConfig = { tickRate: 60 }) {
         this.tickRate = config.tickRate;
-        this.dt = 1 / config.tickRate;
+        // dt is mostly unused, we use FIXED_DT for physics
     }
 
     /**
@@ -57,7 +52,7 @@ export class Engine {
      * @param dt Delta time in seconds from external clock
      */
     update(dt?: number) {
-        const inputDt = dt || this.dt;
+        const inputDt = dt || Engine.FIXED_DT;
 
         // EIDOLON-V P0: Cap accumulator to prevent spiral of death
         this.accumulator = Math.min(

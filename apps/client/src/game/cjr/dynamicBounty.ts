@@ -1,6 +1,6 @@
 import { GameState, PickupKind, Food } from '../../types';
 import { RING_RADII } from '../../constants';
-import { randomRange } from '../math/FastMath';
+import { randomRange, PRNG } from '../math/FastMath';
 import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../engine/VFXRingBuffer';
 
 export const updateDynamicBounty = (state: GameState, dt: number) => {
@@ -19,7 +19,7 @@ export const updateDynamicBounty = (state: GameState, dt: number) => {
 
     // Ensure we don't spam veins. Maybe use a timer in runtime?
     // For MVP, if no vein exists, spawn one with low probability per tick
-    if (!existing && Math.random() < 0.005) {
+    if (!existing && PRNG.next() < 0.005) {
       // ~0.3 per second at 60fps
       spawnCandyVein(state);
     }
@@ -27,11 +27,11 @@ export const updateDynamicBounty = (state: GameState, dt: number) => {
 };
 
 const spawnCandyVein = (state: GameState) => {
-  const angle = Math.random() * Math.PI * 2;
+  const angle = PRNG.next() * Math.PI * 2;
   const r = randomRange(0, RING_RADII.R3 * 0.8); // Near center
 
   const vein: Food = {
-    id: `vein_${Date.now()}`,
+    id: `vein_${Date.now()} `,
     position: { x: Math.cos(angle) * r, y: Math.sin(angle) * r },
     velocity: { x: 0, y: 0 },
     radius: 30, // Big

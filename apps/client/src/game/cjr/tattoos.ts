@@ -3,6 +3,7 @@ import { TattooId } from './cjrTypes';
 import { COLOR_BALANCE } from './balance';
 import { vfxIntegrationManager } from '../vfx/vfxIntegration';
 import { mixPigment, calcMatchPercentFast, pigmentToHex, pigmentToInt } from './colorMath';
+import { PRNG } from '../math/FastMath';
 import { createFloatingText } from '../engine/effects';
 import { createParticle, createFood } from '../engine/factories';
 import { StatusFlag, TattooFlag } from '../engine/statusFlags';
@@ -80,7 +81,7 @@ const TATTOOS: TattooDefinition[] = [
     onHit: (victim: Player | Bot, attacker: Player | Bot, state: GameState) => {
       if (victim.tattoos?.includes(TattooId.PigmentBomb)) {
         const chance = victim.statusScalars.pigmentBombChance || 0.3;
-        if (Math.random() < chance && 'pigment' in attacker) {
+        if (PRNG.next() < chance && 'pigment' in attacker) {
           const att = attacker as Player | Bot;
           att.pigment = mixPigment(att.pigment, victim.pigment, 0.15);
           att.color = pigmentToInt(att.pigment);
@@ -258,7 +259,7 @@ export interface TattooChoice {
 }
 
 export const getTattooChoices = (count: number): TattooChoice[] => {
-  const shuffled = [...TATTOOS].sort(() => 0.5 - Math.random());
+  const shuffled = [...TATTOOS].sort(() => 0.5 - PRNG.next());
   return shuffled.slice(0, count).map(m => ({
     id: m.id,
     name: m.name,

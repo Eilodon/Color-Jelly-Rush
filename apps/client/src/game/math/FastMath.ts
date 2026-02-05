@@ -265,8 +265,33 @@ export const collisionSystem = CollisionSystem;
 export const spatialOptimizer = SpatialOptimizer;
 export const mathPerformanceMonitor = MathPerformanceMonitor;
 
+// EIDOLON-V FORGE: Deterministic PRNG (Mulberry32)
+export class PRNG {
+  private static seed: number = 0;
+
+  static setSeed(s: number): void {
+    this.seed = s;
+  }
+
+  // Fast, good quality random number generator
+  static next(): number {
+    let t = (this.seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+
+  static range(min: number, max: number): number {
+    return this.next() * (max - min) + min;
+  }
+
+  static int(min: number, max: number): number {
+    return Math.floor(this.next() * (max - min)) + min;
+  }
+}
+
 // ============================================
-// LEGACY BRIDGE: Standalone functions (migrated from engine/math.ts)
+// LEGACY BRIDGE (UPDATED TO USE PRNG)
 // ============================================
 import { CENTER_RADIUS, MAP_RADIUS, RING_RADII } from '../../constants';
 
@@ -285,13 +310,13 @@ export const distSq = (v1: Vector2, v2: Vector2): number => {
   return dx * dx + dy * dy;
 };
 
-/** Random number in range [min, max) */
-export const randomRange = (min: number, max: number): number => Math.random() * (max - min) + min;
+/** Random number in range [min, max) using Deterministic PRNG */
+export const randomRange = (min: number, max: number): number => PRNG.range(min, max);
 
-/** Random position within map bounds (circular map centered at origin) */
+/** Random position within map bounds */
 export const randomPos = (): Vector2 => {
-  const angle = Math.random() * Math.PI * 2;
-  const r = Math.sqrt(Math.random()) * (MAP_RADIUS - 200) + 100;
+  const angle = PRNG.next() * Math.PI * 2;
+  const r = Math.sqrt(PRNG.next()) * (MAP_RADIUS - 200) + 100;
   return {
     x: Math.cos(angle) * r,
     y: Math.sin(angle) * r,
@@ -313,8 +338,8 @@ export const randomPosInRing = (ring: 1 | 2 | 3): Vector2 => {
     maxR = RING_RADII.R3;
   }
 
-  const angle = Math.random() * Math.PI * 2;
-  const r = Math.sqrt(randomRange(minR * minR, maxR * maxR));
+  const angle = PRNG.next() * Math.PI * 2;
+  const r = Math.sqrt(PRNG.range(minR * minR, maxR * maxR));
   return {
     x: Math.cos(angle) * r,
     y: Math.sin(angle) * r,
@@ -323,8 +348,8 @@ export const randomPosInRing = (ring: 1 | 2 | 3): Vector2 => {
 
 /** Random position within center zone */
 export const randomPosInCenter = (): Vector2 => {
-  const angle = Math.random() * Math.PI * 2;
-  const r = Math.sqrt(Math.random()) * (CENTER_RADIUS * 0.9);
+  const angle = PRNG.next() * Math.PI * 2;
+  const r = Math.sqrt(PRNG.next()) * (CENTER_RADIUS * 0.9);
   return {
     x: Math.cos(angle) * r,
     y: Math.sin(angle) * r,

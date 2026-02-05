@@ -15,6 +15,24 @@ import {
 import { DirtyTracker } from './DirtyTracker';
 import { SchemaPacketType } from './ProtocolSchema';
 
+// EIDOLON-V OPTIMIZATION: Pre-encoded component IDs to eliminate TextEncoder allocation in hot loop
+const ID_STATS = new TextEncoder().encode('STATS');
+const ID_SKILL = new TextEncoder().encode('SKILL');
+const ID_PIGMENT = new TextEncoder().encode('PIGMENT');
+const ID_TATTOO = new TextEncoder().encode('TATTOO');
+const ID_CONFIG = new TextEncoder().encode('CONFIG');
+const ID_INPUT = new TextEncoder().encode('INPUT');
+
+// Map component names to pre-encoded IDs
+const PRE_ENCODED_IDS: Record<string, Uint8Array> = {
+    'STATS': ID_STATS,
+    'SKILL': ID_SKILL,
+    'PIGMENT': ID_PIGMENT,
+    'TATTOO': ID_TATTOO,
+    'CONFIG': ID_CONFIG,
+    'INPUT': ID_INPUT,
+};
+
 // Pool for reuse
 interface IPacketBuffer {
     buffer: ArrayBuffer;
@@ -161,9 +179,10 @@ export class SchemaBinaryPacker {
 
             hasData = true;
 
-            // Component Section: [IDLen][IDStr][Count][ (ID + Data)... ]
-            const idStr = compName; // Send UPPERCASE ID (e.g. STATS) or adjust as needed
-            const idBytes = new TextEncoder().encode(idStr);
+            // EIDOLON-V OPTIMIZATION: Use pre-encoded ID instead of TextEncoder in hot loop
+            const idBytes = PRE_ENCODED_IDS[compName];
+            if (!idBytes) continue; // Safety check
+            
             view.setUint8(offset, idBytes.length); offset += 1;
             new Uint8Array(entry.buffer).set(idBytes, offset); offset += idBytes.length;
 

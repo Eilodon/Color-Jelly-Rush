@@ -324,13 +324,10 @@ export class GameRoom extends Room<GameRoomState> {
     // EIDOLON-V FIX: 3.6 Wave Spawner - Generate food
     this.updateFoodSpawning(dtSec);
 
-    // 4. Sync DOD stores back to Colyseus schema
-    this.syncDODToSchema();
-
-    // 5. Update game time
+    // 4. Update game time
     this.state.gameTime += dtSec;
 
-    // 6. Broadcast binary transforms
+    // 5. Broadcast binary transforms
     this.broadcastBinaryTransforms();
   }
 
@@ -365,6 +362,9 @@ export class GameRoom extends Room<GameRoomState> {
     });
   }
 
+  /**
+   * Update ring transition logic for all players
+   */
   private updateRingLogicForAll() {
     this.state.players.forEach((player, sessionId) => {
       const entityIndex = this.entityIndices.get(sessionId);
@@ -406,62 +406,6 @@ export class GameRoom extends Room<GameRoomState> {
       if (ringEntity.physicsIndex !== undefined) {
         TransformStore.setPosition(entityIndex, ringEntity.position.x, ringEntity.position.y);
         PhysicsStore.setVelocity(entityIndex, ringEntity.velocity.x, ringEntity.velocity.y);
-      }
-    });
-  }
-
-  /**
-   * IMPERATOR Phase 2: syncDODToSchema
-   * 
-   * TODO: This method will be reduced to only binary packing
-   * once GameRoomState fully implements IEngineGameState and
-   * ServerEngineBridge.syncDODToEngineState is activated.
-   * 
-   * For now, maintains backward compatibility with direct property writes.
-   */
-  private syncDODToSchema() {
-    this.state.players.forEach((player, sessionId) => {
-      const entityIndex = this.entityIndices.get(sessionId);
-      if (entityIndex === undefined) return;
-
-      // Check if entity is still active
-      if (!StateStore.isActive(entityIndex)) {
-        if (!player.isDead) {
-          player.isDead = true;
-        }
-        return;
-      }
-
-      // Sync Transform -> Schema position
-      player.position.x = TransformStore.getX(entityIndex);
-      player.position.y = TransformStore.getY(entityIndex);
-
-      // Sync Physics -> Schema velocity
-      player.velocity.x = PhysicsStore.getVelocityX(entityIndex);
-      player.velocity.y = PhysicsStore.getVelocityY(entityIndex);
-
-      // Update radius from physics store
-      player.radius = PhysicsStore.getRadius(entityIndex);
-
-      // Server-side speed validation (anti-cheat)
-      const vx = player.velocity.x;
-      const vy = player.velocity.y;
-      const speed = Math.sqrt(vx * vx + vy * vy);
-      const maxSpeed = GameRoom.MAX_SPEED_BASE * GameRoom.SPEED_VALIDATION_TOLERANCE;
-
-      if (speed > maxSpeed) {
-        // Log potential speed hack
-        logger.warn('Speed validation failed', {
-          sessionId,
-          speed: speed.toFixed(2),
-          maxAllowed: maxSpeed.toFixed(2),
-        });
-
-        // Clamp velocity
-        const scale = maxSpeed / speed;
-        player.velocity.x *= scale;
-        player.velocity.y *= scale;
-        PhysicsStore.setVelocity(entityIndex, player.velocity.x, player.velocity.y);
       }
     });
   }
@@ -619,18 +563,23 @@ export class GameRoom extends Room<GameRoomState> {
     }
   }
 
-  // EIDOLON-V P2: Check all players for death condition
+  // EIDOLON-V P2: Check all players for death condition and sync death state
   private checkPlayerDeaths(): void {
     this.state.players.forEach((player, sessionId) => {
-      if (player.isDead) return;  // Already dead
-
       const entityIndex = this.entityIndices.get(sessionId);
       if (entityIndex === undefined) return;
 
-      // Read health from DOD store
+      // Check death state from DOD
       const currentHealth = StatsStore.getCurrentHealth(entityIndex);
+      const isActive = StateStore.isActive(entityIndex);
 
-      if (currentHealth <= 0) {
+      // Sync death state to Colyseus schema
+      if (!isActive && !player.isDead) {
+        player.isDead = true;
+      }
+
+      // Handle actual death event
+      if (currentHealth <= 0 && !player.isDead) {
         this.handlePlayerDeath(player, sessionId);
       }
     });

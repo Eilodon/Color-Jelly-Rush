@@ -13,6 +13,10 @@ import { EntityFlags, TransformAccess, PhysicsAccess } from '../generated/Compon
 export const PHY_MAP_RADIUS = 2500;
 export const FRICTION_BASE = 0.92;
 
+// EIDOLON-V Phase 3: Anti-cheat speed limits
+const MAX_SPEED_BASE = 150;
+const SPEED_VALIDATION_TOLERANCE = 1.15;
+
 export class PhysicsSystem {
     /**
      * Update physics for all active entities
@@ -130,6 +134,19 @@ export class PhysicsSystem {
                 vx -= bounceFactor * dot * nx;
                 vy -= bounceFactor * dot * ny;
             }
+        }
+
+        // EIDOLON-V Phase 3: Anti-cheat speed validation
+        // Clamp velocity to max speed (server-authoritative)
+        const speedSq = vx * vx + vy * vy;
+        const maxSpeed = MAX_SPEED_BASE * SPEED_VALIDATION_TOLERANCE;
+        const maxSpeedSq = maxSpeed * maxSpeed;
+        
+        if (speedSq > maxSpeedSq) {
+            const speed = Math.sqrt(speedSq);
+            const scale = maxSpeed / speed;
+            vx *= scale;
+            vy *= scale;
         }
 
         // 6. Write Back

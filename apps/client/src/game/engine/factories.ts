@@ -12,7 +12,7 @@ import {
 import { MAX_SPEED_BASE } from '@cjr/engine';
 import { Entity, Food, Particle, Player, Bot, Projectile, SizeTier, Vector2 } from '../../types';
 import { getCurrentEngine } from './context';
-import { randomRange, randomPos, randomPosInCenter, randomPosInRing } from '../math/FastMath';
+import { randomRange, randomPos, randomPosInCenter, randomPosInRing, PRNG } from '../math/FastMath';
 import { PigmentVec3, ShapeId, PickupKind, TattooId } from '../cjr/cjrTypes';
 import { pigmentToHex } from '../cjr/colorMath';
 import { pooledEntityFactory } from '../pooling/ObjectPool';
@@ -33,13 +33,14 @@ import {
   EntityLookup,
   ProjectileStore,
   EntityFlags,
+  CJRFoodFlags,
 } from '@cjr/engine';
 
 // Helper: Random Pigment
 export const randomPigment = (): PigmentVec3 => ({
-  r: Math.random(),
-  g: Math.random(),
-  b: Math.random(),
+  r: PRNG.next(),
+  g: PRNG.next(),
+  b: PRNG.next(),
 });
 
 import { ConfigStore, InputStore } from '@cjr/engine';
@@ -179,7 +180,7 @@ export const createPlayer = (
       chaos: 0,
       kingForm: 0,
     },
-    rewindHistory: [],
+
     stationaryTime: 0,
 
     statusFlags: StatusFlag.INVULNERABLE,
@@ -319,7 +320,7 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
       chaos: 0,
       kingForm: 0,
     },
-    rewindHistory: [],
+
     stationaryTime: 0,
 
     statusFlags: StatusFlag.INVULNERABLE,
@@ -437,11 +438,11 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   PhysicsStore.set(entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
   // Determine Type Flag
   let typeFlag = EntityFlags.FOOD;
-  if (food.kind === 'catalyst') typeFlag |= EntityFlags.FOOD_CATALYST;
-  else if (food.kind === 'pigment') typeFlag |= EntityFlags.FOOD_PIGMENT;
-  else if (food.kind === 'shield') typeFlag |= EntityFlags.FOOD_SHIELD;
-  else if (food.kind === 'solvent') typeFlag |= EntityFlags.FOOD_SOLVENT;
-  else if (food.kind === 'neutral') typeFlag |= EntityFlags.FOOD_NEUTRAL;
+  if (food.kind === 'catalyst') typeFlag |= CJRFoodFlags.FOOD_CATALYST;
+  else if (food.kind === 'pigment') typeFlag |= CJRFoodFlags.FOOD_PIGMENT;
+  else if (food.kind === 'shield') typeFlag |= CJRFoodFlags.FOOD_SHIELD;
+  else if (food.kind === 'solvent') typeFlag |= CJRFoodFlags.FOOD_SOLVENT;
+  else if (food.kind === 'neutral') typeFlag |= CJRFoodFlags.FOOD_NEUTRAL;
 
   StateStore.setFlag(entId, EntityFlags.ACTIVE | typeFlag);
   StatsStore.set(entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...

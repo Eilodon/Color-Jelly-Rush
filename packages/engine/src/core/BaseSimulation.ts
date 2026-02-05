@@ -158,11 +158,12 @@ export abstract class BaseSimulation {
      * Override this for custom game logic
      */
     protected tick(dt: number): void {
-        // 1. Physics (always run) - pass WorldState
-        this.updatePhysics(dt);
-
-        // 2. Core systems
+        // EIDOLON-V FIX: Input Lag Reduction
+        // 1. Core systems (Logic/Input/AI) - Calculate NEW desired state
         this.updateSystems(dt);
+
+        // 2. Physics (Integration) - Apply NEW state to positions
+        this.updatePhysics(dt);
 
         // 3. Entity logic (override in subclass)
         this.updateEntities(dt);

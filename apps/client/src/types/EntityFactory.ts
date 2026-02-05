@@ -116,7 +116,7 @@ export function createDefaultPlayer(options: CreatePlayerOptions): Player {
             chaos: 0,
             kingForm: 0,
         },
-        rewindHistory: [],
+
         stationaryTime: 0,
 
         // Status (DOD Synced)

@@ -36,7 +36,8 @@ export class ServerValidator {
   private lastUpdateTime: Map<string, number> = new Map();
 
   // IMPERATOR Phase 1: O(1) rate limiting with counter window
-  private static rateTrackers: Map<string, RateTracker> = new Map();
+  // EIDOLON-V OPTIMIZATION: Nested Map eliminates string concatenation garbage
+  private static rateTrackers: Map<string, Map<string, RateTracker>> = new Map();
 
   /**
    * Validate player position to prevent teleportation hacks
@@ -287,6 +288,8 @@ export class ServerValidator {
 
   /**
    * Rate limiting for player actions - IMPERATOR Phase 1: O(1) Token Bucket
+   * EIDOLON-V OPTIMIZATION: Composite key (Map<sessionId, Map<actionType>>) 
+   * eliminates string concatenation `${sessionId}_${actionType}` in hot path
    */
   static validateActionRate(
     sessionId: string,
@@ -294,14 +297,20 @@ export class ServerValidator {
     maxActionsPerSecond: number = 10
   ): ValidationResult {
     const now = Date.now();
-    const key = `${sessionId}_${actionType}`;
+    
+    // O(1): Get or create action map for this session (no string concat!)
+    let actionMap = this.rateTrackers.get(sessionId);
+    if (!actionMap) {
+      actionMap = new Map<string, RateTracker>();
+      this.rateTrackers.set(sessionId, actionMap);
+    }
 
-    let tracker = this.rateTrackers.get(key);
+    let tracker = actionMap.get(actionType);
     
     // O(1): Reset counter if window expired
     if (!tracker || now > tracker.resetAt) {
       tracker = { count: 0, resetAt: now + 1000 };
-      this.rateTrackers.set(key, tracker);
+      actionMap.set(actionType, tracker);
     }
 
     // O(1): Check and increment
@@ -349,15 +358,22 @@ export class ServerValidator {
   /**
    * Clear old data to prevent memory leaks
    * IMPERATOR Phase 1: Clean O(1) rate trackers
+   * EIDOLON-V: Cleanup nested Map structure
    */
   static cleanup(): void {
     const now = Date.now();
     const oneMinuteAgo = now - 60000;
 
-    // Clean up expired rate trackers
-    for (const [key, tracker] of this.rateTrackers) {
-      if (tracker.resetAt < oneMinuteAgo) {
-        this.rateTrackers.delete(key);
+    // Clean up expired rate trackers from nested Maps
+    for (const [sessionId, actionMap] of this.rateTrackers) {
+      for (const [actionType, tracker] of actionMap) {
+        if (tracker.resetAt < oneMinuteAgo) {
+          actionMap.delete(actionType);
+        }
+      }
+      // Remove empty session maps to prevent memory leak
+      if (actionMap.size === 0) {
+        this.rateTrackers.delete(sessionId);
       }
     }
   }

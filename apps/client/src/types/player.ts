@@ -91,7 +91,7 @@ export interface Player extends Entity {
     kingForm: number;
   };
   // WARNING: Array of Objects. Limit size or use RingBuffer if Logic relies on it heavily.
-  rewindHistory: { position: Vector2; health: number; time: number }[];
+
   stationaryTime: number;
   // #endregion
 
