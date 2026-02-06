@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { NetworkClient } from '../game/networking/NetworkClient';
+// EIDOLON-V AUDIT FIX: Corrected import path (was ../game/networking/ which doesn't exist)
+import { NetworkClient } from '../NetworkClient';
 import type { GameState } from '../types';
 
 describe('NetworkClient - Ring Buffer Optimization', () => {

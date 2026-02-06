@@ -224,11 +224,14 @@ const ScreensLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ se
         />
       )}
 
+      {/* EIDOLON-V AUDIT FIX: Pass both ui and game actions (was only passing actions.ui,
+          making pause overlay RESTART/QUIT buttons non-functional) */}
       <UiOverlayManager
         overlays={ui.overlays}
-        actions={actions.ui}
+        actions={{ ...actions.ui, game: actions.game }}
         gameStateRef={refs.gameState}
         settings={settings}
+        onTutorialComplete={actions.completeTutorial}
       />
     </div>
   );

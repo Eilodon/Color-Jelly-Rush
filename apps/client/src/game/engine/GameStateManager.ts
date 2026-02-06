@@ -166,8 +166,13 @@ export class GameStateManager {
     }
   }
 
+  // EIDOLON-V AUDIT FIX: Guard flags to prevent events firing every frame (was 60 emits/sec)
+  private gameOverEmitted = false;
+  private tattooRequestEmitted = false;
+
   private checkGameEvents(state: GameState): void {
-    if (state.result) {
+    if (state.result && !this.gameOverEmitted) {
+      this.gameOverEmitted = true;
       if (state.result === 'win') {
         this.emitEvent({ type: 'LEVEL_UNLOCKED', level: state.level + 1 });
       }
@@ -175,14 +180,23 @@ export class GameStateManager {
       this.emitEvent({ type: 'GAME_OVER', result: state.result });
     }
 
-    if (state.tattooChoices) {
+    if (state.tattooChoices && !this.tattooRequestEmitted) {
+      this.tattooRequestEmitted = true;
       this.emitEvent({ type: 'TATTOO_REQUEST' });
+    }
+    // Reset tattoo flag when choices are consumed (player picked one)
+    if (!state.tattooChoices && this.tattooRequestEmitted) {
+      this.tattooRequestEmitted = false;
     }
   }
 
   // --- Lifecycle Delegates ---
 
   public startSession(config: GameSessionConfig): void {
+    // Reset event guards for new session
+    this.gameOverEmitted = false;
+    this.tattooRequestEmitted = false;
+
     this.currentState = this.sessionManager.startSession(
       config,
       () => this.stopGameLoop(),

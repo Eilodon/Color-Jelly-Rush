@@ -388,7 +388,12 @@ export class NetworkClient {
     });
   }
 
-  private syncPlayers(serverPlayers: any) {
+  // EIDOLON-V AUDIT: Dead code - syncPlayers/syncBots/syncFood (lines 391-743)
+  // These 350+ lines are never called after the binary protocol migration.
+  // Binary channel is now the ONLY source of truth (see DUAL STATE ELIMINATION above).
+  // Prefixed with _ to mark as deprecated dead code for future cleanup.
+
+  private _syncPlayers_DEAD(serverPlayers: any) {
     if (!this.localState || !this.room) return;
 
     const activeIds = new Set<string>();
@@ -618,7 +623,7 @@ export class NetworkClient {
     }
   }
 
-  private syncBots(serverBots: any) {
+  private _syncBots_DEAD(serverBots: any) {
     if (!this.localState) return;
 
     const activeIds = new Set<string>();
@@ -698,7 +703,7 @@ export class NetworkClient {
     }
   }
 
-  private syncFood(serverFood: any) {
+  private _syncFood_DEAD(serverFood: any) {
     if (!this.localState) return;
 
     const activeIds = new Set<string>();

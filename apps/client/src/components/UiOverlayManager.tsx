@@ -25,7 +25,8 @@ interface UiOverlayManagerProps {
     useMultiplayer: boolean;
     tutorialSeen?: boolean;
   };
-  onProgressionUpdate?: (fn: (p: any) => any) => void; // Optional if needed
+  // EIDOLON-V AUDIT FIX: Callback to persist tutorial completion to localStorage
+  onTutorialComplete?: () => void;
 }
 
 export const UiOverlayManager: React.FC<UiOverlayManagerProps> = ({
@@ -33,6 +34,7 @@ export const UiOverlayManager: React.FC<UiOverlayManagerProps> = ({
   actions,
   gameStateRef,
   settings,
+  onTutorialComplete,
 }) => {
   if (overlays.length === 0) return null;
 
@@ -92,9 +94,10 @@ export const UiOverlayManager: React.FC<UiOverlayManagerProps> = ({
           }}
           onClose={didFinish => {
             actions.popOverlay('tutorial');
-            // progression update logic handles elsewhere or passed in?
-            // In App.tsx: setProgression(p => ({...p, tutorialSeen:true}))
-            // We might need an action for 'completeTutorial'
+            // EIDOLON-V AUDIT FIX: Persist tutorial completion when player finishes all steps
+            if (didFinish && onTutorialComplete) {
+              onTutorialComplete();
+            }
           }}
         />
       )}

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState } from '../types';
 import { gameStateManager, GameEvent } from '../game/engine/GameStateManager';
-import { NetworkStatus } from '../game/networking/NetworkClient';
+// EIDOLON-V AUDIT FIX: Corrected import path (was ../game/networking/ which doesn't exist)
+import { NetworkStatus } from '../network/NetworkClient';
 import {
   loadSettings,
   loadProgression,
@@ -217,8 +218,11 @@ export const useGameSession = () => {
         togglePixi: (v: boolean) => setSettings(s => ({ ...s, usePixi: v })),
         toggleMultiplayer: (v: boolean) => setSettings(s => ({ ...s, useMultiplayer: v })),
       },
+      // EIDOLON-V AUDIT FIX: Tutorial completion persistence
+      completeTutorial: () => setProgression(p => ({ ...p, tutorialSeen: true })),
     }),
-    [startGame, quitGame, settings.useMultiplayer]
+    // EIDOLON-V AUDIT FIX: Added settings.usePixi to deps (was stale - retry used old usePixi value)
+    [startGame, quitGame, settings.useMultiplayer, settings.usePixi]
   ); // Rebuild actions if these change
 
   return {

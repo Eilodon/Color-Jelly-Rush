@@ -32,9 +32,13 @@ const GameOverScreen: React.FC<Props> = ({
         <div className="text-[color:var(--mist-400)] mb-8">
           {isWin ? `Level ${level} cleared.` : `Level ${level} failed.`}
         </div>
+        {/* EIDOLON-V AUDIT FIX: Added HOME button (onHome prop was passed but never rendered) */}
         <div className="flex flex-wrap justify-center gap-3">
           <button onClick={onRetry} className="ritual-button ritual-button-primary text-sm">
             RETRY
+          </button>
+          <button onClick={onHome} className="ritual-button ritual-button-ghost text-sm">
+            HOME
           </button>
           <button onClick={onLevels} className="ritual-button ritual-button-ghost text-sm">
             LEVELS
