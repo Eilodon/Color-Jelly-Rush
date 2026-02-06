@@ -85,6 +85,11 @@ export class CJRClientRunner extends ClientRunner {
   protected onInitialize(): void {
     // BaseSimulation initialization complete
     console.info('[CJRClientRunner] Kernel mode initialized');
+
+    // EIDOLON-V: Check environment for Multithreading support
+    import('../../utils/capabilityCheck').then(({ checkEnvironmentCapabilities }) => {
+      checkEnvironmentCapabilities();
+    });
   }
 
   /**
@@ -178,6 +183,77 @@ export class CJRClientRunner extends ClientRunner {
     // Currently GameStateManager reads from DOD stores directly
   }
 
+
+  // =============================================================================
+  // EIDOLON-V Phase 5: Multithreading Bridge (Physics Worker)
+  // =============================================================================
+
+  private worker: Worker | null = null;
+  private useWorker = false;
+
+  /**
+   * Initialize Physics Worker if environment supports it
+   */
+  private async initWorker() {
+    // 1. Check Capabilities
+    const { checkEnvironmentCapabilities } = await import('../../utils/capabilityCheck');
+    const isReady = checkEnvironmentCapabilities();
+
+    if (!isReady) {
+      console.warn('[CJRClientRunner] Environment not ready for Multithreading. Fallback to Main Thread.');
+      return;
+    }
+
+    try {
+      console.log('[CJRClientRunner] Spawning Physics Worker...');
+
+      // 2. Create Worker (Vite worker import)
+      this.worker = new Worker(new URL('../../workers/physics.worker.ts', import.meta.url), {
+        type: 'module'
+      });
+
+      this.worker.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.type === 'INIT_COMPLETE') {
+          console.log('[CJRClientRunner] Worker Initialized. Switching to Split-Brain Mode.');
+          this.useWorker = true;
+          this.worker?.postMessage({ type: 'START' });
+        }
+      };
+
+      // 3. Send Shared Buffers (Zero Copy)
+      // Note: We need to cast 'world' to access buffers because they are protected in BaseSimulation
+      // But we added public accessors in generated code.
+      const world = this.world as any;
+
+      const buffers = {
+        stateFlags: world.stateFlags.buffer, // Should be SAB if init correctly
+        transform: world.transformBuffer,
+        physics: world.physicsBuffer,
+        pigment: world.pigmentBuffer,
+        stats: world.statsBuffer,
+        input: world.inputBuffer,
+        skill: world.skillBuffer,
+        config: world.configBuffer,
+        projectile: world.projectileBuffer,
+        tattoo: world.tattooBuffer
+      };
+
+      this.worker.postMessage({
+        type: 'INIT',
+        config: {
+          maxEntities: world.maxEntities,
+          tickRate: 60
+        },
+        buffers: buffers
+      });
+
+    } catch (err) {
+      console.error('[CJRClientRunner] Worker Spawn Failed:', err);
+      this.useWorker = false;
+    }
+  }
+
   // =============================================================================
   // BaseSimulation Abstract Methods (For Future Migration)
   // =============================================================================
@@ -187,7 +263,7 @@ export class CJRClientRunner extends ClientRunner {
    * Phase 5: Full BaseSimulation integration
    */
   protected updateEntities(dt: number): void {
-    // AI System update
+    // AI System update (Still on Main Thread for Phase 5)
     if (this.gameState) {
       const grid = getCurrentSpatialGrid();
       if (grid) {
@@ -196,12 +272,20 @@ export class CJRClientRunner extends ClientRunner {
       this.aiSystem.update(this.gameState, dt);
     }
 
-    // EIDOLON-V FIX: Core physics pipeline
-    // 1. MovementSystem: Convert input targets to velocities
-    MovementSystem.updateAll(defaultWorld, dt);
+    // EIDOLON-V: Split Brain Architecture
+    if (this.useWorker) {
+      // WORKER MODE:
+      // Physics/Movement is calculated in Worker.
+      // Main thread only handles rendering interpolation (in onInterpolate).
+      // We DO NOT call PhysicsSystem.update() here.
+    } else {
+      // LEGACY/FALLBACK MODE:
+      // 1. MovementSystem: Convert input targets to velocities
+      MovementSystem.updateAll(defaultWorld, dt);
 
-    // 2. PhysicsSystem: Integrate velocity to position + map boundary clamping
-    PhysicsSystem.update(defaultWorld, dt);
+      // 2. PhysicsSystem: Integrate velocity to position
+      PhysicsSystem.update(defaultWorld, dt);
+    }
 
     // Future: Ring logic, emotions, tattoo synergies
   }
