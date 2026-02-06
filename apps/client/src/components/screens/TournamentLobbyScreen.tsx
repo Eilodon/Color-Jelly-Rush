@@ -50,61 +50,51 @@ const formatCountdown = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+// EIDOLON-V AUDIT FIX: Extracted TournamentCard to module-level to prevent
+// unmount/remount on every parent render (was defined inside render function body)
+const TournamentCard: React.FC<{
+  tourney: TournamentInfo;
+  onQueue: (id: string) => void;
+}> = ({ tourney, onQueue }) => {
+  const countdownRef = useRef<HTMLSpanElement>(null);
+
+  useZeroRenderTimer({
+    ref: countdownRef,
+    updater: () => {
+      const remaining = tourney.startTime - Date.now();
+      return formatCountdown(remaining);
+    },
+    interval: 1000,
+    enabled: true,
+  });
+
+  return (
+    <div className="ritual-card">
+      <div className="text-xs text-[color:var(--mist-400)] uppercase tracking-widest">
+        {tourney.format}
+      </div>
+      <div className="text-lg font-bold mt-2">{tourney.name}</div>
+      <div className="text-xs text-[color:var(--mist-400)] mt-1">
+        Starts in{' '}
+        <span ref={countdownRef} className="font-mono text-amber-300">
+          --:--
+        </span>
+      </div>
+      <div className="mt-4">
+        <button
+          onClick={() => onQueue(tourney.id)}
+          className="w-full py-2 rounded border border-[color:rgba(47,141,110,0.6)] text-emerald-200 text-xs font-bold tracking-widest hover:bg-[rgba(47,141,110,0.2)] transition"
+        >
+          QUEUE
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const TournamentLobbyScreen: React.FC<Props> = ({ queue, onQueue, onCancel, onBack }) => {
   // EIDOLON-V: Initialize tournaments once on mount
   const tournamentsRef = useRef<TournamentInfo[]>(createTournaments());
-
-  // EIDOLON-V: Map tournament IDs to DOM elements for zero-render updates
-  const countdownRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
-
-  // EIDOLON-V: Custom hook for each tournament countdown
-  const useTournamentCountdown = (tourney: TournamentInfo) => {
-    const ref = useRef<HTMLSpanElement>(null);
-    
-    useZeroRenderTimer({
-      ref,
-      updater: () => {
-        const remaining = tourney.startTime - Date.now();
-        return formatCountdown(remaining);
-      },
-      interval: 1000,
-      enabled: true,
-    });
-
-    return ref;
-  };
-
-  // EIDOLON-V: Separate component for tournament countdown to use hook properly
-  const TournamentCard: React.FC<{ tourney: TournamentInfo }> = ({ tourney }) => {
-    const countdownRef = useTournamentCountdown(tourney);
-    
-    return (
-      <div className="ritual-card">
-        <div className="text-xs text-[color:var(--mist-400)] uppercase tracking-widest">
-          {tourney.format}
-        </div>
-        <div className="text-lg font-bold mt-2">{tourney.name}</div>
-        <div className="text-xs text-[color:var(--mist-400)] mt-1">
-          Starts in{' '}
-          <span
-            ref={countdownRef}
-            className="font-mono text-amber-300"
-          >
-            --:--
-          </span>
-        </div>
-        <div className="mt-4">
-          <button
-            onClick={() => onQueue(tourney.id)}
-            className="w-full py-2 rounded border border-[color:rgba(47,141,110,0.6)] text-emerald-200 text-xs font-bold tracking-widest hover:bg-[rgba(47,141,110,0.2)] transition"
-          >
-            QUEUE
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   const statusLabel = useMemo(() => {
     if (queue.status === 'queued') return 'QUEUED';
     if (queue.status === 'ready') return 'READY';
@@ -145,7 +135,7 @@ const TournamentLobbyScreen: React.FC<Props> = ({ queue, onQueue, onCancel, onBa
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           {tournamentsRef.current.map(tourney => (
-            <TournamentCard key={tourney.id} tourney={tourney} />
+            <TournamentCard key={tourney.id} tourney={tourney} onQueue={onQueue} />
           ))}
         </div>
 

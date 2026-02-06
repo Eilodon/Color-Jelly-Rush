@@ -495,6 +495,13 @@ export class GameRoom extends Room<GameRoomState> {
       const entityIndex = this.entityIndices.get(sessionId);
       if (entityIndex === undefined || player.isDead) return;
 
+      // EIDOLON-V AUDIT FIX: Recalculate matchPercent every tick (was only set on join,
+      // causing ring transitions to use stale value and players stuck in Ring 1)
+      player.matchPercent = calcMatchPercentFast(
+        { r: player.pigment.r, g: player.pigment.g, b: player.pigment.b },
+        { r: player.targetPigment.r, g: player.targetPigment.g, b: player.targetPigment.b }
+      );
+
       // Build ring entity interface
       const ringEntity = {
         physicsIndex: entityIndex,

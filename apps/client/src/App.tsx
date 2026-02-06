@@ -93,8 +93,11 @@ const App: React.FC = () => {
     );
   }
 
-  // EIDOLON-V: Global Keybinds for Dev Tools
+  // EIDOLON-V AUDIT FIX: Only register dev keybinds in development mode
+  // (was running keydown listener on every keystroke in production)
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (e.shiftKey && e.code === 'KeyS') {
         const { stressTestController } = await import('./dev/StressTestController');

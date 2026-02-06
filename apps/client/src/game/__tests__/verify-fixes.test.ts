@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-// EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
-import { EntityFlags, MAX_ENTITIES } from '@cjr/engine/dod/EntityFlags';
+// EIDOLON-V AUDIT FIX: Corrected import path (was @cjr/engine/dod/EntityFlags which doesn't exist)
+import { EntityFlags, MAX_ENTITIES } from '@cjr/engine';
 import {
   resetAllStores,
   TransformStore,
@@ -17,9 +17,10 @@ import {
   EntityLookup,
 } from '@cjr/engine';
 // Keep local imports for client-specific modules
-import { entityManager } from './engine/dod/EntityManager';
-import { createInitialState } from './engine/index';
-import { createPlayer, createFood, createBot } from './engine/factories';
+// EIDOLON-V AUDIT FIX: Corrected relative paths (test is in __tests__/, needs ../)
+import { entityManager } from '../engine/dod/EntityManager';
+import { createInitialState } from '../engine/index';
+import { createPlayer, createFood, createBot } from '../engine/factories';
 
 describe('EntityFlags Fix Verification', () => {
   it('DEAD and OBSTACLE should have different bit values', () => {

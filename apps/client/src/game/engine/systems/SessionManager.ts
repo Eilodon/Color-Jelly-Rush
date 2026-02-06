@@ -51,9 +51,11 @@ export class SessionManager {
             }
 
             // 5. Connect Networking (if valid)
+            // EIDOLON-V AUDIT FIX: Set local state BEFORE connecting to prevent stale state race
+            // (connectWithRetry is async and may receive messages before setLocalState ran)
             if (config.useMultiplayer) {
-                this.networkClient.connectWithRetry(config.name, config.shape);
                 this.networkClient.setLocalState(state);
+                this.networkClient.connectWithRetry(config.name, config.shape);
             }
 
             // 6. Start Loop

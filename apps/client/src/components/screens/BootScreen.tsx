@@ -1,28 +1,13 @@
-import React, { Suspense, useRef } from 'react';
+import React from 'react';
 
-// EIDOLON-V: Lazy load PixiGameCanvas for shader warm-up
-const PixiGameCanvas = React.lazy(() => import('../PixiGameCanvas'));
+// EIDOLON-V AUDIT FIX: Removed silent PixiGameCanvas warm-up from BootScreen.
+// It created a WebGL context that was never cleaned up on unmount, leaking GPU resources.
+// PixiGameCanvas is already preloaded via dynamic import() in ScreenManager.tsx,
+// which handles module-level warm-up without creating a throwaway WebGL context.
 
 const BootScreen: React.FC = () => {
-  // EIDOLON-V: Dummy refs for PixiGameCanvas props
-  const dummyGameStateRef = useRef(null);
-  const dummyAlphaRef = useRef(0);
-
   return (
     <div className="menu-shell">
-      {/* EIDOLON-V: Silent Shader Warm-up
-          Render PixiGameCanvas invisibly to force WebGL context initialization
-          and shader compilation BEFORE the game starts. This eliminates first-frame jank. */}
-      <Suspense fallback={null}>
-        <div className="absolute inset-0 opacity-0 pointer-events-none" aria-hidden="true">
-          <PixiGameCanvas
-            gameStateRef={dummyGameStateRef}
-            inputEnabled={false}
-            alphaRef={dummyAlphaRef}
-          />
-        </div>
-      </Suspense>
-
       <div className="flex flex-col items-center justify-center">
         <div className="ritual-title ritual-title-gradient text-4xl sm:text-5xl">
           COLOR-JELLY-RUSH

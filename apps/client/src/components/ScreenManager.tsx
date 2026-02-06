@@ -231,6 +231,7 @@ const ScreensLayer: React.FC<{ session: ScreenManagerProps['session'] }> = ({ se
         actions={{ ...actions.ui, game: actions.game }}
         gameStateRef={refs.gameState}
         settings={settings}
+        onTutorialComplete={actions.completeTutorial}
       />
     </div>
   );

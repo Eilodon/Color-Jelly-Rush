@@ -218,8 +218,11 @@ export const useGameSession = () => {
         togglePixi: (v: boolean) => setSettings(s => ({ ...s, usePixi: v })),
         toggleMultiplayer: (v: boolean) => setSettings(s => ({ ...s, useMultiplayer: v })),
       },
+      // EIDOLON-V AUDIT FIX: Tutorial completion persistence
+      completeTutorial: () => setProgression(p => ({ ...p, tutorialSeen: true })),
     }),
-    [startGame, quitGame, settings.useMultiplayer]
+    // EIDOLON-V AUDIT FIX: Added settings.usePixi to deps (was stale - retry used old usePixi value)
+    [startGame, quitGame, settings.useMultiplayer, settings.usePixi]
   ); // Rebuild actions if these change
 
   return {

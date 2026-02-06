@@ -16,11 +16,12 @@ import {
   resetAllStores,
   EntityFlags,
   MAX_ENTITIES,
-  BinaryPacker,
   RING_RADII_SQ,
   THRESHOLDS,
   checkRingTransition,
 } from '@cjr/engine';
+// EIDOLON-V AUDIT FIX: BinaryPacker was deleted, replaced by SchemaBinaryPacker in networking subpath
+import { SchemaBinaryPacker as BinaryPacker } from '@cjr/engine/networking';
 
 describe('Client-Server Sync', () => {
   beforeEach(() => {
