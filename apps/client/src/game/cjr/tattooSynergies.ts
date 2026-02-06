@@ -4,12 +4,13 @@ import { createFood, createParticle } from '../engine/factories';
 import { createFloatingText } from '../engine/effects';
 import { StatusFlag, TattooFlag } from '../engine/statusFlags';
 import { vfxSystem } from '../vfx/vfxSystem';
-import { TransformStore, PhysicsStore, defaultWorld } from '@cjr/engine';
-const w = defaultWorld;
+import { TransformStore, PhysicsStore } from '@cjr/engine';
+import { getWorld } from '../engine/context';
 
 // EIDOLON-V: DOD helpers for tattoo synergies
 const getPlayerPos = (player: Player, out: { x: number; y: number }) => {
   if (player.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = player.physicsIndex * 8;
     out.x = w.transform[idx];
     out.y = w.transform[idx + 1];
@@ -21,6 +22,7 @@ const getPlayerPos = (player: Player, out: { x: number; y: number }) => {
 
 const getPlayerVel = (player: Player, out: { x: number; y: number }) => {
   if (player.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = player.physicsIndex * 8;
     out.x = w.physics[idx];
     out.y = w.physics[idx + 1];
@@ -32,6 +34,7 @@ const getPlayerVel = (player: Player, out: { x: number; y: number }) => {
 
 const getFoodPos = (food: Food, out: { x: number; y: number }) => {
   if (food.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = food.physicsIndex * 8;
     out.x = w.transform[idx];
     out.y = w.transform[idx + 1];
@@ -43,6 +46,7 @@ const getFoodPos = (food: Food, out: { x: number; y: number }) => {
 
 const setFoodVel = (food: Food, vx: number, vy: number) => {
   if (food.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = food.physicsIndex * 8;
     w.physics[idx] = vx;
     w.physics[idx + 1] = vy;

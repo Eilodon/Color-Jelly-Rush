@@ -14,8 +14,8 @@ import { SpatialHashGrid, SpatialQueryResult } from '../spatial/SpatialHashGrid'
 
 // --- Optimization: Persistent Spatial Grid ---
 // ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
-import { EntityLookup, TransformStore, defaultWorld } from '@cjr/engine';
-const w = defaultWorld;
+import { EntityLookup, TransformStore } from '@cjr/engine';
+// Note: getWorld() is defined later in this file, so we use it directly
 
 // --- Optimization: Persistent Spatial Grid ---
 // ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
@@ -101,8 +101,8 @@ export class SpatialGrid implements ISpatialGrid {
     let y = entity.position.y;
     if (entity.physicsIndex !== undefined) {
       const tIdx = entity.physicsIndex * 8;
-      x = w.transform[tIdx];
-      y = w.transform[tIdx + 1];
+      x = getWorld().transform[tIdx];
+      y = getWorld().transform[tIdx + 1];
     }
     this.grid.queryRadiusInto(x, y, maxDistance, indices);
 
@@ -198,10 +198,24 @@ export const createGameEngine = (): IGameEngine => new GameEngine();
 // 3. Each GameState owns its own GameEngine via state.engine
 let currentEngine: IGameEngine | null = null;
 let currentSpatialGrid: ISpatialGrid | null = null;
+let currentWorld: WorldState | null = null; // EIDOLON-V: Instance-based WorldState
 
 export const bindEngine = (engine: IGameEngine) => {
   currentEngine = engine;
   currentSpatialGrid = engine.spatialGrid;
+  currentWorld = engine.world; // EIDOLON-V: Bind world directly
+};
+
+/**
+ * EIDOLON-V: Get current WorldState instance
+ * Replaces deprecated defaultWorld singleton usage
+ * @throws Error if engine not bound (pre-game-loop)
+ */
+export const getWorld = (): WorldState => {
+  if (!currentWorld) {
+    throw new Error('WorldState not bound. Ensure bindEngine() is called before game logic.');
+  }
+  return currentWorld;
 };
 
 export const getCurrentEngine = (): IGameEngine => {

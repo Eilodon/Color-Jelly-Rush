@@ -11,7 +11,7 @@ import {
 // EIDOLON-V FIX: Import MAX_SPEED_BASE from engine SSOT
 import { MAX_SPEED_BASE } from '@cjr/engine';
 import { Entity, Food, Particle, Player, Bot, Projectile, SizeTier, Vector2 } from '../../types';
-import { getCurrentEngine } from './context';
+import { getCurrentEngine, getWorld } from './context';
 import { randomRange, randomPos, randomPosInCenter, randomPosInRing, PRNG } from '../math/FastMath';
 import { PigmentVec3, ShapeId, PickupKind, TattooId } from '../cjr/cjrTypes';
 import { pigmentToHex } from '../cjr/colorMath';
@@ -34,7 +34,6 @@ import {
   ProjectileStore,
   EntityFlags,
   CJRFoodFlags,
-  defaultWorld,
 } from '@cjr/engine';
 
 // Helper: Random Pigment
@@ -49,8 +48,8 @@ import { pigmentToInt, intToHex, hexToInt } from '../cjr/colorMath'; // EIDOLON-
 import { visualSystem } from './systems/VisualSystem';
 import { ShapeId as VisualShapeId } from './systems/VisualSystem';
 
-// EIDOLON-V AUDIT: Cache world reference for DOD store access
-const w = defaultWorld;
+// EIDOLON-V: Instance-based WorldState via getWorld()
+// Note: getWorld() is called inside functions, NOT at module level
 
 export const createPlayer = (
   name: string,
@@ -66,7 +65,7 @@ export const createPlayer = (
   if (entId === -1) return null; // Safety Check: Pool Full
 
   // EIDOLON-V FIX: Immediately RESET flags to remove potential DEAD status from reused IDs
-  w.stateFlags[entId] = 0;
+  getWorld().stateFlags[entId] = 0;
 
   const id = entId.toString(); // Integer Identity as String for backward compatibility
 
@@ -77,14 +76,14 @@ export const createPlayer = (
 
   // 2. Initialize DOD State (Single Source of Truth)
   // 2.1 Transform & Physics
-  TransformStore.set(defaultWorld, entId, position.x, position.y, 0);
-  PhysicsStore.set(defaultWorld, entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
+  PhysicsStore.set(getWorld(), entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
 
   // 2.2 Stats
-  StatsStore.set(defaultWorld, entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
+  StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
 
   // 2.3 State Flags
-  StateStore.setFlag(defaultWorld, entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
+  StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
 
   // 2.4 Skill & Tattoo
   const ShapeMap: Record<string, number> = { circle: 1, square: 2, triangle: 3, hex: 4 };
@@ -98,7 +97,7 @@ export const createPlayer = (
   // 2.5 Config (Hot Logic Data)
   // [magneticRadius, damageMult, speedMult, pickupRange, visionRange]
   ConfigStore.set(
-    defaultWorld,
+    getWorld(),
     entId,
     0, // magneticRadius
     1, // damageMultiplier
@@ -109,7 +108,7 @@ export const createPlayer = (
 
   // 2.6 Input (DOD)
   // Initialize target to current position (so they don't sprint to 0,0)
-  InputStore.setTarget(defaultWorld, entId, position.x, position.y);
+  InputStore.setTarget(getWorld(), entId, position.x, position.y);
 
   // 3. Create View Proxy (JS Object)
   // This object is now a "View Shell" for React/Rendering compatibility.
@@ -230,7 +229,7 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   if (entId === -1) return null; // Safety Check: Pool Full
 
   // EIDOLON-V FIX: Immediately RESET flags to remove potential DEAD status from reused IDs
-  w.stateFlags[entId] = 0;
+  getWorld().stateFlags[entId] = 0;
 
   // Maintain legacy string identity
   const name = `Bot ${id.substr(0, 4)}`;
@@ -241,10 +240,10 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   engine.physicsWorld.indexToId.set(entId, id);
 
   // 2. Initialize DOD State (Single Source of Truth)
-  TransformStore.set(defaultWorld, entId, position.x, position.y, 0);
-  PhysicsStore.set(defaultWorld, entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
-  StatsStore.set(defaultWorld, entId, 100, 100, 0, 0, 1, 1);
-  StateStore.setFlag(defaultWorld, entId, EntityFlags.ACTIVE | EntityFlags.BOT);
+  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
+  PhysicsStore.set(getWorld(), entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1);
+  StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.BOT);
 
   // 2.4 Skill & Tattoo
   const sIdx = entId * SkillStore.STRIDE;
@@ -255,7 +254,7 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
 
   // 2.5 Config (Hot Logic Data)
   ConfigStore.set(
-    defaultWorld,
+    getWorld(),
     entId,
     0, // magneticRadius
     1, // damageMultiplier
@@ -265,7 +264,7 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   );
 
   // 2.6 Input (DOD)
-  InputStore.setTarget(defaultWorld, entId, position.x, position.y);
+  InputStore.setTarget(getWorld(), entId, position.x, position.y);
 
   // 3. Create View Proxy (JS Object)
   const bot: Bot = {
@@ -379,9 +378,9 @@ export const createBoss = (spawnTime: number = 0): Bot | null => {
 
   if (boss.physicsIndex !== undefined) {
     // Update Physics Store radius/mass - use WorldState accessors
-    PhysicsStore.setRadius(defaultWorld, boss.physicsIndex, 80);
+    PhysicsStore.setRadius(getWorld(), boss.physicsIndex, 80);
     // Update Stats Store
-    StatsStore.set(defaultWorld, boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
+    StatsStore.set(getWorld(), boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
   }
 
   return boss;
@@ -400,6 +399,7 @@ export const createBotCreeps = (count: number): Bot[] => {
 
     if (creep.physicsIndex !== undefined) {
       const pIdx = creep.physicsIndex * 8;
+      const w = getWorld();
       w.physics[pIdx + 3] = 5; // Mass
       w.physics[pIdx + 4] = 15; // Radius
       // Update Stats (HP/Score might be different? For now inherit from createBot defaults which is Player default)
@@ -425,7 +425,7 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   }
 
   // EIDOLON-V FIX: Reset flags immediately after acquiring ID
-  w.stateFlags[entId] = 0;
+  getWorld().stateFlags[entId] = 0;
 
   food.physicsIndex = entId; // Note: Need to add physicsIndex to Food type if missing (it IS in Entity interface)
 
@@ -453,8 +453,8 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   }
 
   // Initialize DOD State
-  TransformStore.set(defaultWorld, entId, startPos.x, startPos.y, 0);
-  PhysicsStore.set(defaultWorld, entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
+  TransformStore.set(getWorld(), entId, startPos.x, startPos.y, 0);
+  PhysicsStore.set(getWorld(), entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
   // Determine Type Flag
   let typeFlag = EntityFlags.FOOD;
   if (food.kind === 'catalyst') typeFlag |= CJRFoodFlags.FOOD_CATALYST;
@@ -463,13 +463,13 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   else if (food.kind === 'solvent') typeFlag |= CJRFoodFlags.FOOD_SOLVENT;
   else if (food.kind === 'neutral') typeFlag |= CJRFoodFlags.FOOD_NEUTRAL;
 
-  StateStore.setFlag(defaultWorld, entId, EntityFlags.ACTIVE | typeFlag);
-  StatsStore.set(defaultWorld, entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
+  StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | typeFlag);
+  StatsStore.set(getWorld(), entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
 
   // EIDOLON-V: ConfigStore Init for Food
   // [magneticRadius, damageMult, speedMult, pickupRange, visionRange]
   ConfigStore.set(
-    defaultWorld,
+    getWorld(),
     entId,
     0, // magneticRadius
     0, // damageMultiplier
@@ -533,7 +533,7 @@ export const createProjectile = (
   }
 
   // EIDOLON-V FIX: Reset flags immediately after acquiring ID
-  w.stateFlags[entId] = 0;
+  getWorld().stateFlags[entId] = 0;
   projectile.physicsIndex = entId;
 
   // Calculate velocity toward target
@@ -558,14 +558,14 @@ export const createProjectile = (
   projectile.velocity = { x: vx, y: vy };
 
   // DOD Stores
-  TransformStore.set(defaultWorld, entId, position.x, position.y, 0);
-  PhysicsStore.set(defaultWorld, entId, vx, vy, 0.5, 8, 0.5, 1.0);
-  StateStore.setFlag(defaultWorld, entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
-  StatsStore.set(defaultWorld, entId, 1, 1, 0, 0, 0, 1);
+  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
+  PhysicsStore.set(getWorld(), entId, vx, vy, 0.5, 8, 0.5, 1.0);
+  StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
+  StatsStore.set(getWorld(), entId, 1, 1, 0, 0, 0, 1);
 
   // EIDOLON-V: ConfigStore Init for Projectile
   ConfigStore.set(
-    defaultWorld,
+    getWorld(),
     entId,
     0, // magneticRadius
     1, // damageMultiplier
@@ -581,7 +581,7 @@ export const createProjectile = (
   // If -1, we might fail self-collision checks if logic relies on int comparison only.
   // But usually projectiles are created by Valid Entities.
 
-  ProjectileStore.set(defaultWorld, entId, oIdx, damage, duration, 0);
+  ProjectileStore.set(getWorld(), entId, oIdx, damage, duration, 0);
 
   // EIDOLON-V FIX: Zero-Copy Live View (SSOT)
   bindToLiveView(projectile, entId);
@@ -600,7 +600,7 @@ export const createProjectile = (
 
 // EIDOLON-V FIX: Zero-Copy Helper
 // Binds object properties directly to DOD Stores via Getters/Setters
-// FIXED: Cache proxy objects to avoid temp allocation on every access
+// FIXED: Uses getWorld() for instance-based access (migration from defaultWorld)
 const bindToLiveView = (entity: any, entId: number) => {
   const pBase = entId * TransformStore.STRIDE;
   const vBase = entId * PhysicsStore.STRIDE;
@@ -611,26 +611,26 @@ const bindToLiveView = (entity: any, entId: number) => {
 
   Object.defineProperties(posProxy, {
     x: {
-      get() { return w.transform[pBase]; },
-      set(v: number) { w.transform[pBase] = v; },
+      get() { return getWorld().transform[pBase]; },
+      set(v: number) { getWorld().transform[pBase] = v; },
       enumerable: true
     },
     y: {
-      get() { return w.transform[pBase + 1]; },
-      set(v: number) { w.transform[pBase + 1] = v; },
+      get() { return getWorld().transform[pBase + 1]; },
+      set(v: number) { getWorld().transform[pBase + 1] = v; },
       enumerable: true
     }
   });
 
   Object.defineProperties(velProxy, {
     x: {
-      get() { return w.physics[vBase]; },
-      set(v: number) { w.physics[vBase] = v; },
+      get() { return getWorld().physics[vBase]; },
+      set(v: number) { getWorld().physics[vBase] = v; },
       enumerable: true
     },
     y: {
-      get() { return w.physics[vBase + 1]; },
-      set(v: number) { w.physics[vBase + 1] = v; },
+      get() { return getWorld().physics[vBase + 1]; },
+      set(v: number) { getWorld().physics[vBase + 1] = v; },
       enumerable: true
     }
   });

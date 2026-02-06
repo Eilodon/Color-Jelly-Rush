@@ -109,12 +109,15 @@ export class SchemaBinaryPacker {
         view.setUint16(offset, 0, true); offset += 2; // Placeholder for count
 
         let count = 0;
-        const maxEnt = world.maxEntities;
         const tView = world.transformView; // DataView access
 
-        // Loop all active entities
-        for (let id = 0; id < maxEnt; id++) {
-            if (!world.isValidEntityId(id)) continue;
+        // EIDOLON-V P2-1 FIX: Use Sparse Set for O(activeCount) iteration
+        // Was O(maxEntities) = 10K, now O(activeCount) = typically 50-200
+        const activeCount = world.activeCount;
+        const activeEntities = world.activeEntities;
+
+        for (let i = 0; i < activeCount; i++) {
+            const id = activeEntities[i];
 
             // Write ID (2)
             view.setUint16(offset, id, true); offset += 2;

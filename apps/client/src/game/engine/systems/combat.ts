@@ -22,18 +22,17 @@ import {
   EntityLookup,
   PigmentStore,
   EntityFlags,
-  // EIDOLON-V AUDIT: Import defaultWorld for DOD store access (replaces deprecated .data/.flags)
-  defaultWorld,
 } from '@cjr/engine';
+import { getWorld } from '../context';
 import { audioEngine } from '../../audio/AudioEngine';
 
-// EIDOLON-V AUDIT: Cache world reference for zero-overhead access in hot paths
-const w = defaultWorld;
+// EIDOLON-V: Instance-based WorldState via getWorld()
 
 // EIDOLON-V PHASE 6: Pure DOD Logic for Consumption
 // Uses PigmentStore instead of EntityLookup - Zero Object Access!
 // NOTE: Internal function - exported for future collision system integration
 export const consumePickupDOD = (entityId: number, foodId: number, _state: GameState) => {
+  const w = getWorld();
   // Safety checks - AUDIT FIX: use world.stateFlags instead of deprecated StateStore.flags
   const fFlags = w.stateFlags[foodId];
   if ((fFlags & EntityFlags.ACTIVE) === 0 || fFlags & EntityFlags.DEAD) return;
@@ -101,6 +100,7 @@ export const consumePickupDOD = (entityId: number, foodId: number, _state: GameS
 
 // Extracted from legacy consumePickup to avoid double-counting
 const handleLegacyFoodEffects = (e: Player | Bot, food: Food, state: GameState) => {
+  const w = getWorld();
   triggerEmotion(e, 'yum');
 
   let ex = e.position.x;
@@ -201,6 +201,7 @@ export const reduceHealthDOD = (
   attackerId: number | -1,
   state: GameState
 ) => {
+  const w = getWorld();
   const vFlags = w.stateFlags[victimId];
   if (vFlags & EntityFlags.DEAD || (vFlags & EntityFlags.ACTIVE) === 0) return;
 
@@ -254,6 +255,7 @@ export const resolveCombat = (
   c1: boolean,
   c2: boolean
 ) => {
+  const w = getWorld();
   if (e1.physicsIndex === undefined || e2.physicsIndex === undefined) return;
   const id1 = e1.physicsIndex;
   const id2 = e2.physicsIndex;

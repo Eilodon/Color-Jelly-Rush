@@ -13,12 +13,11 @@ import {
   StatsStore,
   MAX_ENTITIES,
   EntityFlags,
-  defaultWorld,
 } from '@cjr/engine';
 import { GameState } from '../../../types';
+import { getWorld } from '../context';
 
 import { cjrClientRunner } from '../runner/CJRClientRunner';
-const w = defaultWorld;
 
 export class PhysicsCoordinator {
   private lastUpdateTime = 0;
@@ -35,6 +34,7 @@ export class PhysicsCoordinator {
     // Sync player position from DOD store to state object
     // Note: This is only for UI/debugging - rendering uses DOD directly
     if (state.player.physicsIndex !== undefined) {
+      const w = getWorld();
       const idx = state.player.physicsIndex;
       state.player.position.x = TransformStore.getX(w, idx);
       state.player.position.y = TransformStore.getY(w, idx);
@@ -54,6 +54,7 @@ export class PhysicsCoordinator {
 
     // Update local player visuals from DOD if needed
     if (state.player.physicsIndex !== undefined) {
+      const w = getWorld();
       const idx = state.player.physicsIndex;
       // Note: Position is set by NetworkClient reconciliation, not here
       // But we can update derived values
@@ -66,6 +67,7 @@ export class PhysicsCoordinator {
    * Check and sync death states from DOD to game state
    */
   public syncDeathStates(state: GameState): void {
+    const w = getWorld();
     const maxEntities = MAX_ENTITIES;
 
     for (let i = 0; i < maxEntities; i++) {
@@ -112,6 +114,7 @@ export class PhysicsCoordinator {
     lastUpdateTime: number;
   } {
     let activeEntities = 0;
+    const w = getWorld();
     const maxEntities = MAX_ENTITIES;
 
     for (let i = 0; i < maxEntities; i++) {

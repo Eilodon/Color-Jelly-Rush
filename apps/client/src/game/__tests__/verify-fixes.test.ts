@@ -23,7 +23,7 @@ import { entityManager } from '../engine/dod/EntityManager';
 import { createInitialState } from '../engine/index';
 import { createPlayer, createFood, createBot } from '../engine/factories';
 
-const w = defaultWorld;
+// EIDOLON-V: Migrated to getWorld() accessor - add const w = getWorld(); in functions
 
 describe('EntityFlags Fix Verification', () => {
   it('DEAD and OBSTACLE should have different bit values', () => {

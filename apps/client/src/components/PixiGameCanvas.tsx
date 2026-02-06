@@ -12,8 +12,8 @@ import {
 import { GameState } from '../types';
 import { JELLY_VERTEX, JELLY_FRAGMENT, JellyShaderResources } from '../game/cjr/shaders';
 import { MAP_RADIUS, COLOR_PALETTE_HEX, RING_RADII } from '../constants';
-import { getPhysicsWorld } from '../game/engine/context';
-import { TransformStore, PhysicsStore, defaultWorld, EntityFlags } from '@cjr/engine';
+import { getPhysicsWorld, getWorld } from '../game/engine/context';
+import { TransformStore, PhysicsStore, EntityFlags } from '@cjr/engine';
 import { visualStore } from '../game/engine/systems/VisualSystem';
 
 const STRIDE = TransformStore.STRIDE;
@@ -257,8 +257,9 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
         unitPoolRef.current!.reset();
         projectilePoolRef.current!.reset();
 
-        const tData = defaultWorld.transform;
-        const pData = defaultWorld.physics;
+        const w = getWorld();
+        const tData = w.transform;
+        const pData = w.physics;
         const idToIndex = getPhysicsWorld().idToIndex;
         const interpAlpha = alphaRef.current;
 
@@ -271,7 +272,7 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
         const CULL_MARGIN = 100;
 
         // EIDOLON-V: DOD Render Path using Sparse Set
-        const dodWorld = defaultWorld;
+        const dodWorld = w;
         const activeEntities = dodWorld.activeEntities;
         const activeCount = dodWorld.activeCount;
         const stateFlags = dodWorld.stateFlags;

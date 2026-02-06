@@ -1,8 +1,7 @@
 import { Bot, Player, GameState, Food, Entity } from '../../types';
 import { RING_RADII } from '../../constants';
-import { getCurrentSpatialGrid } from '../engine/context';
-import { TransformStore, PhysicsStore, defaultWorld } from '@cjr/engine';
-const w = defaultWorld;
+import { getCurrentSpatialGrid, getWorld } from '../engine/context';
+import { TransformStore, PhysicsStore } from '@cjr/engine';
 import { PRNG } from '../math/FastMath';
 /**
  * BOT PERSONALITIES - PR15
@@ -25,6 +24,7 @@ interface PersonalityBehavior {
 // EIDOLON-V: DOD helpers for bot personalities
 const getPos = (e: Entity) => {
   if (e.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = e.physicsIndex * 8;
     return { x: w.transform[idx], y: w.transform[idx + 1] };
   }
@@ -33,6 +33,7 @@ const getPos = (e: Entity) => {
 
 const setBotVel = (bot: Bot, vx: number, vy: number) => {
   if (bot.physicsIndex !== undefined) {
+    const w = getWorld();
     const idx = bot.physicsIndex * 8;
     w.physics[idx] = vx;
     w.physics[idx + 1] = vy;

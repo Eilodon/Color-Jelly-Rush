@@ -1,11 +1,12 @@
 // EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
-import { TattooStore, StatsStore, StateStore, defaultWorld } from '@cjr/engine';
+import { TattooStore, StatsStore, StateStore } from '@cjr/engine';
+import { getWorld } from '../../context';
 import { MAX_ENTITIES, EntityFlags } from '@cjr/engine';
 import { TattooFlag } from '../../statusFlags';
-const w = defaultWorld;
 
 export class TattooSystem {
   static update(dt: number) {
+    const w = getWorld();
     const count = MAX_ENTITIES;
     const flags = w.stateFlags;
     const tFlags = TattooStore.flags;
@@ -27,7 +28,7 @@ export class TattooSystem {
       // }
 
       // 2. Timers
-      const idx = id * TattooStore.STRIDE;
+      const idx = id * 4; // TattooStore uses STRIDE=4
       // Example active effect timer logic
     }
   }

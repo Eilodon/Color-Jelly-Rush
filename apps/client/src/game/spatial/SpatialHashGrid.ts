@@ -3,7 +3,8 @@
 
 import { fastMath } from '../math/FastMath';
 import { Entity } from '../../types';
-import { TransformStore, PhysicsStore, EntityLookup, defaultWorld } from '@cjr/engine';
+import { TransformStore, PhysicsStore, EntityLookup } from '@cjr/engine';
+import { getWorld } from '../engine/context';
 
 // EIDOLON-V P0 FIX: __DEV__ guard for hot path warnings
 declare const __DEV__: boolean;
@@ -20,8 +21,6 @@ const warnOnce = (msg: string, data?: unknown) => {
     }
   }
 };
-
-const w = defaultWorld;
 
 export interface SpatialHashConfig {
   worldSize: number;
@@ -136,6 +135,7 @@ export class SpatialHashGrid {
 
     // Validate TransformStore bounds
     const tIdx = entityIndex * 8;
+    const w = getWorld();
     if (tIdx + 1 >= w.transform.length) {
       warnOnce('SpatialHashGrid.add: TransformStore index out of bounds', {
         entityIndex,
@@ -146,8 +146,8 @@ export class SpatialHashGrid {
     }
 
     // Read entity position
-    const x = w.transform[tIdx];
-    const y = w.transform[tIdx + 1];
+    const x = getWorld().transform[tIdx];
+    const y = getWorld().transform[tIdx + 1];
 
     // Validate position
     if (!isFinite(x) || !isFinite(y)) {
@@ -242,6 +242,7 @@ export class SpatialHashGrid {
     this.getCellsForBounds(x - radius, x + radius, y - radius, y + radius, this.tempCellArray);
 
     const radiusSq = radius * radius;
+    const w = getWorld();
     const tData = w.transform;
     const pData = w.physics;
 
@@ -412,6 +413,7 @@ export class SpatialHashGrid {
     if (idx === undefined) return [];
 
     const tIdx = idx * 8;
+    const w = getWorld();
     const x = w.transform[tIdx];
     const y = w.transform[tIdx + 1];
 

@@ -4,6 +4,8 @@
  * Source: packages/engine/scripts/schema.config.js
  */
 
+import { EntityFlags } from './ComponentAccessors';
+
 export const MAX_ENTITIES = 10000;
 
 export interface IWorldBuffers {
@@ -166,10 +168,12 @@ export class WorldState {
     }
 
     /**
-     * Check if entity ID is valid
+     * Check if entity ID is valid AND ACTIVE
+     * P3-2 FIX: Also checks ACTIVE flag to prevent reading stale data
      */
     isValidEntityId(id: number): boolean {
-        return id >= 0 && id < this.maxEntities;
+        return id >= 0 && id < this.maxEntities &&
+            (this.stateFlags[id] & EntityFlags.ACTIVE) !== 0;
     }
 }
 

@@ -113,8 +113,8 @@ export class Vector2Pool {
 }
 
 import { entityManager } from '../engine/dod/EntityManager';
-import { StateStore, EntityLookup, EntityFlags, defaultWorld } from '@cjr/engine';
-const w = defaultWorld;
+import { StateStore, EntityLookup, EntityFlags } from '@cjr/engine';
+import { getWorld } from '../engine/context';
 
 export class EntityPoolManager {
   private static instance: EntityPoolManager;
@@ -208,6 +208,7 @@ export class PooledEntityFactory {
         reset() {
           // EIDOLON-V FIX: Release DOD Index
           if (this.physicsIndex !== undefined) {
+            const w = getWorld();
             StateStore.clearFlag(w, this.physicsIndex, EntityFlags.ACTIVE);
             EntityLookup[this.physicsIndex] = null;
             entityManager.removeEntity(this.physicsIndex);
@@ -258,6 +259,7 @@ export class PooledEntityFactory {
         reset() {
           // EIDOLON-V FIX: Release DOD Index
           if (this.physicsIndex !== undefined) {
+            const w = getWorld();
             StateStore.clearFlag(w, this.physicsIndex, EntityFlags.ACTIVE);
             EntityLookup[this.physicsIndex] = null;
             entityManager.removeEntity(this.physicsIndex);

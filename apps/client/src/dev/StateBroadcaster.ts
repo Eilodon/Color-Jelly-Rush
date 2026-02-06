@@ -7,9 +7,8 @@ import {
     EntityFlags,
     MAX_ENTITIES,
     EntityLookup,
-    defaultWorld
 } from '@cjr/engine';
-const w = defaultWorld;
+import { getWorld } from '../game/engine/context';
 
 interface EntitySnapshot {
     id: number; // Index
@@ -84,6 +83,7 @@ export class StateBroadcaster {
     }
 
     private captureSnapshot() {
+        const w = getWorld();
         const entities: EntitySnapshot[] = [];
         const tData = w.transform;
         const pData = w.physics;
