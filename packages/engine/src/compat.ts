@@ -193,10 +193,18 @@ export class StateStore {
     }
 
     static setFlag(world: WorldState, id: number, flag: number): void {
+        // EIDOLON-V FIX: If setting ACTIVE flag, also add to Sparse Set
+        if ((flag & GeneratedEntityFlags.ACTIVE) !== 0) {
+            StateAccess.activate(world, id);
+        }
         StateAccess.setFlag(world, id, flag);
     }
 
     static clearFlag(world: WorldState, id: number, flag: number): void {
+        // EIDOLON-V FIX: If clearing ACTIVE flag, also remove from Sparse Set
+        if ((flag & GeneratedEntityFlags.ACTIVE) !== 0) {
+            StateAccess.deactivate(world, id);
+        }
         StateAccess.clearFlag(world, id, flag);
     }
 }

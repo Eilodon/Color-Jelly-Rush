@@ -46,6 +46,8 @@ export const randomPigment = (): PigmentVec3 => ({
 
 import { ConfigStore, InputStore } from '@cjr/engine';
 import { pigmentToInt, intToHex, hexToInt } from '../cjr/colorMath'; // EIDOLON-V: Import color helper
+import { visualSystem } from './systems/VisualSystem';
+import { ShapeId as VisualShapeId } from './systems/VisualSystem';
 
 export const createPlayer = (
   name: string,
@@ -207,6 +209,9 @@ export const createPlayer = (
   // EIDOLON-V FIX: Zero-Copy Live View (SSOT)
   bindToLiveView(player, entId);
 
+  // EIDOLON-V: Visual System Integration
+  visualSystem.onEntitySpawn(entId, pigmentToInt(pigment), shapeId);
+
   return player;
 };
 
@@ -351,6 +356,10 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   // EIDOLON-V FIX: Zero-Copy Live View (SSOT)
   bindToLiveView(bot, entId);
 
+  // EIDOLON-V: Visual System Integration
+  // Bots use circle shape by default (ShapeId.CIRCLE = 0)
+  visualSystem.onEntitySpawn(entId, pigmentToInt(pigment), VisualShapeId.CIRCLE);
+
   return bot;
 };
 
@@ -471,6 +480,20 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   // EIDOLON-V FIX: Zero-Copy Live View (SSOT)
   bindToLiveView(food, entId);
 
+  // EIDOLON-V: Visual System Integration
+  let shape: number = VisualShapeId.CIRCLE;
+  let colorInt = pigmentToInt(pigment);
+
+  if (food.kind === 'catalyst') {
+    shape = VisualShapeId.HEX;
+    colorInt = 0xd946ef;
+  } else if (food.kind === 'shield') {
+    shape = VisualShapeId.SQUARE; // Using SQUARE for shield visual
+    colorInt = 0xfbbf24;
+  }
+
+  visualSystem.onEntitySpawn(entId, colorInt, shape);
+
   return food;
 };
 
@@ -559,6 +582,15 @@ export const createProjectile = (
 
   // EIDOLON-V FIX: Zero-Copy Live View (SSOT)
   bindToLiveView(projectile, entId);
+
+  // EIDOLON-V: Visual System Integration
+  // Projectiles use circle shape
+  let colorInt = 0xffffff;
+  const rawColor = (projectile as any).color;
+  if (typeof rawColor === 'string') {
+    colorInt = hexToInt(rawColor);
+  }
+  visualSystem.onEntitySpawn(entId, colorInt, VisualShapeId.CIRCLE);
 
   return projectile;
 };

@@ -13,7 +13,8 @@ import { GameState } from '../types';
 import { JELLY_VERTEX, JELLY_FRAGMENT, JellyShaderResources } from '../game/cjr/shaders';
 import { MAP_RADIUS, COLOR_PALETTE_HEX, RING_RADII } from '../constants';
 import { getPhysicsWorld } from '../game/engine/context';
-import { TransformStore, PhysicsStore } from '@cjr/engine';
+import { TransformStore, PhysicsStore, defaultWorld, EntityFlags } from '@cjr/engine';
+import { visualStore } from '../game/engine/systems/VisualSystem';
 
 const STRIDE = TransformStore.STRIDE;
 const X_OFFSET = 0;
@@ -262,98 +263,108 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
         const interpAlpha = alphaRef.current;
 
         // D. Render Food
-        // EIDOLON-V OPTIMIZATION: Viewport Culling
+        // EIDOLON-V OPTIMIZATION: DOD Sparse Set Iteration + Viewport Culling
         const viewX = camX - window.innerWidth / 2;
         const viewY = camY - window.innerHeight / 2;
         const viewW = window.innerWidth;
         const viewH = window.innerHeight;
         const CULL_MARGIN = 100;
 
-        for (const f of state.food) {
-          if (f.isDead) continue;
+        // EIDOLON-V: DOD Render Path using Sparse Set
+        const dodWorld = defaultWorld;
+        const activeEntities = dodWorld.activeEntities;
+        const activeCount = dodWorld.activeCount;
+        const stateFlags = dodWorld.stateFlags;
+        const transformData = dodWorld.transform;
+        const physicsData = dodWorld.physics;
+        const TRANSFORM_STRIDE = 8; // x,y,rot,scale,prevX,prevY,prevRot,pad
+        const PHYSICS_STRIDE = 8;   // vx,vy,friction,mass,radius,restitution,friction,pad
 
-          // Pre-check culling (using raw pos or approximated)
-          // Simple AABB check against viewport
-          if (
-            f.position.x < viewX - CULL_MARGIN ||
-            f.position.x > viewX + viewW + CULL_MARGIN ||
-            f.position.y < viewY - CULL_MARGIN ||
-            f.position.y > viewY + viewH + CULL_MARGIN
-          ) {
+        // Render FOOD entities from Sparse Set
+        for (let i = 0; i < activeCount; i++) {
+          const id = activeEntities[i];
+          const flags = stateFlags[id];
+
+          // Skip non-food entities
+          if ((flags & EntityFlags.FOOD) === 0) continue;
+
+          // Get transform data
+          const tBase = id * TRANSFORM_STRIDE;
+          const currX = transformData[tBase];     // x
+          const currY = transformData[tBase + 1]; // y
+          const prevX = transformData[tBase + 4]; // prevX
+          const prevY = transformData[tBase + 5]; // prevY
+
+          // Interpolate position
+          const fx = prevX + (currX - prevX) * interpAlpha;
+          const fy = prevY + (currY - prevY) * interpAlpha;
+
+          // Viewport culling
+          if (fx < viewX - CULL_MARGIN || fx > viewX + viewW + CULL_MARGIN ||
+            fy < viewY - CULL_MARGIN || fy > viewY + viewH + CULL_MARGIN) {
             continue;
           }
 
+          // Get radius from physics
+          const pBase = id * PHYSICS_STRIDE;
+          const fr = physicsData[pBase + 4]; // radius
+
+          // Get visual data
+          const color = visualStore.color[id];
+          const shape = visualStore.shape[id];
+
           const gfx = foodPoolRef.current!.get();
-          const idx = f.physicsIndex ?? idToIndex.get(f.id);
-          let fx = f.position.x;
-          let fy = f.position.y;
-          let fr = f.radius;
-          if (idx !== undefined) {
-            const base = idx * STRIDE;
-            const currX = tData[base + X_OFFSET];
-            const currY = tData[base + Y_OFFSET];
-            const prevX = tData[base + PREV_X_OFFSET];
-            const prevY = tData[base + PREV_Y_OFFSET];
-            fx = prevX + (currX - prevX) * interpAlpha;
-            fy = prevY + (currY - prevY) * interpAlpha;
-            fr = pData[base + RADIUS_OFFSET];
-          }
           gfx.position.set(fx, fy);
           gfx.clear();
 
-          // Style by kind
-          if (f.kind === 'catalyst') {
+          // Render based on shape (hex=catalyst, square=shield, circle=default)
+          if (shape === 3) { // HEX = catalyst
             gfx.regularPoly(0, 0, fr, 6);
             gfx.fill(0xd946ef);
-          } else if (f.kind === 'shield') {
+          } else if (shape === 1) { // SQUARE = shield
             gfx.rect(-fr, -fr, fr * 2, fr * 2);
             gfx.fill(0xfbbf24);
-          } else {
+          } else { // CIRCLE = default pigment
             gfx.circle(0, 0, fr);
-            gfx.fill(f.color);
+            gfx.fill(color);
           }
         }
 
-        // E. Render Units (Player + Bots)
-        const units = [state.player, ...state.bots];
-        for (const u of units) {
-          if (!u || u.isDead) continue;
+        // E. Render Units (Player + Bots - DOD)
+        for (let i = 0; i < activeCount; i++) {
+          const id = activeEntities[i];
+          const flags = stateFlags[id];
 
-          // Culling for units
-          if (
-            u.position.x < viewX - CULL_MARGIN ||
-            u.position.x > viewX + viewW + CULL_MARGIN ||
-            u.position.y < viewY - CULL_MARGIN ||
-            u.position.y > viewY + viewH + CULL_MARGIN
-          ) {
+          if ((flags & (EntityFlags.PLAYER | EntityFlags.BOT)) === 0) continue;
+
+          // Get transform
+          const tBase = id * TRANSFORM_STRIDE;
+          const currX = transformData[tBase];
+          const currY = transformData[tBase + 1];
+          const prevX = transformData[tBase + 4];
+          const prevY = transformData[tBase + 5];
+
+          const ux = prevX + (currX - prevX) * interpAlpha;
+          const uy = prevY + (currY - prevY) * interpAlpha;
+
+          // Culling
+          if (ux < viewX - CULL_MARGIN || ux > viewX + viewW + CULL_MARGIN ||
+            uy < viewY - CULL_MARGIN || uy > viewY + viewH + CULL_MARGIN) {
             continue;
           }
 
-          const idx = u.physicsIndex ?? idToIndex.get(u.id);
-          let ux = u.position.x;
-          let uy = u.position.y;
-          let ur = u.radius;
-          if (idx !== undefined) {
-            const base = idx * STRIDE;
-            const currX = tData[base + X_OFFSET];
-            const currY = tData[base + Y_OFFSET];
-            const prevX = tData[base + PREV_X_OFFSET];
-            const prevY = tData[base + PREV_Y_OFFSET];
-            ux = prevX + (currX - prevX) * interpAlpha;
-            uy = prevY + (currY - prevY) * interpAlpha;
-            ur = pData[base + RADIUS_OFFSET];
-          }
+          const pBase = id * PHYSICS_STRIDE;
+          const ur = physicsData[pBase + 4];
+          const color = visualStore.color[id];
 
-          // EIDOLON-V FIX: Use Graphics API to draw jelly (shader matrices fixed later)
+          // Use Graphics API to draw jelly
           const gfx = unitPoolRef.current!.get() as unknown as Graphics;
           gfx.position.set(ux, uy);
           gfx.clear();
 
-          // Extract color from integer
-          const color = u.color as number;
-
-          // Draw jelly body with gradient effect
-          const energy = u.currentHealth / u.maxHealth;
+          // Energy/Health calc from Stats if needed, for simplicity we use 100% effect or fallback
+          // (Optimization: Add StatsStore buffer access if precise energy needed)
+          const energy = 1.0;
 
           // Outer glow
           gfx.circle(0, 0, ur * 1.1);
@@ -371,28 +382,39 @@ const PixiGameCanvas: React.FC<PixiGameCanvasProps> = ({ gameStateRef, alphaRef 
           }
         }
 
-        // F. Render Projectiles
-        for (const p of state.projectiles) {
-          if (p.isDead) continue;
-          const gfx = projectilePoolRef.current!.get();
-          const idx = p.physicsIndex ?? idToIndex.get(p.id);
-          let px = p.position.x;
-          let py = p.position.y;
-          let pr = p.radius;
-          if (idx !== undefined) {
-            const base = idx * STRIDE;
-            const currX = tData[base + X_OFFSET];
-            const currY = tData[base + Y_OFFSET];
-            const prevX = tData[base + PREV_X_OFFSET];
-            const prevY = tData[base + PREV_Y_OFFSET];
-            px = prevX + (currX - prevX) * interpAlpha;
-            py = prevY + (currY - prevY) * interpAlpha;
-            pr = pData[base + RADIUS_OFFSET];
+        // F. Render Projectiles (DOD)
+        for (let i = 0; i < activeCount; i++) {
+          const id = activeEntities[i];
+          const flags = stateFlags[id];
+
+          if ((flags & EntityFlags.PROJECTILE) === 0) continue;
+
+          // Get transform
+          const tBase = id * TRANSFORM_STRIDE;
+          const currX = transformData[tBase];
+          const currY = transformData[tBase + 1];
+          const prevX = transformData[tBase + 4];
+          const prevY = transformData[tBase + 5];
+
+          const px = prevX + (currX - prevX) * interpAlpha;
+          const py = prevY + (currY - prevY) * interpAlpha;
+
+          // Culling
+          if (px < viewX - CULL_MARGIN || px > viewX + viewW + CULL_MARGIN ||
+            py < viewY - CULL_MARGIN || py > viewY + viewH + CULL_MARGIN) {
+            continue;
           }
+
+          const pBase = id * PHYSICS_STRIDE;
+          const pr = physicsData[pBase + 4];
+          // const color = visualStore.color[id];
+
+          const gfx = projectilePoolRef.current!.get();
           gfx.position.set(px, py);
           gfx.clear();
+
           gfx.circle(0, 0, pr);
-          gfx.fill(0xff0000);
+          gfx.fill(0xffffff); // White projectiles 
         }
       });
     };
