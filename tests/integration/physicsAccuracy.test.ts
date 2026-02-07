@@ -123,7 +123,7 @@ describe('Physics Accuracy', () => {
       TransformStore.set(w, entityId, startX, startY, 0, 1);
       PhysicsStore.set(w, entityId, 0, 0, 100, 28);
       InputStore.setTarget(w, entityId, targetX, targetY);
-      ConfigStore.setMaxSpeed(entityId, 150);
+      ConfigStore.setMaxSpeed(w, entityId, 150);
       StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
 
       const initialDist = Math.abs(targetX - startX);
@@ -169,8 +169,8 @@ describe('Physics Accuracy', () => {
       TransformStore.set(w, entityId, 0, 0, 0, 1);
       PhysicsStore.set(w, entityId, 0, 0, 100, 28);
       InputStore.setTarget(w, entityId, 1000, 0);
-      ConfigStore.setMaxSpeed(entityId, baseMaxSpeed);
-      ConfigStore.setSpeedMultiplier(entityId, speedMultiplier);
+      ConfigStore.setMaxSpeed(w, entityId, baseMaxSpeed);
+      ConfigStore.setSpeedMultiplier(w, entityId, speedMultiplier);
       StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
 
       // Accelerate towards target
@@ -199,7 +199,7 @@ describe('Physics Accuracy', () => {
         TransformStore.set(w, entityId, 100, 200, 0, 1);
         PhysicsStore.set(w, entityId, 50, 30, 100, 28);
         InputStore.setTarget(w, entityId, 500, 400);
-        ConfigStore.setMaxSpeed(entityId, 150);
+        ConfigStore.setMaxSpeed(w, entityId, 150);
         StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
 
         // Run for 2 seconds
@@ -263,7 +263,7 @@ describe('Physics Accuracy', () => {
         TransformStore.set(w, i, i * 100, 0, 0, 1);
         PhysicsStore.set(w, i, 10 * (i + 1), 0, 100, 28);
         InputStore.setTarget(w, i, 1000, i * 50);
-        ConfigStore.setMaxSpeed(i, 100 + i * 10);
+        ConfigStore.setMaxSpeed(w, i, 100 + i * 10);
         StateStore.setFlag(w, i, EntityFlags.ACTIVE);
       }
 
@@ -294,7 +294,7 @@ describe('Performance', () => {
       TransformStore.set(w, i, Math.random() * 1000, Math.random() * 1000, 0, 1);
       PhysicsStore.set(w, i, Math.random() * 50, Math.random() * 50, 100, 28);
       InputStore.setTarget(w, i, Math.random() * 1000, Math.random() * 1000);
-      ConfigStore.setMaxSpeed(i, 150);
+      ConfigStore.setMaxSpeed(w, i, 150);
       StateStore.setFlag(w, i, EntityFlags.ACTIVE);
     }
 

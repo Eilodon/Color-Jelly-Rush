@@ -5,13 +5,10 @@
  */
 
 import { TransformStore, PhysicsStore } from '../../compat';
-import { defaultWorld } from '../../generated/WorldState';
+import { WorldState, defaultWorld } from '../../generated/WorldState';
 import { RING_RADII, RING_RADII_SQ, THRESHOLDS, COMMIT_BUFFS } from './constants';
 import { fastMath } from '../../math/FastMath';
 import type { RingId } from './types';
-
-// EIDOLON-V AUDIT: Cache world reference for DOD store access
-const w = defaultWorld;
 
 /**
  * Entity interface for ring system operations
@@ -30,43 +27,44 @@ export interface IRingEntity {
 }
 
 // DOD helpers for ring system
-const getEntityPos = (entity: IRingEntity, out: { x: number; y: number }) => {
+// EIDOLON-V P1 FIX: Accept WorldState parameter instead of module-level singleton
+const getEntityPos = (world: WorldState, entity: IRingEntity, out: { x: number; y: number }) => {
     if (entity.physicsIndex !== undefined) {
         const idx = entity.physicsIndex * 8;
-        out.x = w.transform[idx];
-        out.y = w.transform[idx + 1];
+        out.x = world.transform[idx];
+        out.y = world.transform[idx + 1];
     } else {
         out.x = entity.position.x;
         out.y = entity.position.y;
     }
 };
 
-const getEntityVel = (entity: IRingEntity, out: { x: number; y: number }) => {
+const getEntityVel = (world: WorldState, entity: IRingEntity, out: { x: number; y: number }) => {
     if (entity.physicsIndex !== undefined) {
         const idx = entity.physicsIndex * 8;
-        out.x = w.physics[idx];
-        out.y = w.physics[idx + 1];
+        out.x = world.physics[idx];
+        out.y = world.physics[idx + 1];
     } else {
         out.x = entity.velocity.x;
         out.y = entity.velocity.y;
     }
 };
 
-const setEntityVel = (entity: IRingEntity, vx: number, vy: number) => {
+const setEntityVel = (world: WorldState, entity: IRingEntity, vx: number, vy: number) => {
     if (entity.physicsIndex !== undefined) {
         const idx = entity.physicsIndex * 8;
-        w.physics[idx] = vx;
-        w.physics[idx + 1] = vy;
+        world.physics[idx] = vx;
+        world.physics[idx + 1] = vy;
     }
     entity.velocity.x = vx;
     entity.velocity.y = vy;
 };
 
-const setEntityPos = (entity: IRingEntity, x: number, y: number) => {
+const setEntityPos = (world: WorldState, entity: IRingEntity, x: number, y: number) => {
     if (entity.physicsIndex !== undefined) {
         const idx = entity.physicsIndex * 8;
-        w.transform[idx] = x;
-        w.transform[idx + 1] = y;
+        world.transform[idx] = x;
+        world.transform[idx + 1] = y;
     }
     entity.position.x = x;
     entity.position.y = y;
@@ -87,16 +85,18 @@ export const getRingAtPosition = (x: number, y: number): RingId => {
 
 /**
  * Main update function for ring logic
+ * EIDOLON-V P1 FIX: Added optional world parameter for instance-based architecture
  */
 export const updateRingLogic = (
     entity: IRingEntity,
     _dt: number,
-    _levelConfig: unknown
+    _levelConfig: unknown,
+    world: WorldState = defaultWorld
 ): { transitioned: boolean; newRing?: RingId } => {
     if (entity.isDead) return { transitioned: false };
 
     if ('matchPercent' in entity) {
-        return checkRingTransition(entity);
+        return checkRingTransition(entity, world);
     }
     return { transitioned: false };
 };
@@ -106,12 +106,14 @@ export const updateRingLogic = (
  * Enforces one-way commit logic.
  * Returns transition info for event emission by caller
  * EIDOLON-V OPTIMIZED: Uses pre-computed squares
+ * EIDOLON-V P1 FIX: Added world parameter for instance-based architecture
  */
 export const checkRingTransition = (
-    entity: IRingEntity
+    entity: IRingEntity,
+    world: WorldState = defaultWorld
 ): { transitioned: boolean; newRing?: RingId } => {
     const pos = { x: 0, y: 0 };
-    getEntityPos(entity, pos);
+    getEntityPos(world, entity, pos);
 
     const distSq = pos.x * pos.x + pos.y * pos.y;
 
@@ -123,7 +125,7 @@ export const checkRingTransition = (
                 applyCommitBuff(entity, COMMIT_BUFFS.R2);
                 return { transitioned: true, newRing: 2 };
             } else {
-                applyElasticRejection(entity, RING_RADII.R2, 50);
+                applyElasticRejection(entity, RING_RADII.R2, 50, world);
             }
         }
     }
@@ -136,19 +138,19 @@ export const checkRingTransition = (
                 applyCommitBuff(entity, COMMIT_BUFFS.R3);
                 return { transitioned: true, newRing: 3 };
             } else {
-                applyElasticRejection(entity, RING_RADII.R3, 50);
+                applyElasticRejection(entity, RING_RADII.R3, 50, world);
             }
         }
         // Keep in Ring 2
         else if (distSq > RING_RADII_SQ.R2) {
-            clampToRingOuter(entity, RING_RADII.R2);
+            clampToRingOuter(entity, RING_RADII.R2, world);
         }
     }
 
     // Ring 3 - cannot leave
     else if (entity.ring === 3) {
         if (distSq > RING_RADII_SQ.R3) {
-            clampToRingOuter(entity, RING_RADII.R3);
+            clampToRingOuter(entity, RING_RADII.R3, world);
         }
     }
 
@@ -174,19 +176,20 @@ const applyCommitBuff = (
 const applyElasticRejection = (
     entity: IRingEntity,
     radiusLimit: number,
-    thickness: number
+    thickness: number,
+    world: WorldState
 ) => {
     const pos = { x: 0, y: 0 };
     const vel = { x: 0, y: 0 };
-    getEntityPos(entity, pos);
-    getEntityVel(entity, vel);
+    getEntityPos(world, entity, pos);
+    getEntityVel(world, entity, vel);
 
     const distSq = pos.x * pos.x + pos.y * pos.y;
     const dist = fastMath.fastSqrt(distSq);
     const penetration = radiusLimit - dist;
 
     if (dist > radiusLimit + thickness) {
-        clampToRingOuter(entity, radiusLimit + thickness);
+        clampToRingOuter(entity, radiusLimit + thickness, world);
         return;
     }
 
@@ -206,14 +209,14 @@ const applyElasticRejection = (
     const dampedVx = newVx * (1 - c);
     const dampedVy = newVy * (1 - c);
 
-    setEntityVel(entity, dampedVx, dampedVy);
+    setEntityVel(world, entity, dampedVx, dampedVy);
 };
 
-const clampToRingOuter = (entity: IRingEntity, radiusLimit: number) => {
+const clampToRingOuter = (entity: IRingEntity, radiusLimit: number, world: WorldState) => {
     const pos = { x: 0, y: 0 };
     const vel = { x: 0, y: 0 };
-    getEntityPos(entity, pos);
-    getEntityVel(entity, vel);
+    getEntityPos(world, entity, pos);
+    getEntityVel(world, entity, vel);
 
     const angle = Math.atan2(pos.y, pos.x);
     const safeR = radiusLimit - 2;
@@ -221,7 +224,7 @@ const clampToRingOuter = (entity: IRingEntity, radiusLimit: number) => {
     const newX = Math.cos(angle) * safeR;
     const newY = Math.sin(angle) * safeR;
 
-    setEntityPos(entity, newX, newY);
+    setEntityPos(world, entity, newX, newY);
 
     const nx = Math.cos(angle);
     const ny = Math.sin(angle);
@@ -229,7 +232,7 @@ const clampToRingOuter = (entity: IRingEntity, radiusLimit: number) => {
     if (dotProduct > 0) {
         const newVx = vel.x - dotProduct * nx;
         const newVy = vel.y - dotProduct * ny;
-        setEntityVel(entity, newVx, newVy);
+        setEntityVel(world, entity, newVx, newVy);
     }
 };
 

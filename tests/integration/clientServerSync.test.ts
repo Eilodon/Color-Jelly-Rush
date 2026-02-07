@@ -1,6 +1,8 @@
 /**
  * Integration Tests: Client-Server Sync
  * Tests authoritative server physics sync with client prediction
+ * 
+ * EIDOLON-V REFACTOR: Updated to use new SchemaBinaryPacker API
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -20,9 +22,10 @@ import {
   THRESHOLDS,
   checkRingTransition,
   defaultWorld,
+  StateAccess,
 } from '@cjr/engine';
-// EIDOLON-V AUDIT FIX: BinaryPacker was deleted, replaced by SchemaBinaryPacker in networking subpath
-import { SchemaBinaryPacker as BinaryPacker } from '@cjr/engine/networking';
+// EIDOLON-V AUDIT FIX: Use new SchemaBinaryPacker API
+import { SchemaBinaryPacker } from '@cjr/engine/networking';
 
 const w = defaultWorld;
 
@@ -32,69 +35,40 @@ describe('Client-Server Sync', () => {
   });
 
   describe('Entity State Sync', () => {
-    it('should sync position from TransformStore to network buffer', () => {
+    it('should pack transform data from WorldState to binary buffer', () => {
       // Setup: Create entity at position (100, 200)
       const entityId = 0;
       TransformStore.set(w, entityId, 100, 200, 0, 1);
       PhysicsStore.set(w, entityId, 50, 0, 100, 28);
-      StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
+      StateAccess.activate(w, entityId);
 
-      // Pack transform for network
-      const updates = [{
-        id: 'player1',
-        x: TransformStore.getX(w, entityId),
-        y: TransformStore.getY(w, entityId),
-        vx: PhysicsStore.getVelocityX(w, entityId),
-        vy: PhysicsStore.getVelocityY(w, entityId),
-      }];
-
-      const buffer = BinaryPacker.packTransforms(updates, 0);
+      // Pack transform using new API
+      const buffer = SchemaBinaryPacker.packTransformSnapshot(w, 0);
       expect(buffer).toBeDefined();
       expect(buffer.byteLength).toBeGreaterThan(0);
 
-      // Unpack and verify
-      let unpackedX = 0, unpackedY = 0, unpackedVx = 0;
-      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
-        expect(id).toBe('player1');
-        unpackedX = x;
-        unpackedY = y;
-        unpackedVx = vx;
-      });
-
-      expect(unpackedX).toBeCloseTo(100, 3);
-      expect(unpackedY).toBeCloseTo(200, 3);
-      expect(unpackedVx).toBeCloseTo(50, 3);
+      // Verify buffer contains header + at least one entity
+      // Header: Type(1) + Timestamp(4) + Count(2) = 7 bytes
+      // Per entity: ID(2) + X(4) + Y(4) = 10 bytes
+      expect(buffer.byteLength).toBe(7 + 10);
     });
 
     it('should handle multiple entity sync', () => {
       const entityCount = 5;
-      const updates: { id: string; x: number; y: number; vx: number; vy: number }[] = [];
 
       // Create multiple entities
       for (let i = 0; i < entityCount; i++) {
         TransformStore.set(w, i, i * 100, i * 50, 0, 1);
         PhysicsStore.set(w, i, i * 10, i * 5, 100, 28);
-        StateStore.setFlag(w, i, EntityFlags.ACTIVE);
-
-        updates.push({
-          id: `player${i}`,
-          x: TransformStore.getX(w, i),
-          y: TransformStore.getY(w, i),
-          vx: PhysicsStore.getVelocityX(w, i),
-          vy: PhysicsStore.getVelocityY(w, i),
-        });
+        StateAccess.activate(w, i);
       }
 
-      const buffer = BinaryPacker.packTransforms(updates, 0);
-      const receivedUpdates: any[] = [];
+      const buffer = SchemaBinaryPacker.packTransformSnapshot(w, 0);
 
-      BinaryPacker.unpackAndApply(buffer, (id, x, y, vx, vy) => {
-        receivedUpdates.push({ id, x, y, vx, vy });
-      });
-
-      expect(receivedUpdates.length).toBe(entityCount);
-      expect(receivedUpdates[0].id).toBe('player0');
-      expect(receivedUpdates[4].id).toBe('player4');
+      // Should pack all 5 entities
+      // Header: 7 bytes
+      // Per entity: 10 bytes * 5 = 50 bytes
+      expect(buffer.byteLength).toBe(7 + 10 * entityCount);
     });
   });
 
@@ -107,8 +81,8 @@ describe('Client-Server Sync', () => {
       TransformStore.set(w, entityId, startX, startY, 0, 1);
       PhysicsStore.set(w, entityId, 0, 0, 100, 28);
       InputStore.setTarget(w, entityId, 500, 0); // Target at (500, 0)
-      ConfigStore.setMaxSpeed(entityId, 150);
-      StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
+      ConfigStore.setMaxSpeed(w, entityId, 150);
+      StateAccess.activate(w, entityId);
 
       // Run physics for 60 frames (1 second at 60fps)
       for (let i = 0; i < 60; i++) {
@@ -129,8 +103,8 @@ describe('Client-Server Sync', () => {
       TransformStore.set(w, entityId, 0, 0, 0, 1);
       PhysicsStore.set(w, entityId, 0, 0, 100, 28);
       InputStore.setTarget(w, entityId, 1000, 0);
-      ConfigStore.setMaxSpeed(entityId, maxSpeed);
-      StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
+      ConfigStore.setMaxSpeed(w, entityId, maxSpeed);
+      StateAccess.activate(w, entityId);
 
       // Apply movement
       MovementSystem.update(w, entityId, 1 / 60);
@@ -206,7 +180,7 @@ describe('Client-Server Sync', () => {
       TransformStore.set(w, entityId, 0, 0, 0, 1);
       // Set velocity above limit (simulating client hack)
       PhysicsStore.set(w, entityId, 200, 0, 100, 28);
-      StateStore.setFlag(w, entityId, EntityFlags.ACTIVE);
+      StateAccess.activate(w, entityId);
 
       const vx = PhysicsStore.getVelocityX(w, entityId);
       const vy = PhysicsStore.getVelocityY(w, entityId);
@@ -232,22 +206,57 @@ describe('Client-Server Sync', () => {
 });
 
 describe('Network Protocol', () => {
-  it('should pack and unpack events correctly', () => {
-    const events = [
-      { type: 1, entityId: 'player1', data: 100, x: 50, y: 75 },
-      { type: 2, entityId: 'player2', data: 50, x: 100, y: 200 },
-    ];
+  beforeEach(() => {
+    resetAllStores();
+  });
 
-    const buffer = BinaryPacker.packEvents(events, 1234);
-    const receivedEvents: any[] = [];
+  it('should pack binary buffer with correct header format', () => {
+    // Setup entity
+    const entityId = 0;
+    TransformStore.set(w, entityId, 100, 200, 0, 1);
+    StateAccess.activate(w, entityId);
 
-    BinaryPacker.unpackEvents(buffer, (type, entityId, data, x, y) => {
-      receivedEvents.push({ type, entityId, data, x, y });
-    });
+    const timestamp = 1234.5;
+    const buffer = SchemaBinaryPacker.packTransformSnapshot(w, timestamp);
 
-    expect(receivedEvents.length).toBe(2);
-    expect(receivedEvents[0].entityId).toBe('player1');
-    expect(receivedEvents[0].data).toBeCloseTo(100, 3);
-    expect(receivedEvents[1].entityId).toBe('player2');
+    // Verify header
+    const view = new DataView(buffer);
+
+    // Type byte (offset 0)
+    const packetType = view.getUint8(0);
+    expect(packetType).toBe(1); // SchemaPacketType.TRANSFORM_UPDATE
+
+    // Timestamp (offset 1, float32 LE)
+    const packedTimestamp = view.getFloat32(1, true);
+    expect(packedTimestamp).toBeCloseTo(timestamp, 3);
+
+    // Count (offset 5, uint16 LE)
+    const count = view.getUint16(5, true);
+    expect(count).toBe(1); // One entity
+  });
+
+  it('should pack entity data with correct format', () => {
+    const entityId = 5;
+    const testX = 123.456;
+    const testY = 789.012;
+
+    TransformStore.set(w, entityId, testX, testY, 0, 1);
+    StateAccess.activate(w, entityId);
+
+    const buffer = SchemaBinaryPacker.packTransformSnapshot(w, 0);
+    const view = new DataView(buffer);
+
+    // Entity data starts at offset 7
+    // EntityId (offset 7, uint16 LE)
+    const packedId = view.getUint16(7, true);
+    expect(packedId).toBe(entityId);
+
+    // X (offset 9, float32 LE)
+    const packedX = view.getFloat32(9, true);
+    expect(packedX).toBeCloseTo(testX, 3);
+
+    // Y (offset 13, float32 LE)
+    const packedY = view.getFloat32(13, true);
+    expect(packedY).toBeCloseTo(testY, 3);
   });
 });

@@ -29,6 +29,7 @@ import {
   StateStore,
   StatsStore,
   SkillStore,
+  SkillAccess,
   TattooStore,
   EntityLookup,
   ProjectileStore,
@@ -85,13 +86,10 @@ export const createPlayer = (
   // 2.3 State Flags
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
 
-  // 2.4 Skill & Tattoo
+  // 2.4 Skill & Tattoo - EIDOLON-V P2 FIX: Use SkillAccess.set
   const ShapeMap: Record<string, number> = { circle: 1, square: 2, triangle: 3, hex: 4 };
   const shapeId = ShapeMap[shape] || 1;
-  const sIdx = entId * SkillStore.STRIDE;
-  SkillStore.data[sIdx] = 0; // cooldown
-  SkillStore.data[sIdx + 1] = 8; // maxCooldown (Default)
-  SkillStore.data[sIdx + 3] = shapeId;
+  SkillAccess.set(getWorld(), entId, 0, 8, 0, shapeId); // cooldown=0, maxCooldown=8, activeTimer=0
   TattooStore.flags[entId] = 0;
 
   // 2.5 Config (Hot Logic Data)
@@ -245,11 +243,8 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1);
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.BOT);
 
-  // 2.4 Skill & Tattoo
-  const sIdx = entId * SkillStore.STRIDE;
-  SkillStore.data[sIdx] = 0; // cooldown
-  SkillStore.data[sIdx + 1] = 8; // maxCooldown (Default)
-  SkillStore.data[sIdx + 3] = 1; // circle
+  // 2.4 Skill & Tattoo - EIDOLON-V P2 FIX: Use SkillAccess.set
+  SkillAccess.set(getWorld(), entId, 0, 8, 0, 1); // cooldown=0, maxCooldown=8, activeTimer=0, shape=circle
   TattooStore.flags[entId] = 0;
 
   // 2.5 Config (Hot Logic Data)

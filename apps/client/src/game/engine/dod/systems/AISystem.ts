@@ -26,10 +26,22 @@ import {
   EntityFlags,
   CJRFoodFlags,
   WorldState,
+  SkillSystem, // EIDOLON-V P1 FIX: Use canonical engine version (has Triangle/Hex)
 } from '@cjr/engine';
-import { SkillSystem } from './SkillSystem';
 import { updateBotPersonality } from '../../../cjr/botPersonalities';
 import type { SpatialGrid } from '../../context';
+
+/**
+ * EIDOLON-V P2 FIX: O(1) Entity ID → Index Cache
+ * Maintained automatically by findEntityIndex (lazy population)
+ * Call clearEntityIdCache() on game reset/session end
+ */
+const entityIdCache = new Map<string, number>();
+
+/** Clear the entity ID cache (call on game reset) */
+export function clearEntityIdCache(): void {
+  entityIdCache.clear();
+}
 
 /**
  * AI System configuration
@@ -318,16 +330,42 @@ export class AISystem {
   }
 
   /**
-   * Find entity index by ID (O(N) fallback - optimize later)
+   * EIDOLON-V P2 FIX: O(1) Entity ID → Index lookup
+   * 
+   * Strategy: Use Entity.physicsIndex stored in EntityLookup objects.
+   * EntityLookup is already indexed by physicsIndex, so we just need to
+   * find the entity with matching id and return its physicsIndex.
+   * 
+   * For true O(1), we maintain a module-level Map that is populated
+   * when entities are created and cleared when destroyed.
    */
   private findEntityIndex(world: WorldState, id: string): number {
-    const flags = world.stateFlags;
-    for (let i = 0; i < flags.length; i++) {
-      if ((flags[i] & EntityFlags.ACTIVE) === 0) continue;
+    // O(1) Lookup: Try the entityIdCache first
+    const cachedIdx = entityIdCache.get(id);
+    if (cachedIdx !== undefined) {
+      // Validate the cached index is still valid (entity not recycled)
+      const flags = world.stateFlags[cachedIdx];
+      if (flags & EntityFlags.ACTIVE) {
+        const entity = EntityLookup[cachedIdx];
+        if (entity && entity.id === id) {
+          return cachedIdx;
+        }
+      }
+      // Invalid cache entry - remove it
+      entityIdCache.delete(id);
+    }
 
-      const entity = EntityLookup[i];
+    // Fallback: O(activeCount) scan via Sparse Set (not O(maxEntities))
+    const activeCount = world.activeCount;
+    const activeEntities = world.activeEntities;
+
+    for (let i = 0; i < activeCount; i++) {
+      const idx = activeEntities[i];
+      const entity = EntityLookup[idx];
       if (entity && entity.id === id) {
-        return i;
+        // Cache for next time
+        entityIdCache.set(id, idx);
+        return idx;
       }
     }
     return -1;

@@ -65,22 +65,22 @@ export class PhysicsCoordinator {
 
   /**
    * Check and sync death states from DOD to game state
+   * EIDOLON-V P2 FIX: Use Sparse Set for O(activeCount) instead of O(maxEntities)
    */
   public syncDeathStates(state: GameState): void {
     const w = getWorld();
-    const maxEntities = MAX_ENTITIES;
+    const activeCount = w.activeCount;
+    const activeEntities = w.activeEntities;
 
-    for (let i = 0; i < maxEntities; i++) {
-      const flags = w.stateFlags[i];
-      if (!(flags & EntityFlags.ACTIVE)) continue;
+    for (let i = 0; i < activeCount; i++) {
+      const id = activeEntities[i];
+      const health = StatsStore.getCurrentHealth(w, id);
 
-      const health = StatsStore.getCurrentHealth(w, i);
       if (health <= 0) {
         // Mark as dead in DOD
-        w.stateFlags[i] &= ~EntityFlags.ACTIVE;
-
+        w.stateFlags[id] &= ~EntityFlags.ACTIVE;
         // Find and mark corresponding entity in state
-        this.markEntityDead(state, i);
+        this.markEntityDead(state, id);
       }
     }
   }
@@ -108,23 +108,15 @@ export class PhysicsCoordinator {
 
   /**
    * Get performance stats from physics systems
+   * EIDOLON-V P2 FIX: Use Sparse Set activeCount directly
    */
   public getStats(): {
     activeEntities: number;
     lastUpdateTime: number;
   } {
-    let activeEntities = 0;
     const w = getWorld();
-    const maxEntities = MAX_ENTITIES;
-
-    for (let i = 0; i < maxEntities; i++) {
-      if (w.stateFlags[i] & EntityFlags.ACTIVE) {
-        activeEntities++;
-      }
-    }
-
     return {
-      activeEntities,
+      activeEntities: w.activeCount,
       lastUpdateTime: this.lastUpdateTime,
     };
   }
