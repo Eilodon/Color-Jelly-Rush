@@ -16,7 +16,7 @@ import { MovementSystem } from '@cjr/engine/systems';
 import { PhysicsSystem } from '@cjr/engine/systems';
 import { TransformAccess, PhysicsAccess, GameConfig } from '@cjr/engine';
 import { InputRingBuffer } from './InputRingBuffer';
-import { clientLogger } from '../game/logging/ClientLogger';
+import { clientLogger } from '../core/logging/ClientLogger';
 // EIDOLON-V: Dev tooling
 import { PacketInterceptor } from '../dev/PacketInterceptor';
 
