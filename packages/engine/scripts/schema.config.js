@@ -95,9 +95,9 @@ const SCHEMA = {
             speedMult: { type: 'f32', default: 1 },
             pickupRange: { type: 'f32', default: 0 },
             visionRange: { type: 'f32', default: 0 },
+            maxSpeed: { type: 'f32', default: 200 },  // EIDOLON-V: Added maxSpeed field
             _pad1: { type: 'f32', default: 0 },
             _pad2: { type: 'f32', default: 0 },
-            _pad3: { type: 'f32', default: 0 },
         }
     },
     Projectile: {

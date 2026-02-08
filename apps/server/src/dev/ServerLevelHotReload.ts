@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { LevelConfig, getLevelConfig, updateLevelConfig } from '@cjr/engine';
+import { logger } from '../logging/Logger';
 
 /**
  * Server-side Level Hot Reload
@@ -10,7 +11,7 @@ export class ServerLevelHotReload {
   private reconnectInterval: number = 5000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(private serverUrl: string = 'ws://localhost:8091') {}
+  constructor(private serverUrl: string = 'ws://localhost:8091') { }
 
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) return;
@@ -19,7 +20,7 @@ export class ServerLevelHotReload {
       this.ws = new WebSocket(this.serverUrl);
 
       this.ws.on('open', () => {
-        console.log('[ServerLevelHotReload] Connected to config server');
+        logger.info('[ServerLevelHotReload] Connected to config server');
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
@@ -31,20 +32,20 @@ export class ServerLevelHotReload {
           const message = JSON.parse(data.toString());
           this.handleMessage(message);
         } catch (error) {
-          console.error('[ServerLevelHotReload] Failed to parse message:', error);
+          logger.error('[ServerLevelHotReload] Failed to parse message:', error);
         }
       });
 
       this.ws.on('close', () => {
-        console.log('[ServerLevelHotReload] Disconnected');
+        logger.info('[ServerLevelHotReload] Disconnected');
         this.scheduleReconnect();
       });
 
       this.ws.on('error', (error) => {
-        console.error('[ServerLevelHotReload] WebSocket error:', error);
+        logger.error('[ServerLevelHotReload] WebSocket error:', error);
       });
     } catch (error) {
-      console.error('[ServerLevelHotReload] Failed to connect:', error);
+      logger.error('[ServerLevelHotReload] Failed to connect:', error);
       this.scheduleReconnect();
     }
   }
@@ -62,7 +63,7 @@ export class ServerLevelHotReload {
     const msg = message as { type: string; levelId?: number; level?: LevelConfig };
 
     if (msg.type === 'LEVEL_UPDATED' && msg.levelId && msg.level) {
-      console.log(`[ServerLevelHotReload] Updating level ${msg.levelId}`);
+      logger.info(`[ServerLevelHotReload] Updating level ${msg.levelId}`);
       updateLevelConfig(msg.levelId, msg.level);
     }
   }

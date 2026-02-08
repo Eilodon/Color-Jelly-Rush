@@ -1,6 +1,6 @@
 # Color Jelly Rush - Data Flow Architecture
 
-> **Last Updated:** February 2, 2026
+> **Last Updated:** February 8, 2026
 > **Purpose:** Visual guide to data flow throughout the system
 
 ---
@@ -21,16 +21,16 @@
 │   ┌──────────────────────────────────────────────────────────────────────┐  │
 │   │                        GAME LOOP (60 FPS)                            │  │
 │   │  ┌─────────────┐   ┌──────────────────┐   ┌────────────────────┐    │  │
-│   │  │ GameState   │   │ OptimizedEngine  │   │  DOD Component     │    │  │
-│   │  │   Manager   │──►│   .update(dt)    │──►│  Stores (TypedArr) │    │  │
+│   │  │ CJRClient   │   │ WorldState       │   │  DOD Component     │    │  │
+│   │  │ Runner      │──►│ .update(dt)      │──►│  Access Classes    │    │  │
 │   │  └─────────────┘   └──────────────────┘   └────────────────────┘    │  │
 │   └──────────────────────────────────────────────────────────────────────┘  │
 │                                       │                                      │
 │                    ┌──────────────────┼──────────────────┐                  │
 │                    ▼                  ▼                  ▼                  │
 │   ┌──────────────────────┐  ┌─────────────────┐  ┌───────────────────┐     │
-│   │   React Components   │  │   Pixi.js       │  │   NetworkClient   │     │
-│   │   (HUD, Overlays)    │  │   Renderer      │  │   (Colyseus)      │     │
+│   │   React Components   │  │   Canvas2D /    │  │   NetworkClient   │     │
+│   │   (HUD, Overlays)    │  │   Pixi.js       │  │   (Colyseus)      │     │
 │   └──────────────────────┘  └─────────────────┘  └─────────┬─────────┘     │
 │                                                              │               │
 └──────────────────────────────────────────────────────────────┼───────────────┘
@@ -58,33 +58,32 @@
 │   ┌────────────────────────────────────────────────────────────────────┐    │
 │   │  BufferedInput.syncToStore(playerIndex, worldPos, cameraPos)       │    │
 │   │      ↓                                                              │    │
-│   │  InputStore.data[idx*4 + 0] = targetX                               │    │
-│   │  InputStore.data[idx*4 + 1] = targetY                               │    │
-│   │  InputStore.data[idx*4 + 2] = skillInput (0 or 1)                   │    │
-│   │  InputStore.data[idx*4 + 3] = reserved                              │    │
+│   │  world.input[idx*4 + 0] = targetX                                   │    │
+│   │  world.input[idx*4 + 1] = targetY                                   │    │
+│   │  world.input[idx*4 + 2] = skillInput (0 or 1)                       │    │
+│   │  world.input[idx*4 + 3] = reserved                                  │    │
 │   └────────────────────────────────────────────────────────────────────┘    │
 │                              ↓                                               │
 │   2. PHYSICS UPDATE                                                          │
 │   ┌────────────────────────────────────────────────────────────────────┐    │
-│   │  OptimizedEngine.updateGameState(state, dt)                         │    │
+│   │  CJRClientRunner.updateEntities(dt)                                 │    │
 │   │      ↓                                                              │    │
-│   │  PhysicsSystem.update(dt) → TransformStore, PhysicsStore            │    │
-│   │  MovementSystem.update(dt) → PhysicsStore (velocity from input)     │    │
-│   │  SkillSystem.update(dt) → SkillStore, effects                       │    │
-│   │  CJR Systems → colorMath, ringSystem, winCondition                  │    │
+│   │  MovementSystem.update(world, dt) → world.physics (velocity)        │    │
+│   │  PhysicsSystem.update(world, dt) → world.transform (position)       │    │
+│   │  SkillSystem.update(world, dt) → world.skill, effects               │    │
+│   │  ringSystem.update() → Ring progression                             │    │
 │   └────────────────────────────────────────────────────────────────────┘    │
 │                              ↓                                               │
 │   3. SYNC DOD → OBJECTS (for legacy/UI)                                      │
 │   ┌────────────────────────────────────────────────────────────────────┐    │
-│   │  state.player.position.x = TransformStore.data[playerTIdx]          │    │
-│   │  state.player.position.y = TransformStore.data[playerTIdx + 1]      │    │
-│   │  state.player.velocity.x = PhysicsStore.data[playerTIdx]            │    │
-│   │  state.player.velocity.y = PhysicsStore.data[playerTIdx + 1]        │    │
+│   │  EntityStateBridge.syncFromDOD()                                    │    │
+│   │  state.player.position.x = world.transform[pIdx * 8]                │    │
+│   │  state.player.position.y = world.transform[pIdx * 8 + 1]            │    │
 │   └────────────────────────────────────────────────────────────────────┘    │
 │                              ↓                                               │
 │   4. VFX & AUDIO UPDATE                                                      │
 │   ┌────────────────────────────────────────────────────────────────────┐    │
-│   │  vfxIntegrationManager.update(state, dt)                            │    │
+│   │  JuiceSystem.update(dt)                                             │    │
 │   │  audioEngine.setListenerPosition(playerX, playerY)                  │    │
 │   │  audioEngine.setBGMIntensity(matchPercent * 4)                      │    │
 │   └────────────────────────────────────────────────────────────────────┘    │
@@ -100,8 +99,9 @@
 │   ┌────────────────────────────────────────────────────────────────────┐    │
 │   │  renderCallback(alpha)                                              │    │
 │   │      ↓                                                              │    │
-│   │  Pixi.js or Canvas2D draw calls                                     │    │
+│   │  getInterpolatedPositionByIndex(physicsIndex, alpha, outPoint)      │    │
 │   │  Interpolation: pos = prev + (curr - prev) * alpha                  │    │
+│   │  DrawStrategies.Player(ctx, entity, x, y)                           │    │
 │   └────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -130,14 +130,9 @@
 │                                                                │             │
 │                                                                ▼             │
 │                                                       ┌─────────────────┐    │
-│                                                       │ServerEngineBridge│   │
-│                                                       │ processInput()  │    │
-│                                                       └────────┬────────┘    │
-│                                                                │             │
-│                                                                ▼             │
-│                                                       ┌─────────────────┐    │
-│                                                       │ @cjr/engine     │    │
-│                                                       │ Engine.update() │    │
+│                                                       │ GameRoom        │    │
+│                                                       │ TransformAccess │    │
+│                                                       │ PhysicsAccess   │    │
 │                                                       └────────┬────────┘    │
 │                                                                │             │
 │                                                                ▼             │
@@ -164,50 +159,90 @@
 
 ## 3. DOD (Data-Oriented Design) Data Flow
 
-### 3.1 Component Store Layout
+### 3.1 WorldState Layout (Instance-Based)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        DOD COMPONENT STORES                                  │
+│                     WORLDSTATE CLASS (Instance-Based)                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   TransformStore (Float32Array)                                              │
+│   const world = getWorld();  // Instance accessor                            │
+│                                                                              │
+│   world.transform (Float32Array) - STRIDE = 8                                │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │ STRIDE = 8 floats per entity                                          │ │
-│   │                                                                        │ │
 │   │  idx*8+0  │  idx*8+1  │  idx*8+2  │  idx*8+3  │  idx*8+4  │  ...     │ │
 │   │    x      │    y      │  rotation │   scale   │   prevX   │  prevY   │ │
 │   └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
-│   PhysicsStore (Float32Array)                                                │
+│   world.physics (Float32Array) - STRIDE = 8                                  │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │ STRIDE = 8 floats per entity                                          │ │
-│   │                                                                        │ │
 │   │  idx*8+0  │  idx*8+1  │  idx*8+2  │  idx*8+3  │  idx*8+4  │  ...     │ │
 │   │    vx     │    vy     │  angVel   │   mass    │   radius  │  restit  │ │
 │   └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
-│   StateStore (Uint32Array) - Bitmask flags                                   │
+│   world.stateFlags (Uint32Array) - Entity bitmask flags                      │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │  flags[idx] = ACTIVE | PLAYER | RING_1 | ...                          │ │
+│   │  stateFlags[idx] = ACTIVE | PLAYER | RING_1 | BOT | FOOD | DEAD | ...│ │
 │   └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
-│   StatsStore (Float32Array)                                                  │
+│   world.stats (Float32Array) - STRIDE = 8                                    │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
-│   │  idx*4+0  │  idx*4+1  │  idx*4+2  │  idx*4+3  │                       │ │
-│   │   health  │  maxHealth│   score   │    xp     │                       │ │
+│   │  idx*8+0  │  idx*8+1  │  idx*8+2  │  idx*8+3  │  idx*8+4  │  ...     │ │
+│   │   health  │  maxHealth│   score   │   match   │   defense │  damage  │ │
 │   └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
-│   InputStore (Float32Array)                                                  │
+│   world.input (Float32Array) - STRIDE = 4                                    │
 │   ┌───────────────────────────────────────────────────────────────────────┐ │
 │   │  idx*4+0  │  idx*4+1  │  idx*4+2  │  idx*4+3  │                       │ │
 │   │  targetX  │  targetY  │ skillFlag │  reserved │                       │ │
 │   └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
+│   world.pigment (Float32Array) - STRIDE = 8                                  │
+│   ┌───────────────────────────────────────────────────────────────────────┐ │
+│   │  idx*8+0  │  idx*8+1  │  idx*8+2  │  ...     │                        │ │
+│   │     r     │     g     │     b     │  target  │                        │ │
+│   └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│   world.activeEntities (Uint16Array) - Sparse Set                            │
+│   world.activeCount (number) - Number of active entities                     │
+│   ┌───────────────────────────────────────────────────────────────────────┐ │
+│   │  [idx0, idx1, idx2, ...] - Only active entity IDs                     │ │
+│   │  Iterate: for (let i = 0; i < world.activeCount; i++)                 │ │
+│   └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 System Data Access Pattern
+### 3.2 Access Class Pattern (Static Methods)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     ACCESS CLASS PATTERN (Static)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   // NEW: TransformAccess (static methods)                                   │
+│   TransformAccess.set(world, id, x, y, rotation, scale, prevX, prevY, pR)   │
+│   TransformAccess.getX(world, id) → number                                  │
+│   TransformAccess.getY(world, id) → number                                  │
+│                                                                              │
+│   // NEW: PhysicsAccess (static methods)                                     │
+│   PhysicsAccess.set(world, id, vx, vy, angVel, mass, radius, rest, fric)    │
+│   PhysicsAccess.getVx(world, id) → number                                   │
+│   PhysicsAccess.getRadius(world, id) → number                               │
+│                                                                              │
+│   // DEPRECATED: Legacy Store wrappers (compat.ts)                           │
+│   TransformStore.set(world, id, x, y, rotation, scale)  // → Access.set()   │
+│   PhysicsStore.set(world, id, vx, vy, mass, radius)     // → Access.set()   │
+│   ⚠️ These log deprecation warnings in development mode                     │
+│                                                                              │
+│   // Direct array access (most performant)                                   │
+│   world.transform[id * 8 + 0] = newX;                                        │
+│   world.transform[id * 8 + 1] = newY;                                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.3 System Data Access Pattern
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -217,21 +252,20 @@
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                        MovementSystem                                │   │
 │   │                                                                      │   │
-│   │   READS:    InputStore (targetX, targetY)                            │   │
-│   │             TransformStore (x, y)                                    │   │
+│   │   READS:    world.input (targetX, targetY)                           │   │
+│   │             world.transform (x, y)                                   │   │
 │   │                                                                      │   │
-│   │   WRITES:   PhysicsStore (vx, vy)                                    │   │
+│   │   WRITES:   world.physics (vx, vy)                                   │   │
 │   │                                                                      │   │
-│   │   for (idx = 0; idx < entityCount; idx++) {                          │   │
-│   │     targetX = InputStore.data[idx*4 + 0]                             │   │
-│   │     targetY = InputStore.data[idx*4 + 1]                             │   │
-│   │     currX = TransformStore.data[idx*8 + 0]                           │   │
-│   │     currY = TransformStore.data[idx*8 + 1]                           │   │
-│   │                                                                      │   │
-│   │     dx = targetX - currX                                             │   │
-│   │     dy = targetY - currY                                             │   │
-│   │     PhysicsStore.data[idx*8 + 0] = dx * speed                        │   │
-│   │     PhysicsStore.data[idx*8 + 1] = dy * speed                        │   │
+│   │   // Use Sparse Set for O(Active) iteration                          │   │
+│   │   for (let i = 0; i < world.activeCount; i++) {                      │   │
+│   │     const idx = world.activeEntities[i];                             │   │
+│   │     const tIdx = idx * 8;                                            │   │
+│   │     const iIdx = idx * 4;                                            │   │
+│   │     const dx = world.input[iIdx] - world.transform[tIdx];            │   │
+│   │     const dy = world.input[iIdx+1] - world.transform[tIdx+1];        │   │
+│   │     world.physics[tIdx] = dx * speed;                                │   │
+│   │     world.physics[tIdx + 1] = dy * speed;                            │   │
 │   │   }                                                                  │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                      │                                       │
@@ -239,18 +273,19 @@
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                        PhysicsSystem                                 │   │
 │   │                                                                      │   │
-│   │   READS:    PhysicsStore (vx, vy)                                    │   │
+│   │   READS:    world.physics (vx, vy)                                   │   │
 │   │                                                                      │   │
-│   │   WRITES:   TransformStore (x, y, prevX, prevY)                      │   │
+│   │   WRITES:   world.transform (x, y, prevX, prevY)                     │   │
 │   │                                                                      │   │
-│   │   for (idx = 0; idx < entityCount; idx++) {                          │   │
+│   │   for (let i = 0; i < world.activeCount; i++) {                      │   │
+│   │     const idx = world.activeEntities[i];                             │   │
+│   │     const tIdx = idx * 8;                                            │   │
 │   │     // Store previous position for interpolation                     │   │
-│   │     TransformStore.data[idx*8 + 4] = TransformStore.data[idx*8 + 0]  │   │
-│   │     TransformStore.data[idx*8 + 5] = TransformStore.data[idx*8 + 1]  │   │
-│   │                                                                      │   │
+│   │     world.transform[tIdx + 4] = world.transform[tIdx];                │   │
+│   │     world.transform[tIdx + 5] = world.transform[tIdx + 1];            │   │
 │   │     // Apply velocity                                                │   │
-│   │     TransformStore.data[idx*8 + 0] += PhysicsStore.data[idx*8+0]*dt  │   │
-│   │     TransformStore.data[idx*8 + 1] += PhysicsStore.data[idx*8+1]*dt  │   │
+│   │     world.transform[tIdx] += world.physics[tIdx] * dt;               │   │
+│   │     world.transform[tIdx + 1] += world.physics[tIdx + 1] * dt;       │   │
 │   │   }                                                                  │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                      │                                       │
@@ -258,13 +293,13 @@
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                        SkillSystem                                   │   │
 │   │                                                                      │   │
-│   │   READS:    InputStore (skillFlag)                                   │   │
-│   │             SkillStore (cooldowns)                                   │   │
-│   │             TransformStore (x, y)                                    │   │
+│   │   READS:    world.input (skillFlag)                                  │   │
+│   │             world.skill (cooldowns)                                  │   │
+│   │             world.transform (x, y)                                   │   │
 │   │                                                                      │   │
-│   │   WRITES:   SkillStore (cooldowns)                                   │   │
-│   │             PhysicsStore (for dash velocity)                         │   │
-│   │             EventRingBuffer (for VFX triggers)                       │   │
+│   │   WRITES:   world.skill (cooldowns)                                  │   │
+│   │             world.physics (for dash velocity)                        │   │
+│   │             vfxBuffer (for VFX triggers)                             │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -272,58 +307,59 @@
 
 ---
 
-## 4. Event System Data Flow
+## 4. VFX Ring Buffer Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        EVENT RING BUFFER FLOW                                │
+│                        VFX RING BUFFER FLOW                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │   GAME SYSTEMS (Headless Engine)                                             │
 │   ──────────────────────────────                                             │
 │                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │  SkillSystem / CollisionSystem / WaveSpawner                         │   │
+│   │  combat.ts / SkillSystem / AISystem                                  │   │
 │   │                                                                      │   │
 │   │  // Emit events into ring buffer (zero allocation)                   │   │
-│   │  eventBuffer.push({                                                  │   │
-│   │    type: EngineEventType.PARTICLE_BURST,                             │   │
-│   │    x: entity.x,                                                      │   │
-│   │    y: entity.y,                                                      │   │
-│   │    data: { color: 0xFF0000, count: 20 }                              │   │
-│   │  });                                                                 │   │
+│   │  vfxBuffer.push(                                                     │   │
+│   │    world.transform[entityId * 8],      // x from DOD                 │   │
+│   │    world.transform[entityId * 8 + 1],  // y from DOD                 │   │
+│   │    packedColor,                                                      │   │
+│   │    VFX_TYPES.EXPLODE,                                                │   │
+│   │    intensity                                                         │   │
+│   │  );                                                                  │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                      │                                       │
 │                                      ▼                                       │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │                     EventRingBuffer                                  │   │
+│   │                     VFXRingBuffer                                    │   │
 │   │                                                                      │   │
 │   │   [slot0] [slot1] [slot2] [slot3] ... [slotN]                        │   │
 │   │      ↑                        ↑                                      │   │
 │   │    head                      tail                                    │   │
 │   │                                                                      │   │
-│   │   - Fixed size (e.g., 256 slots)                                     │   │
+│   │   - Fixed size (256 slots)                                           │   │
 │   │   - Circular overwrite (oldest events discarded)                     │   │
 │   │   - Zero GC allocation                                               │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                      │                                       │
 │                                      ▼                                       │
-│   CLIENT VFX LAYER (runs on client only)                                     │
-│   ──────────────────────────────────────                                     │
+│   CLIENT VFX LAYER                                                           │
+│   ──────────────────                                                         │
 │                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
-│   │  vfxIntegrationManager.drainEvents()                                 │   │
+│   │  JuiceSystem.update(dt)                                              │   │
 │   │                                                                      │   │
-│   │  eventBuffer.drain((event) => {                                      │   │
-│   │    switch (event.type) {                                             │   │
-│   │      case EngineEventType.PARTICLE_BURST:                            │   │
-│   │        particleSystem.emit(event.x, event.y, event.data);            │   │
+│   │  vfxBuffer.drain((x, y, color, type, intensity) => {                 │   │
+│   │    switch (type) {                                                   │   │
+│   │      case VFX_TYPES.EXPLODE:                                         │   │
+│   │        particleSystem.emit(x, y, color, intensity);                  │   │
 │   │        break;                                                        │   │
-│   │      case EngineEventType.SCREEN_SHAKE:                              │   │
-│   │        cameraShake.trigger(event.data.intensity);                    │   │
+│   │      case VFX_TYPES.SCREEN_SHAKE:                                    │   │
+│   │        this.shakeOffset.x = (Math.random() - 0.5) * intensity;       │   │
 │   │        break;                                                        │   │
-│   │      case EngineEventType.PLAY_SOUND:                                │   │
-│   │        audioEngine.play(event.data.sfx, event.x, event.y);           │   │
+│   │      case VFX_TYPES.FLOATING_TEXT:                                   │   │
+│   │        this.floatingTexts.push({x, y, text: TEXT_IDS[intensity]});   │   │
 │   │        break;                                                        │   │
 │   │    }                                                                 │   │
 │   │  });                                                                 │   │
@@ -402,17 +438,16 @@
 │   │                 │                   │                                 │ │
 │   │ prevPos = curr  │                   │  alpha = accumulator / tickRate │ │
 │   │ currPos += vel  │                   │                                 │ │
-│   └─────────────────┘                   │  for each entity:               │ │
-│           │                             │    renderX = lerp(prevX,        │ │
-│           │                             │                 currX, alpha)   │ │
-│           ▼                             │    renderY = lerp(prevY,        │ │
-│   ┌─────────────────┐                   │                 currY, alpha)   │ │
-│   │ TransformStore  │──────────────────►│                                 │ │
-│   │                 │                   │    sprite.position.set(         │ │
-│   │ [prevX, prevY]  │                   │      renderX, renderY           │ │
-│   │ [currX, currY]  │                   │    );                           │ │
-│   └─────────────────┘                   │                                 │ │
-│                                         │  pixi.renderer.render(stage);   │ │
+│   └─────────────────┘                   │  for (let i = 0; i < food.len)  │ │
+│           │                             │    const pos = physicsIndex ?   │ │
+│           │                             │      getInterpolatedPosition    │ │
+│           ▼                             │        ByIndex(idx, alpha, pt)  │ │
+│   ┌─────────────────┐                   │      : entity.position;         │ │
+│   │ world.transform │──────────────────►│                                 │ │
+│   │                 │                   │    DrawStrategies.Food(ctx,     │ │
+│   │ [prevX, prevY]  │                   │      entity, pos.x, pos.y);     │ │
+│   │ [currX, currY]  │                   │                                 │ │
+│   └─────────────────┘                   │  ctx.fillRect(...)              │ │
 │                                         └─────────────────────────────────┘ │
 │                                                                              │
 │   Timeline:                                                                  │
@@ -451,12 +486,10 @@
 │                                        │                                     │
 │   t=16ms                               ▼                                     │
 │        Local Prediction         ┌──────────────┐                            │
-│        ┌──────────────┐         │ Engine.update│                            │
-│        │ x: 101       │         │ (Authoritative)                           │
-│        │ y: 50        │         │              │                            │
-│        └──────────────┘         │ x: 101       │                            │
-│                                 │ y: 50        │                            │
-│                                 └──────┬───────┘                            │
+│        ┌──────────────┐         │TransformAccess                            │
+│        │ x: 101       │         │.set(world,id,│                            │
+│        │ y: 50        │         │  101,50,...) │                            │
+│        └──────────────┘         └──────┬───────┘                            │
 │                                        │                                     │
 │   t=50ms (RTT)                         │ broadcast                           │
 │        ◄───────────────────────────────┼────────────────────────────►       │
@@ -493,19 +526,19 @@
 │                        CJR MECHANICS DATA FLOW                               │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   PLAYER CONSUMES PIGMENT                                                    │
-│   ───────────────────────                                                    │
+│   PLAYER CONSUMES PIGMENT (DOD Path)                                         │
+│   ──────────────────────────────────                                         │
 │                                                                              │
 │   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐                │
-│   │ Collision    │────►│ mixPigment() │────►│ Player.pigment│               │
-│   │ Detection    │     │              │     │ = newColor    │               │
-│   └──────────────┘     │ newPigment = │     └───────┬──────┘                │
-│                        │  lerp(old,   │             │                        │
-│                        │  food.pigment,│             ▼                        │
-│                        │  mixRatio)   │     ┌──────────────┐                │
-│                        └──────────────┘     │calcMatchPercent               │
-│                                             │ (player, target)│              │
-│                                             └───────┬──────┘                │
+│   │ Collision    │────►│ consumePickup│────►│ PigmentStore │               │
+│   │ Detection    │     │ DOD()        │     │ .mix()       │               │
+│   └──────────────┘     │              │     └───────┬──────┘                │
+│                        │ // Read food │             │                        │
+│                        │ // from DOD  │             ▼                        │
+│                        │ world.pigment│     ┌──────────────┐                │
+│                        │ [fIdx+0] = r │     │world.stats   │                │
+│                        │              │     │ [idx+3]=match│                │
+│                        └──────────────┘     └───────┬──────┘                │
 │                                                     │                        │
 │                                                     ▼                        │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -555,20 +588,30 @@
 
 ---
 
-## 9. Data Authority Summary
+## 9. Data Authority Summary (SSOT)
 
-| Data | Authority (SSOT) | Read By | Write By |
-|------|------------------|---------|----------|
-| Position (x, y) | `TransformStore` | Renderer, Physics, UI | PhysicsSystem |
-| Velocity (vx, vy) | `PhysicsStore` | PhysicsSystem | MovementSystem, Skills |
-| Health/Score | `StatsStore` | UI, Combat | Combat, Pickup |
-| Input Target | `InputStore` | MovementSystem | BufferedInput |
-| Entity Flags | `StateStore` | All Systems | Factory, Lifecycle |
-| Pigment/Color | `Player.pigment` | ColorMath, Renderer | Eating System |
-| Match Percent | Calculated | UI, Ring Logic | (derived) |
-| Ring Level | `Player.ring` | Ring Logic, UI | Ring Commit |
-| Tattoos | `TattooStore` | TattooSystem | Upgrade System |
-| Skill Cooldowns | `SkillStore` | SkillSystem, UI | SkillSystem |
+| Data | Authority (SSOT) | Access Class | Read By | Write By |
+|------|------------------|--------------|---------|----------|
+| Position (x, y) | `world.transform` | `TransformAccess` | Renderer, Physics, UI | PhysicsSystem |
+| Velocity (vx, vy) | `world.physics` | `PhysicsAccess` | PhysicsSystem | MovementSystem, Skills |
+| Health/Score | `world.stats` | `StatsAccess` | UI, Combat | Combat, Pickup |
+| Input Target | `world.input` | `InputAccess` | MovementSystem | BufferedInput |
+| Entity Flags | `world.stateFlags` | `StateAccess` | All Systems | Factory, Lifecycle |
+| Pigment/Color | `world.pigment` | `PigmentAccess` | ColorMath, Renderer | consumePickupDOD |
+| Match Percent | `world.stats[idx+3]` | `StatsAccess` | UI, Ring Logic | Combat |
+| Ring Level | Entity flags | `StateAccess` | Ring Logic, UI | ringSystem |
+| Tattoos | `world.tattoo` | `TattooAccess` | TattooSystem | Upgrade |
+| Skill Cooldowns | `world.skill` | `SkillAccess` | SkillSystem, UI | SkillSystem |
+
+---
+
+## 10. Key Architecture Principles (Feb 2026)
+
+1. **Instance-Based WorldState**: Use `getWorld()` accessor, not global singletons
+2. **Access Classes Over Store Wrappers**: Use `TransformAccess.set()` not `TransformStore.set()`
+3. **Sparse Set Iteration**: Use `world.activeEntities` for O(active) iteration
+4. **DOD Position for VFX**: Always read `world.transform[id * 8]` for VFX positions
+5. **Hybrid Fallback**: If `physicsIndex !== undefined`, use DOD; else fallback to OOP
 
 ---
 

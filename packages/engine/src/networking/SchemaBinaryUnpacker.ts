@@ -13,6 +13,7 @@ import {
     TransformAccess,
     PhysicsAccess
 } from '../generated';
+import { ISnapshotReceiver } from './ISnapshotReceiver';
 
 export class SchemaBinaryUnpacker {
 
@@ -22,7 +23,8 @@ export class SchemaBinaryUnpacker {
      */
     static unpack(
         buffer: ArrayBuffer,
-        world: WorldState
+        world: WorldState,
+        receiver?: ISnapshotReceiver // EIDOLON-V: Optional receiver for buffering (if not provided, writes to world)
     ): number | null {
         const view = new DataView(buffer);
         let offset = 0;
@@ -34,12 +36,15 @@ export class SchemaBinaryUnpacker {
         // Dispatch based on packet type
         switch (type) {
             case SchemaPacketType.TRANSFORM_UPDATE:
-                return SchemaBinaryUnpacker.unpackTransformUpdate(view, offset, world);
+                return SchemaBinaryUnpacker.unpackTransformUpdate(view, offset, world, receiver);
 
             case SchemaPacketType.PHYSICS_UPDATE:
-                return SchemaBinaryUnpacker.unpackPhysicsUpdate(view, offset, world);
+                return SchemaBinaryUnpacker.unpackPhysicsUpdate(view, offset, world, receiver);
 
             case SchemaPacketType.COMPONENT_DELTA:
+                // Component Deltas still write directly to world for now as Deserializer is coupled
+                // TODO: Update Deserializer or Receiver to handle generic components?
+                // For now, they are less critical for physics glitching (Smart Lane vs Fast Lane)
                 return SchemaBinaryUnpacker.unpackComponentDelta(view, offset, world);
 
             default:
@@ -55,7 +60,8 @@ export class SchemaBinaryUnpacker {
     private static unpackTransformUpdate(
         view: DataView,
         offset: number,
-        world: WorldState
+        world: WorldState,
+        receiver?: ISnapshotReceiver
     ): number | null {
         if (view.byteLength < offset + 6) return null;
 
@@ -69,10 +75,14 @@ export class SchemaBinaryUnpacker {
             const x = view.getFloat32(offset, true); offset += 4;
             const y = view.getFloat32(offset, true); offset += 4;
 
-            // Direct SSOT Write
+            // Direct SSOT Write or Receiver Buffer
             if (world.isValidEntityId(id)) {
-                TransformAccess.setX(world, id, x);
-                TransformAccess.setY(world, id, y);
+                if (receiver) {
+                    receiver.onTransform(id, x, y);
+                } else {
+                    TransformAccess.setX(world, id, x);
+                    TransformAccess.setY(world, id, y);
+                }
             }
         }
         return timestamp;
@@ -85,7 +95,8 @@ export class SchemaBinaryUnpacker {
     private static unpackPhysicsUpdate(
         view: DataView,
         offset: number,
-        world: WorldState
+        world: WorldState,
+        receiver?: ISnapshotReceiver
     ): number | null {
         if (view.byteLength < offset + 6) return null;
 
@@ -101,9 +112,13 @@ export class SchemaBinaryUnpacker {
             const radius = view.getFloat32(offset, true); offset += 4;
 
             if (world.isValidEntityId(id)) {
-                PhysicsAccess.setVx(world, id, vx);
-                PhysicsAccess.setVy(world, id, vy);
-                PhysicsAccess.setRadius(world, id, radius);
+                if (receiver) {
+                    receiver.onPhysics(id, vx, vy, radius);
+                } else {
+                    PhysicsAccess.setVx(world, id, vx);
+                    PhysicsAccess.setVy(world, id, vy);
+                    PhysicsAccess.setRadius(world, id, radius);
+                }
             }
         }
         return timestamp;
@@ -141,7 +156,7 @@ export class SchemaBinaryUnpacker {
         // So we need to match. Schema uses PascalCase (Transform, Physics).
         // COMPONENT_IDS uses UPPERCASE (TRANSFORM, PHYSICS).
         const upperId = compStringId.toUpperCase();
-        const numericId = (COMPONENT_IDS as any)[upperId];
+        const numericId = (COMPONENT_IDS as Record<string, number | undefined>)[upperId];
 
         const count = view.getUint16(offset, true); offset += 2;
 

@@ -292,8 +292,8 @@ export class ConfigStore {
         ConfigAccess.setMagneticRadius(world, id, value);
     }
 
-    static set(world: WorldState, id: number, magneticRadius: number, damageMult: number, speedMult: number, pickupRange: number, visionRange: number): void {
-        ConfigAccess.set(world, id, magneticRadius, damageMult, speedMult, pickupRange, visionRange);
+    static set(world: WorldState, id: number, magneticRadius: number, damageMult: number, speedMult: number, pickupRange: number, visionRange: number, maxSpeed: number = 200): void {
+        ConfigAccess.set(world, id, magneticRadius, damageMult, speedMult, pickupRange, visionRange, maxSpeed);
     }
 }
 

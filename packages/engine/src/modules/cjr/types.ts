@@ -60,3 +60,40 @@ export enum MutationTier {
     Epic = 'epic',
     Legendary = 'legendary',
 }
+
+/**
+ * Numeric IDs for TattooId enum values.
+ * Used for network serialization to avoid charCodeAt collision.
+ * (e.g., PigmentBomb, PerfectMatch, PrismGuard, Pierce all start with 'p')
+ */
+export const TATTOO_NUMERIC_ID: Record<TattooId, number> = {
+    [TattooId.FilterInk]: 1,
+    [TattooId.Overdrive]: 2,
+    [TattooId.DepositShield]: 3,
+    [TattooId.PigmentBomb]: 4,
+    [TattooId.PerfectMatch]: 5,
+    [TattooId.CatalystSense]: 6,
+    [TattooId.NeutralMastery]: 7,
+    [TattooId.SolventExpert]: 8,
+    [TattooId.CatalystEcho]: 9,
+    [TattooId.PrismGuard]: 10,
+    [TattooId.InkLeech]: 11,
+    [TattooId.GrimHarvest]: 12,
+    [TattooId.SpeedSurge]: 13,
+    [TattooId.Invulnerable]: 14,
+    [TattooId.Rewind]: 15,
+    [TattooId.Lightning]: 16,
+    [TattooId.Chaos]: 17,
+    [TattooId.KingForm]: 18,
+    [TattooId.Magnet]: 19,
+    [TattooId.Dash]: 20,
+    [TattooId.Bump]: 21,
+    [TattooId.Pierce]: 22,
+};
+
+/**
+ * Reverse lookup: Numeric ID → TattooId
+ */
+export const TATTOO_BY_NUMERIC_ID: Record<number, TattooId> = Object.fromEntries(
+    Object.entries(TATTOO_NUMERIC_ID).map(([k, v]) => [v, k as TattooId])
+) as Record<number, TattooId>;

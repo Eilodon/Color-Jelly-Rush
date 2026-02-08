@@ -7,10 +7,10 @@
  */
 
 import {
-  TransformStore,
-  PhysicsStore,
+  TransformAccess,
+  PhysicsAccess,
   StateStore,
-  StatsStore,
+  StatsAccess,
   MAX_ENTITIES,
   EntityFlags,
 } from '@cjr/engine';
@@ -36,10 +36,10 @@ export class PhysicsCoordinator {
     if (state.player.physicsIndex !== undefined) {
       const w = getWorld();
       const idx = state.player.physicsIndex;
-      state.player.position.x = TransformStore.getX(w, idx);
-      state.player.position.y = TransformStore.getY(w, idx);
-      state.player.velocity.x = PhysicsStore.getVelocityX(w, idx);
-      state.player.velocity.y = PhysicsStore.getVelocityY(w, idx);
+      state.player.position.x = TransformAccess.getX(w, idx);
+      state.player.position.y = TransformAccess.getY(w, idx);
+      state.player.velocity.x = PhysicsAccess.getVx(w, idx);
+      state.player.velocity.y = PhysicsAccess.getVy(w, idx);
     }
   }
 
@@ -58,8 +58,8 @@ export class PhysicsCoordinator {
       const idx = state.player.physicsIndex;
       // Note: Position is set by NetworkClient reconciliation, not here
       // But we can update derived values
-      state.player.velocity.x = PhysicsStore.getVelocityX(w, idx);
-      state.player.velocity.y = PhysicsStore.getVelocityY(w, idx);
+      state.player.velocity.x = PhysicsAccess.getVx(w, idx);
+      state.player.velocity.y = PhysicsAccess.getVy(w, idx);
     }
   }
 
@@ -74,7 +74,7 @@ export class PhysicsCoordinator {
 
     for (let i = 0; i < activeCount; i++) {
       const id = activeEntities[i];
-      const health = StatsStore.getCurrentHealth(w, id);
+      const health = StatsAccess.getHp(w, id);
 
       if (health <= 0) {
         // Mark as dead in DOD

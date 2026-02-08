@@ -4,39 +4,39 @@ import { ShapeId } from '../game/cjr/cjrTypes';
 interface MainMenuProps {
   level: number;
   unlockedLevel: number;
-  usePixi: boolean;
+  _usePixi?: boolean;
   useMultiplayer: boolean;
   networkStatus: 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error' | 'offline_mode';
-  name: string;
-  shape: ShapeId;
+  _name?: string;
+  _shape?: ShapeId;
   onTogglePixi: (usePixi: boolean) => void;
   onOpenLevels: () => void;
   onOpenTutorial: () => void;
   onOpenSettings: () => void;
   onOpenMatchmaking: () => void;
   onOpenTournament: () => void;
-  onStart: (name: string, shape: ShapeId) => void;
-  onNameChange: (name: string) => void;
-  onShapeChange: (shape: ShapeId) => void;
+  _onStart?: (name: string, shape: ShapeId) => void;
+  _onNameChange?: (name: string) => void;
+  _onShapeChange?: (shape: ShapeId) => void;
 }
 
 const MainMenu: React.FC<MainMenuProps> = ({
   level,
   unlockedLevel,
-  usePixi,
+  _usePixi,
   useMultiplayer,
   networkStatus,
-  name,
-  shape,
+  _name,
+  _shape,
   onTogglePixi,
   onOpenLevels,
   onOpenTutorial,
   onOpenSettings,
   onOpenMatchmaking,
   onOpenTournament,
-  onStart,
-  onNameChange,
-  onShapeChange,
+  _onStart,
+  _onNameChange,
+  _onShapeChange,
 }) => {
   const handleStart = () => {
     if (!name.trim()) return;

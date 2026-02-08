@@ -94,11 +94,30 @@ export class StateAccess {
     }
 
     static activate(world: WorldState, id: number): void {
-        world.stateFlags[id] |= EntityFlags.ACTIVE;
+        // Only add if not already active (idempotent)
+        if ((world.stateFlags[id] & EntityFlags.ACTIVE) === 0) {
+            world.stateFlags[id] |= EntityFlags.ACTIVE;
+            // EIDOLON-V: Add to Sparse Set
+            const idx = world.activeCount++;
+            world.activeEntities[idx] = id;
+            world.entityToIndex[id] = idx;
+        }
     }
 
     static deactivate(world: WorldState, id: number): void {
-        world.stateFlags[id] &= ~EntityFlags.ACTIVE;
+        // Only remove if currently active (idempotent)
+        if ((world.stateFlags[id] & EntityFlags.ACTIVE) !== 0) {
+            world.stateFlags[id] &= ~EntityFlags.ACTIVE;
+            // EIDOLON-V: Remove from Sparse Set (swap-remove for O(1))
+            const idx = world.entityToIndex[id];
+            if (idx >= 0 && idx < world.activeCount) {
+                const lastIdx = --world.activeCount;
+                const lastId = world.activeEntities[lastIdx];
+                world.activeEntities[idx] = lastId;
+                world.entityToIndex[lastId] = idx;
+                world.entityToIndex[id] = -1;
+            }
+        }
     }
 
     static markDead(world: WorldState, id: number): void {
@@ -132,6 +151,9 @@ export class NetworkSerializer {
         view: DataView, 
         offset: number
     ): number {
+        // EIDOLON-V P1: Defense-in-depth bounds check
+        if (id < 0 || id >= world.maxEntities) return offset;
+        
         switch (componentId) {
 `;
 
@@ -155,6 +177,9 @@ export class NetworkDeserializer {
         view: DataView, 
         offset: number
     ): number {
+        // EIDOLON-V P1: Defense-in-depth bounds check
+        if (id < 0 || id >= world.maxEntities) return offset;
+        
         switch (componentId) {
 `;
 
@@ -225,6 +250,8 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
         packerCode += `    ${compName.toUpperCase()}: ${config.id},\n`;
 
         packerBody += `            case ${config.id}: { // ${compName}\n`;
+        packerBody += `                // Bounds check: need ${stride} bytes to write\n`;
+        packerBody += `                if (view.byteLength < offset + ${stride}) return offset;\n`;
         packerBody += `                const srcView = world.${lowerName}View;\n`;
         packerBody += `                const ptr = id * ${stride};\n`;
         for (const f of fields) {
@@ -235,6 +262,8 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
 
         // --- Build Unpacker ---
         unpackerBody += `            case ${config.id}: { // ${compName}\n`;
+        unpackerBody += `                // Bounds check: need ${stride} bytes to read\n`;
+        unpackerBody += `                if (view.byteLength < offset + ${stride}) return offset;\n`;
         unpackerBody += `                const dstView = world.${lowerName}View;\n`;
         unpackerBody += `                const ptr = id * ${stride};\n`;
         for (const f of fields) {
@@ -252,6 +281,8 @@ ${fields.filter(f => !f.name.startsWith('_')).map(f => `    static set${capitali
  * Generated: ${timestamp}
  * Source: packages/engine/scripts/schema.config.js
  */
+
+import { EntityFlags } from './ComponentAccessors';
 
 export const MAX_ENTITIES = 10000;
 
@@ -279,6 +310,11 @@ ${componentMeta.map(m => {
     public readonly ${n}View: DataView;`;
     }).join('\n')}
 
+    // EIDOLON-V: Sparse Set for O(1) Iteration
+    public readonly activeEntities: Uint16Array; // Dense [id1, id2, ...]
+    public readonly entityToIndex: Int16Array;   // Sparse [id] -> index
+    public activeCount: number = 0;
+
     constructor(config?: IWorldConfig) {
         this.maxEntities = config?.maxEntities ?? MAX_ENTITIES;
         
@@ -303,6 +339,11 @@ ${componentMeta.map(m => {
         worldStateCode += `        this.${lowerName}View = new DataView(this.${lowerName}Buffer);\n`;
     }
 
+    // Add Sparse Set initialization
+    worldStateCode += `\n        // EIDOLON-V: Initialize Sparse Set\n`;
+    worldStateCode += `        this.activeEntities = new Uint16Array(this.maxEntities);\n`;
+    worldStateCode += `        this.entityToIndex = new Int16Array(this.maxEntities).fill(-1);\n`;
+
     worldStateCode += `    }
 
     /**
@@ -314,13 +355,20 @@ ${componentMeta.map(m => {
     for (const meta of componentMeta) {
         worldStateCode += `        this.${meta.name.toLowerCase()}.fill(0);\n`;
     }
-    worldStateCode += `    }
+    worldStateCode += `
+        // EIDOLON-V: Reset Sparse Set
+        this.activeCount = 0;
+        this.activeEntities.fill(0);
+        this.entityToIndex.fill(-1);
+    }
 
     /**
-     * Check if entity ID is valid
+     * Check if entity ID is valid AND ACTIVE
+     * P3-2 FIX: Also checks ACTIVE flag to prevent reading stale data
      */
     isValidEntityId(id: number): boolean {
-        return id >= 0 && id < this.maxEntities;
+        return id >= 0 && id < this.maxEntities &&
+            (this.stateFlags[id] & EntityFlags.ACTIVE) !== 0;
     }
 }
 

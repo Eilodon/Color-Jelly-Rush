@@ -13,10 +13,10 @@ import { GameState } from '../types';
 import { JELLY_VERTEX, JELLY_FRAGMENT, JellyShaderResources } from '../game/cjr/shaders';
 import { MAP_RADIUS, COLOR_PALETTE_HEX, RING_RADII } from '../constants';
 import { getPhysicsWorld, getWorld } from '../game/engine/context';
-import { TransformStore, PhysicsStore, EntityFlags } from '@cjr/engine';
+import { TransformAccess, PhysicsAccess, EntityFlags, STRIDES } from '@cjr/engine';
 import { visualStore } from '../game/engine/systems/VisualSystem';
 
-const STRIDE = TransformStore.STRIDE;
+const STRIDE = STRIDES.TRANSFORM;
 const X_OFFSET = 0;
 const Y_OFFSET = 1;
 const PREV_X_OFFSET = 4;

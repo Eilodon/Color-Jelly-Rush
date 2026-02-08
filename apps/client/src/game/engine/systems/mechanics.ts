@@ -1,6 +1,6 @@
 import { MAX_SPEED_BASE, MAX_ENTITY_RADIUS } from '../../../constants';
 import { Player, Bot, SizeTier } from '../../../types';
-import { PhysicsStore, StatsStore, EntityLookup } from '@cjr/engine';
+import { STRIDES, EntityLookup } from '@cjr/engine';
 import { getWorld } from '../context';
 
 // Logic ported from legacy physics.ts
@@ -26,7 +26,7 @@ export const applyGrowth = (entity: Player | Bot, amount: number) => {
 
 export const applyGrowthDOD = (id: number, amount: number) => {
   const w = getWorld();
-  const pIdx = id * 8; // PhysicsStore.STRIDE
+  const pIdx = id * 8; // STRIDES.PHYSICS = 8
   const currentRadius = w.physics[pIdx + 4];
 
   const currentArea = Math.PI * currentRadius * currentRadius;

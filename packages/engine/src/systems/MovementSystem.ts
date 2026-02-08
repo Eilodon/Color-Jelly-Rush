@@ -35,7 +35,7 @@ export class MovementSystem {
 
         // 2. Read speed config
         const speedMult = ConfigAccess.getSpeedMult(world, id) || 1;
-        const configMaxSpeed = ConfigAccess.getMagneticRadius(world, id); // Reusing first field for maxSpeed
+        const configMaxSpeed = ConfigAccess.getMaxSpeed(world, id); // Use proper MAX_SPEED field
 
         const baseMaxSpeed = configMaxSpeed > 0 ? configMaxSpeed : defaultMaxSpeed;
         const effectiveMaxSpeed = baseMaxSpeed * speedMult;

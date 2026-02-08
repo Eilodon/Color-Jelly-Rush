@@ -34,6 +34,26 @@ export interface ISpawnResult {
 }
 
 /**
+ * EIDOLON-V P3 FIX: DOD-friendly spawn descriptor
+ * Use this instead of IFood[] to avoid object allocation.
+ * Caller populates WorldState directly using these raw values.
+ */
+export interface SpawnDescriptor {
+    x: number;
+    y: number;
+    kind: PickupKind;
+    pigmentR: number;
+    pigmentG: number;
+    pigmentB: number;
+    radius: number;
+    value: number;
+}
+
+export interface ISpawnResultDOD {
+    descriptors: SpawnDescriptor[];
+}
+
+/**
  * Update wave spawner logic
  * Returns new food items instead of mutating state directly
  */

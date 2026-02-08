@@ -138,7 +138,14 @@ describe('GameRoom', () => {
   });
 
   describe('Player Death', () => {
-    beforeEach(() => room.onCreate({}));
+    beforeEach(() => {
+      vi.useFakeTimers();
+      room.onCreate({});
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
     it('handles player death and respawn', () => {
       const client = createMockClient('d1');
@@ -146,7 +153,7 @@ describe('GameRoom', () => {
       const entityIdx = (room as any).entityIndices.get('d1');
       const initialX = room.state.players.get('d1')?.position.x;
 
-      // Simulate death (health <= 0) using Accessor API with world
+      // Simulate death (health <= 0) using Accessor API
       const world = (room as any).world;
       const { StatsAccess } = require('@cjr/engine');
       StatsAccess.setHp(world, entityIdx, 0);
@@ -154,7 +161,18 @@ describe('GameRoom', () => {
       room.update(16.67);
 
       const player = room.state.players.get('d1');
-      // Player is immediately respawned (isDead = false), health reset
+      // Player should be dead initially (async respawn)
+      expect(player?.isDead).toBe(true);
+      expect(player?.currentHealth).toBe(0);
+
+      // Advance clock by 1.6 seconds to trigger respawn (1.5s delay)
+      vi.advanceTimersByTime(1600);
+      room.clock.tick(); // Process scheduled tasks
+
+      // Update room to process any pending state changes
+      room.update(16.67);
+
+      // Player should now be respawned
       expect(player?.isDead).toBe(false);
       expect(player?.currentHealth).toBe(100);
       // Position should have changed (respawn at random location)

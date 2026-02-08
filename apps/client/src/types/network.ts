@@ -3,6 +3,7 @@
  * Proper types for server state sync to replace `any` in NetworkClient
  */
 
+// Vector2 imported but used in extended interfaces - keeping for future use
 import { Vector2 } from './entity';
 
 // ============================================

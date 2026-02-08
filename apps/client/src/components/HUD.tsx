@@ -19,7 +19,7 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
   // CRITICAL: Direct DOM manipulation refs (no useState = no re-renders)
   const colorHintRef = useRef<HTMLDivElement>(null);
   const winHoldContainerRef = useRef<HTMLDivElement>(null);
-  const ringBadgeRef = useRef<HTMLSpanElement>(null); // For currentRing display if needed
+  // const _ringBadgeRef = useRef<HTMLSpanElement>(null); // For currentRing display if needed
 
   // EIDOLON-V FIX: The Blind HUD Fix
   const { getStats } = useGameDataBridge(gameStateRef);
@@ -129,7 +129,7 @@ const HUD: React.FC<HUDProps> = memo(({ gameStateRef }) => {
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, []); // EIDOLON ARCHITECT: Empty deps - no re-renders, component mounts once
+  }, [gameStateRef, getStats]); // EIDOLON ARCHITECT: Include required deps
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none font-ui overflow-hidden">

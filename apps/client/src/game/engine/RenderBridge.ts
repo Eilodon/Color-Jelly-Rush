@@ -11,7 +11,7 @@
  */
 
 import { getPhysicsWorld, getWorld } from './context';
-import { TransformStore } from '@cjr/engine';
+import { TransformAccess } from '@cjr/engine';
 import { vfxBuffer } from './VFXRingBuffer';
 
 const STRIDE = 8;

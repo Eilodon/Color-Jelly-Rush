@@ -96,7 +96,7 @@ export const updateRingLogic = (
     if (entity.isDead) return { transitioned: false };
 
     if ('matchPercent' in entity) {
-        return checkRingTransition(entity, world);
+        return checkRingTransition(entity, world, _dt);  // EIDOLON-V P1 FIX: Pass dt
     }
     return { transitioned: false };
 };
@@ -110,7 +110,8 @@ export const updateRingLogic = (
  */
 export const checkRingTransition = (
     entity: IRingEntity,
-    world: WorldState = defaultWorld
+    world: WorldState = defaultWorld,
+    dt: number = 0.016  // EIDOLON-V P1 FIX: dt for frame-rate independent physics
 ): { transitioned: boolean; newRing?: RingId } => {
     const pos = { x: 0, y: 0 };
     getEntityPos(world, entity, pos);
@@ -125,7 +126,7 @@ export const checkRingTransition = (
                 applyCommitBuff(entity, COMMIT_BUFFS.R2);
                 return { transitioned: true, newRing: 2 };
             } else {
-                applyElasticRejection(entity, RING_RADII.R2, 50, world);
+                applyElasticRejection(entity, RING_RADII.R2, 50, world, dt);
             }
         }
     }
@@ -138,7 +139,7 @@ export const checkRingTransition = (
                 applyCommitBuff(entity, COMMIT_BUFFS.R3);
                 return { transitioned: true, newRing: 3 };
             } else {
-                applyElasticRejection(entity, RING_RADII.R3, 50, world);
+                applyElasticRejection(entity, RING_RADII.R3, 50, world, dt);
             }
         }
         // Keep in Ring 2
@@ -172,12 +173,15 @@ const applyCommitBuff = (
 /**
  * Applies organic elastic force when trying to cross a membrane without permission.
  * F = -k * x - c * v (Spring + Damping)
+ * 
+ * EIDOLON-V P1 FIX: Uses actual dt instead of hardcoded 0.016 to fix frame-rate dependency
  */
 const applyElasticRejection = (
     entity: IRingEntity,
     radiusLimit: number,
     thickness: number,
-    world: WorldState
+    world: WorldState,
+    dt: number = 0.016  // Default fallback for legacy callers
 ) => {
     const pos = { x: 0, y: 0 };
     const vel = { x: 0, y: 0 };
@@ -198,13 +202,16 @@ const applyElasticRejection = (
     const k = 5.0;
     const c = 0.2;
 
+    // EIDOLON-V P1 FIX: Clamp max repulsion force to prevent NaN from lag spikes
+    const MAX_REPULSION_FORCE = 500;
+    const force = Math.min(Math.abs(penetration * k), MAX_REPULSION_FORCE) * Math.sign(penetration);
+
     const dirX = Math.cos(angle);
     const dirY = Math.sin(angle);
 
-    const force = penetration * k;
-
-    const newVx = vel.x + dirX * force * 0.016;
-    const newVy = vel.y + dirY * force * 0.016;
+    // EIDOLON-V P1 FIX: Use actual dt instead of hardcoded 0.016
+    const newVx = vel.x + dirX * force * dt;
+    const newVy = vel.y + dirY * force * dt;
 
     const dampedVx = newVx * (1 - c);
     const dampedVy = newVy * (1 - c);
@@ -241,14 +248,38 @@ const clampToRingOuter = (entity: IRingEntity, radiusLimit: number, world: World
 // ============================================================================
 
 /**
+ * Type guard to validate entity has required IRingEntity fields
+ * EIDOLON-V P3 FIX: Prevents crash from blind type casting
+ */
+const isRingEntity = (entity: unknown): entity is IRingEntity => {
+    if (!entity || typeof entity !== 'object') return false;
+    const e = entity as Record<string, unknown>;
+    return (
+        typeof e.position === 'object' && e.position !== null &&
+        typeof e.velocity === 'object' && e.velocity !== null &&
+        typeof e.ring === 'number' &&
+        typeof e.matchPercent === 'number' &&
+        typeof e.isDead === 'boolean' &&
+        typeof e.statusScalars === 'object' && e.statusScalars !== null &&
+        typeof e.statusMultipliers === 'object' && e.statusMultipliers !== null &&
+        typeof e.statusTimers === 'object' && e.statusTimers !== null
+    );
+};
+
+/**
  * Legacy-compatible updateRingLogic
  * Matches client signature: (entity: Player | Bot, dt: number, levelConfig: any, state: GameState) => void
  */
 export const updateRingLogicLegacy = (
-    entity: any,
+    entity: unknown,
     dt: number,
-    _levelConfig: any,
-    _state: any
+    _levelConfig: unknown,
+    _state: unknown
 ): void => {
-    updateRingLogic(entity as IRingEntity, dt, _levelConfig);
+    // EIDOLON-V P3 FIX: Validate before casting
+    if (!isRingEntity(entity)) {
+        console.warn('[ringSystem] updateRingLogicLegacy called with invalid entity');
+        return;
+    }
+    updateRingLogic(entity, dt, _levelConfig);
 };

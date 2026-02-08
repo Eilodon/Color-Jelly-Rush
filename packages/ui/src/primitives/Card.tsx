@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface CardProps {
   children: React.ReactNode;
@@ -6,7 +6,10 @@ interface CardProps {
   padding?: 'none' | 'small' | 'medium' | 'large';
 }
 
-export const Card: React.FC<CardProps> = ({
+/**
+ * EIDOLON-V: Memoized Card component
+ */
+export const Card = memo<CardProps>(({
   children,
   className = '',
   padding = 'medium',
@@ -23,4 +26,6 @@ export const Card: React.FC<CardProps> = ({
       {children}
     </div>
   );
-};
+});
+
+Card.displayName = 'Card';

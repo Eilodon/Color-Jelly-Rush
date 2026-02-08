@@ -1,6 +1,6 @@
 # Color Jelly Rush - Module Dependency Map
 
-> **Last Updated:** February 2, 2026
+> **Last Updated:** February 8, 2026
 > **Purpose:** Visual guide to module dependencies and import paths
 
 ---
@@ -17,8 +17,9 @@
                     ▼                      │                      ▼
     ┌───────────────────────┐              │      ┌───────────────────────┐
     │    apps/client        │              │      │    apps/server        │
-    │    (React + Pixi.js)  │              │      │    (Express+Colyseus) │
-    └───────────────────────┘              │      └───────────────────────┘
+    │    (React + Canvas/   │              │      │    (Express+Colyseus) │
+    │     Pixi.js)          │              │      └───────────────────────┘
+    └───────────────────────┘              │                      │
                 │                          │                      │
                 │                          │                      │
                 └──────────────────────────┼──────────────────────┘
@@ -93,7 +94,7 @@ apps/client/src/
 │               │       ├─► screens/MatchmakingScreen.tsx
 │               │       └─► screens/GameOverScreen.tsx
 │               │
-│               ├─► components/PixiGameCanvas.tsx
+│               ├─► components/GameCanvas.tsx
 │               │       │
 │               │       └─► game/renderer/backends/*
 │               │
@@ -101,10 +102,10 @@ apps/client/src/
 │                       │
 │                       └─► game/engine/GameStateManager.ts
 │                               │
-│                               ├─► game/engine/GameLoop.ts
+│                               ├─► game/engine/runner/CJRClientRunner.ts
 │                               ├─► game/engine/ClientEngineBridge.ts
 │                               │       │
-│                               │       └─► @cjr/engine (Engine class)
+│                               │       └─► @cjr/engine (WorldState, Systems)
 │                               │
 │                               └─► network/*
 ```
@@ -131,22 +132,29 @@ apps/client/src/
 │  game/engine/GameStateManager.ts  │ Session orchestrator            │
 │  game/engine/GameLoop.ts          │ RAF loop                        │
 │  game/engine/ClientEngineBridge.ts│ Links to @cjr/engine            │
-│  game/engine/dod/*                │ Client DOD stores               │
+│  game/engine/runner/CJRClientRunner│ Main game runner               │
+│  game/engine/context.ts           │ getWorld() accessor             │
+│  game/engine/dod/*                │ Client DOD layer                │
+│  game/engine/dod/systems/         │ AISystem, TattooSystem          │
+│  game/engine/systems/             │ combat, mechanics, etc.         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         CJR MECHANICS LAYER                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │  game/cjr/tattoos.ts           │ Tattoo definitions                 │
-│  game/cjr/shapeSkills.ts       │ Shape-based skills                 │
+│  game/cjr/tattooSynergies.ts   │ Synergy system                     │
 │  game/cjr/emotions.ts          │ Emotion system                     │
 │  game/cjr/contribution.ts      │ Boss contribution tiers            │
+│  game/cjr/botPersonalities.ts  │ Bot AI personalities               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                          RENDERING LAYER                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │  game/renderer/backends/       │ Render backend abstraction         │
 │  game/vfx/*                    │ Visual effects system              │
+│  game/visuals/JuiceSystem.ts   │ Game juice effects                 │
 ├─────────────────────────────────────────────────────────────────────┤
 │                          NETWORK LAYER                              │
 ├─────────────────────────────────────────────────────────────────────┤
+│  network/NetworkClient.ts      │ Colyseus client wrapper            │
 │  network/BinaryPacker.ts       │ Binary message encoding            │
 │  network/InputRingBuffer.ts    │ Input buffering                    │
 │  network/NetworkTransformBuffer│ Position interpolation             │
@@ -174,9 +182,11 @@ apps/server/src/
 │       │       │
 │       │       └─► rooms/GameRoom.ts
 │       │               │
-│       │               ├─► engine/ServerEngineBridge.ts
+│       │               ├─► @cjr/engine (WorldState, Access classes)
 │       │               │       │
-│       │               │       └─► @cjr/engine (Engine class)
+│       │               │       ├─► TransformAccess
+│       │               │       ├─► PhysicsAccess
+│       │               │       └─► PhysicsSystem, MovementSystem
 │       │               │
 │       │               ├─► schema/GameState.ts (Colyseus Schema)
 │       │               └─► systems/ColorMixingSystem.ts
@@ -203,45 +213,81 @@ apps/server/src/
 │
 ├── index.ts ◄────────────────────── PUBLIC API
 │       │
-│       ├─► dod/
+│       ├─► generated/             ← CODE-GENERATED (DO NOT EDIT)
 │       │   ├── index.ts
-│       │   ├── ComponentStores.ts   ← TypedArray storage
-│       │   ├── EntityFlags.ts       ← Bitmask flags
-│       │   └── IEntityLookup.ts     ← Lookup interface
+│       │   ├── WorldState.ts      ← Instance-based world state
+│       │   ├── ComponentAccessors.ts ← TransformAccess, PhysicsAccess, etc.
+│       │   ├── NetworkPacker.ts   ← Binary serialization
+│       │   └── NetworkDeserializer.ts
 │       │
-│       ├─► systems/
+│       ├─► core/                  ← INFRASTRUCTURE
 │       │   ├── index.ts
-│       │   ├── PhysicsSystem.ts     ← Position updates
-│       │   ├── MovementSystem.ts    ← Velocity from input
-│       │   └── SkillSystem.ts       ← Skill execution
+│       │   ├── BaseSimulation.ts  ← Abstract simulation class
+│       │   ├── ComponentRegistry.ts ← Dynamic component registration
+│       │   ├── CoreRegistry.ts    ← Core module registry
+│       │   └── IEntityLookup.ts   ← Entity lookup interface
 │       │
-│       ├─► cjr/
-│       │   ├── index.ts
-│       │   ├── colorMath.ts         ← Color mixing/matching
-│       │   ├── ringSystem.ts        ← Ring progression
-│       │   ├── waveSpawner.ts       ← Entity spawning
-│       │   ├── winCondition.ts      ← Victory check
-│       │   ├── bossCjr.ts           ← Boss mechanics
-│       │   └── tattoos.ts           ← Upgrade system
+│       ├─► interfaces/            ← CONTRACTS
+│       │   ├── IComponent.ts
+│       │   ├── IModule.ts
+│       │   ├── ISystem.ts
+│       │   ├── IWorld.ts
+│       │   └── index.ts
 │       │
-│       ├─► events/
+│       ├─► systems/               ← PURE DOD SYSTEMS
 │       │   ├── index.ts
-│       │   └── EventRingBuffer.ts   ← Zero-alloc event queue
+│       │   ├── PhysicsSystem.ts   ← Position updates
+│       │   ├── MovementSystem.ts  ← Velocity from input
+│       │   └── SkillSystem.ts     ← Skill execution
 │       │
-│       ├─► config/
+│       ├─► modules/               ← GAME MODULES
 │       │   ├── index.ts
-│       │   ├── levels.ts            ← Level configurations
+│       │   └── cjr/               ← CJR MODULE
+│       │       ├── index.ts       ← Module exports
+│       │       ├── CJRModule.ts   ← IGameModule implementation
+│       │       ├── colorMath.ts   ← Color mixing/matching
+│       │       ├── ringSystem.ts  ← Ring progression
+│       │       ├── waveSpawner.ts ← Entity spawning
+│       │       ├── winCondition.ts← Victory check
+│       │       ├── bossCjr.ts     ← Boss mechanics
+│       │       ├── tattoos.ts     ← Upgrade system
+│       │       ├── constants.ts   ← CJR constants
+│       │       ├── flags.ts       ← CJR-specific flags
+│       │       ├── state.ts       ← State interfaces
+│       │       └── types.ts       ← Type definitions
+│       │
+│       ├─► loader/                ← ENTITY LOADING
+│       │   ├── index.ts
+│       │   ├── BlueprintLoader.ts ← Level blueprint loader
+│       │   ├── EntitySpawner.ts   ← Entity spawning
+│       │   └── LevelValidator.ts  ← Level validation
+│       │
+│       ├─► events/                ← EVENT SYSTEM
+│       │   ├── index.ts
+│       │   └── EventRingBuffer.ts ← Zero-alloc event queue
+│       │
+│       ├─► config/                ← CONFIGURATION
+│       │   ├── index.ts
+│       │   ├── levels.ts          ← Level configurations
 │       │   └── constants.ts
 │       │
-│       ├─► math/
-│       │   └── FastMath.ts          ← Optimized math utils
+│       ├─► math/                  ← MATH UTILITIES
+│       │   ├── index.ts
+│       │   └── FastMath.ts        ← Optimized math utils
 │       │
-│       ├─► networking/
-│       │   ├── BinaryPacker.ts      ← Binary protocol
+│       ├─► networking/            ← BINARY PROTOCOL
+│       │   ├── index.ts
+│       │   ├── BinaryPacker.ts    ← Binary protocol
 │       │   └── types.ts
 │       │
-│       └─► factories/
-│           └── LogicFactories.ts    ← Entity creation
+│       ├─► factories/             ← ENTITY CREATION
+│       │   ├── index.ts
+│       │   └── LogicFactories.ts  ← createLogicEntity
+│       │
+│       └─► compat.ts              ← LEGACY COMPATIBILITY
+│           ├── TransformStore     ← DEPRECATED → TransformAccess
+│           ├── PhysicsStore       ← DEPRECATED → PhysicsAccess
+│           └── resetAllStores     ← DEPRECATED → world.reset()
 ```
 
 ---
@@ -272,17 +318,29 @@ apps/server/src/
 ```typescript
 // Importing from @cjr/engine
 import {
-  Engine,
-  TransformStore,
-  PhysicsStore,
-  EntityFlags,
+  // Generated (primary source)
+  WorldState,
+  TransformAccess,
+  PhysicsAccess,
+  MAX_ENTITIES,
+  STRIDES,
+
+  // Core
+  getComponentRegistry,
+
+  // Systems
   PhysicsSystem,
   MovementSystem,
+
+  // Events
   eventBuffer,
   EngineEventType,
+
+  // CJR Module
   mixPigment,
   calcMatchPercent,
-  getRingAtPosition
+  getRingAtPosition,
+  cjrModule,
 } from '@cjr/engine';
 
 // Importing from @cjr/shared
@@ -296,6 +354,7 @@ import {
 
 // Internal aliases
 import { GameStateManager } from '@/game/engine/GameStateManager';
+import { getWorld } from '@/game/engine/context';
 import { HUD } from '@components/HUD';
 ```
 
@@ -304,10 +363,12 @@ import { HUD } from '@components/HUD';
 ```typescript
 // Importing from @cjr/engine
 import {
-  Engine,
-  TransformStore,
+  WorldState,
+  TransformAccess,
+  PhysicsAccess,
   PhysicsSystem,
-  BinaryPacker
+  MovementSystem,
+  STRIDES,
 } from '@cjr/engine';
 
 // Importing from @cjr/shared
@@ -339,52 +400,18 @@ npm run lint -- --rule 'import/no-cycle: error'
 
 ---
 
-## 9. Vite Alias Configuration
-
-```typescript
-// apps/client/vite.config.ts
-resolve: {
-  alias: {
-    '@': path.resolve(__dirname, './src'),
-    '@cjr/shared': path.resolve(__dirname, '../../packages/shared/src'),
-    '@cjr/engine': path.resolve(__dirname, '../../packages/engine/src'),
-    '@services': path.resolve(__dirname, './src/services'),
-    '@components': path.resolve(__dirname, './src/components'),
-  },
-}
-```
-
----
-
-## 10. TypeScript Path Aliases
-
-```json
-// apps/client/tsconfig.json
-{
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./src/*"],
-      "@cjr/shared": ["../../packages/shared/src"],
-      "@cjr/engine": ["../../packages/engine/src"],
-      "@services/*": ["./src/services/*"],
-      "@components/*": ["./src/components/*"]
-    }
-  }
-}
-```
-
----
-
-## 11. Module Export Rules
+## 9. Module Export Rules
 
 ### @cjr/engine Exports
 
 | Module | What to Export | What NOT to Export |
 |--------|----------------|-------------------|
-| `dod/` | Stores, EntityFlags, MAX_ENTITIES | Internal helpers |
-| `systems/` | System update functions | Internal state |
-| `cjr/` | Public game logic functions | Implementation details |
+| `generated/` | WorldState, Access classes, STRIDES | Internal buffers |
+| `core/` | ComponentRegistry, getComponentRegistry | Internal state |
+| `systems/` | System update functions | Internal helpers |
+| `modules/cjr/` | Public game logic, CJRModule | Implementation details |
 | `events/` | eventBuffer, EventTypes | Buffer internals |
+| `loader/` | EntitySpawner, BlueprintLoader | Internal parsers |
 
 ### @cjr/shared Exports
 
@@ -392,6 +419,21 @@ resolve: {
 |--------|----------------|
 | `constants.ts` | All constants |
 | `types.ts` | All type definitions |
+
+---
+
+## 10. Key Changes (Feb 2026)
+
+| Before (Feb 2) | After (Feb 8) | Import Path |
+|----------------|---------------|-------------|
+| `TransformStore` | `TransformAccess` | `@cjr/engine` |
+| `PhysicsStore` | `PhysicsAccess` | `@cjr/engine` |
+| `dod/ComponentStores.ts` | `generated/ComponentAccessors.ts` | `@cjr/engine` |
+| `cjr/*.ts` | `modules/cjr/*.ts` | `@cjr/engine` |
+| Global `defaultWorld` | `getWorld()` accessor | Context file |
+| N/A | `CJRModule` class | `@cjr/engine` |
+| N/A | `ComponentRegistry` | `@cjr/engine` |
+| N/A | `EntitySpawner` | `@cjr/engine` |
 
 ---
 

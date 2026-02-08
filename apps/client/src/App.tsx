@@ -65,9 +65,9 @@ const App: React.FC = () => {
 
         clientLogger.info('✅ BOOT COMPLETE. ENTERING MENU.');
         session.actions.ui.setScreen('menu');
-      } catch (e: any) {
-        clientLogger.error('FATAL: Boot failed', undefined, e);
-        setBootError(e.message || 'Unknown Boot Error');
+      } catch (e: unknown) {
+        clientLogger.error('FATAL: Boot failed', undefined, e instanceof Error ? e : new Error(String(e)));
+        setBootError(e instanceof Error ? e.message : 'Unknown Boot Error');
       }
     };
 
@@ -80,7 +80,7 @@ const App: React.FC = () => {
       mobileOptimizer.cleanup();
       clientLogger.info('App component unmounting');
     };
-  }, []);
+  }, [session.actions.ui]);
 
   if (bootError) {
     return (
@@ -104,7 +104,7 @@ const App: React.FC = () => {
         const state = gameStateManager.getCurrentState();
         if (state) {
           stressTestController.start(state);
-          console.log('Stress Test START');
+          console.info('Stress Test START');
         } else {
           console.warn('Cannot start Stress Test: No State');
         }
@@ -112,7 +112,7 @@ const App: React.FC = () => {
       if (e.shiftKey && e.code === 'KeyD') {
         const { stressTestController } = await import('./dev/StressTestController');
         stressTestController.stop();
-        console.log('Stress Test STOP');
+        console.info('Stress Test STOP');
       }
     };
     window.addEventListener('keydown', handleKeyDown);

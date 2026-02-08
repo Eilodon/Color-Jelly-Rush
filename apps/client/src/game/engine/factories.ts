@@ -27,7 +27,7 @@ import {
   TransformAccess,    // PHASE 3: Migrated from TransformStore
   PhysicsAccess,      // PHASE 3: Migrated from PhysicsStore
   StateStore,
-  StatsStore,
+  StatsAccess,
   SkillStore,
   SkillAccess,
   TattooStore,
@@ -81,7 +81,7 @@ export const createPlayer = (
   PhysicsAccess.set(getWorld(), entId, 0, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
 
   // 2.2 Stats
-  StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
+  StatsAccess.set(getWorld(), entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
 
   // 2.3 State Flags
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PLAYER);
@@ -240,7 +240,7 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   // 2. Initialize DOD State (Single Source of Truth)
   TransformAccess.set(getWorld(), entId, position.x, position.y, 0, 1, position.x, position.y, 0);
   PhysicsAccess.set(getWorld(), entId, 0, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
-  StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1);
+  StatsAccess.set(getWorld(), entId, 100, 100, 0, 0, 1, 1);
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.BOT);
 
   // 2.4 Skill & Tattoo - EIDOLON-V P2 FIX: Use SkillAccess.set
@@ -375,7 +375,7 @@ export const createBoss = (spawnTime: number = 0): Bot | null => {
     // Update Physics Store radius/mass - use WorldState accessors
     PhysicsAccess.setRadius(getWorld(), boss.physicsIndex, 80);
     // Update Stats Store
-    StatsStore.set(getWorld(), boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
+    StatsAccess.set(getWorld(), boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
   }
 
   return boss;
@@ -459,7 +459,7 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   else if (food.kind === 'neutral') typeFlag |= CJRFoodFlags.FOOD_NEUTRAL;
 
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | typeFlag);
-  StatsStore.set(getWorld(), entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
+  StatsAccess.set(getWorld(), entId, 1, 1, 1, 0, 0, 0); // HP 1, MaxHP 1, Score 1...
 
   // EIDOLON-V: ConfigStore Init for Food
   // [magneticRadius, damageMult, speedMult, pickupRange, visionRange]
@@ -556,7 +556,7 @@ export const createProjectile = (
   TransformAccess.set(getWorld(), entId, position.x, position.y, 0, 1, position.x, position.y, 0);
   PhysicsAccess.set(getWorld(), entId, vx, vy, 0, 0.5, 8, 0.5, 1.0);
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
-  StatsStore.set(getWorld(), entId, 1, 1, 0, 0, 0, 1);
+  StatsAccess.set(getWorld(), entId, 1, 1, 0, 0, 0, 1);
 
   // EIDOLON-V: ConfigStore Init for Projectile
   ConfigStore.set(

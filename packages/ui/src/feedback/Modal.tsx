@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -7,7 +7,10 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({
+/**
+ * EIDOLON-V: Memoized Modal component
+ */
+export const Modal = memo<ModalProps>(({
   isOpen,
   onClose,
   title,
@@ -37,4 +40,6 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+Modal.displayName = 'Modal';

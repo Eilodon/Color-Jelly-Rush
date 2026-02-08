@@ -1,6 +1,6 @@
 import { MutableRefObject, useCallback, useRef } from 'react';
 import { GameState, Player } from '../types';
-import { StatsStore } from '@cjr/engine';
+import { STRIDES } from '@cjr/engine';
 import { getWorld } from '../game/engine/context';
 
 export interface BridgedStats {
@@ -29,7 +29,7 @@ export const useGameDataBridge = (gameStateRef: MutableRefObject<GameState | nul
     // "The Blind Fix": Read directly from memory if available
     if (idx !== undefined) {
       const w = getWorld();
-      const base = idx * StatsStore.STRIDE;
+      const base = idx * STRIDES.STATS;
       if (base + 3 < w.stats.length) {
         statsRef.current.currentHealth = w.stats[base];
         statsRef.current.maxHealth = w.stats[base + 1];

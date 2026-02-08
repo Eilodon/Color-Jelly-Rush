@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 
 interface ToastProps {
   message: string;
@@ -7,7 +7,10 @@ interface ToastProps {
   onClose?: () => void;
 }
 
-export const Toast: React.FC<ToastProps> = ({
+/**
+ * EIDOLON-V: Memoized Toast component
+ */
+export const Toast = memo<ToastProps>(({
   message,
   type = 'info',
   duration = 3000,
@@ -34,4 +37,6 @@ export const Toast: React.FC<ToastProps> = ({
       {message}
     </div>
   );
-};
+});
+
+Toast.displayName = 'Toast';

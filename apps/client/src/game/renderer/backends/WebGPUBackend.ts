@@ -69,7 +69,7 @@ export class WebGPUBackend implements IRenderBackend {
                 alphaMode: 'opaque',
             });
 
-            console.log('[WebGPUBackend] Initialized successfully');
+            console.info('[WebGPUBackend] Initialized successfully');
             return true;
         } catch (e) {
             console.warn('[WebGPUBackend] Init failed:', e);

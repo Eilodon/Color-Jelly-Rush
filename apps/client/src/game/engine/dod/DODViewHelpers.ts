@@ -5,7 +5,7 @@
  */
 
 // EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
-import { TransformStore, PhysicsStore, StateStore } from '@cjr/engine';
+import { TransformAccess, PhysicsAccess, StateStore, STRIDES } from '@cjr/engine';
 import { getWorld } from '../context';
 import { EntityFlags } from '@cjr/engine';
 import { entityManager } from './EntityManager';
@@ -26,7 +26,7 @@ export function sampleEntityPositionsToArray(out: Float32Array, filterFlags: num
   const tData = w.transform;
   const flags = w.stateFlags;
   const count = entityManager.count;
-  const stride = TransformStore.STRIDE;
+  const stride = STRIDES.TRANSFORM;
 
   let writeIdx = 0;
   const maxWrite = out.length;
@@ -105,8 +105,8 @@ export function sampleEntityPositionsWithRadiusToArray(
   const pData = w.physics;
   const flags = w.stateFlags;
   const count = entityManager.count;
-  const tStride = TransformStore.STRIDE;
-  const pStride = PhysicsStore.STRIDE;
+  const tStride = STRIDES.TRANSFORM;
+  const pStride = STRIDES.PHYSICS;
 
   let writeIdx = 0;
   const maxWrite = out.length;

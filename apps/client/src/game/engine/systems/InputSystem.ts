@@ -1,7 +1,7 @@
 import { BufferedInput } from '../../input/BufferedInput';
 import { NetworkClient } from '../../../network/NetworkClient';
 import { GameState } from '../../../types';
-import { InputStore, TransformStore } from '@cjr/engine';
+import { InputStore, TransformAccess } from '@cjr/engine';
 import { getWorld } from '../context';
 
 export class InputSystem {

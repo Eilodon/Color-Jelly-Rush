@@ -553,14 +553,43 @@ export class GameRoom extends Room<GameRoomState> {
     const buffer = SchemaBinaryPacker.packTransformSnapshot(this.world, this.state.gameTime);
 
     if (buffer.byteLength > 0) {
-      // Use 'binary' channel if client supports it, or 'binIdx' as legacy?
-      // Client NetworkClient.ts: handleBinaryIndexedUpdate uses SchemaBinaryUnpacker now.
-      // We can use 'binIdx' to keep routing same.
-      // But wait: 'binary' message type might be handled differently?
-      // Client: this.room.onMessage('binIdx', ...) => handleBinaryIndexedUpdate
-      // handleBinaryIndexedUpdate => calls handleBinaryUpdate => unpacks Schema.
-      // So 'binIdx' is fine.
-      this.broadcast('binIdx', new Uint8Array(buffer));
+      // EIDOLON-V FIX: Unicast with Ack (Last Processed Input)
+      // We must append the 'lastProcessedInput' seq for each client to the packet.
+      // Format: [Ack (4 bytes)] + [Snapshot Buffer]
+      // Note: Header is handled by Colyseus? No, we use sendBytes.
+      // Actually Colyseus 'sendBytes' sends raw buffer with a type code?
+      // Colyseus documentation says: room.sendBytes(client, buffer)
+      // But we are using 'binIdx' channel via broadcast before.
+      // To keep it simple and compatible with how we handle messages:
+      // We will construct a new buffer for each client: [Ack(4)] + [Original Buffer]
+      // And use `client.send('binIdx', buffer)` (which wraps it) OR `client.sendBytes()`?
+      // If we use `broadcast('binIdx', buffer)`, it sends the same buffer to all.
+      // We need UNICAST.
+
+      const inputs = this.state.players; // Access player state for lastProcessedInput
+
+      this.clients.forEach(client => {
+        const player = inputs.get(client.sessionId);
+        const lastAck = player ? player.lastProcessedInput : 0;
+
+        // Construct packet: Ack (4 bytes) + Snapshot
+        // We reuse the snapshot buffer, just need to prefix it.
+        // Optimization: Double buffer or just new allocation?
+        // Allocating small header + copy is fine for 50 clients.
+        // Or we can assume Client knows how to strip it.
+
+        // Packet Structure:
+        // [Ack (4 bytes - Uint32)] + [Body (Snapshot)]
+        const packetSize = 4 + buffer.byteLength;
+        const packet = new Uint8Array(packetSize);
+        const view = new DataView(packet.buffer);
+
+        view.setUint32(0, lastAck, true);
+        packet.set(new Uint8Array(buffer), 4);
+
+        // Send unicast
+        client.send('binIdx', packet);
+      });
     }
   }
 

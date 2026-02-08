@@ -9,6 +9,7 @@
  */
 
 import { WorldState, StateAccess } from '@cjr/engine';
+import { ISnapshotReceiver } from '@cjr/engine/networking';
 
 interface PendingTransform {
   x: number;
@@ -17,7 +18,7 @@ interface PendingTransform {
   vy: number;
 }
 
-export class NetworkTransformBuffer {
+export class NetworkTransformBuffer implements ISnapshotReceiver {
   private static instance: NetworkTransformBuffer;
 
   // Use Map for O(1) lookup and overwrites (latest wins)
@@ -50,6 +51,52 @@ export class NetworkTransformBuffer {
     } else {
       this.pending.set(physicsIndex, { x, y, vx, vy });
     }
+  }
+
+  // EIDOLON-V: ISnapshotReceiver Implementation
+  onTransform(id: number, x: number, y: number): void {
+    // We need to merge with existing data, or create new.
+    // Since packets might separate Transform and Physics, we need to handle partial updates.
+    // Our 'queue' method expects all 4 values.
+    // If we only get Transform, we must preserve existing Velocity if present, or Init to 0?
+    // Wait, 'queue' overwrites everything.
+    // If we receive Transform, we don't know Velocity yet.
+    // We should split pending into TransformPending and PhysicsPending?
+    // Or just store partials.
+
+    let existing = this.pending.get(id);
+    if (!existing) {
+      existing = { x, y, vx: 0, vy: 0 };
+      this.pending.set(id, existing);
+    } else {
+      existing.x = x;
+      existing.y = y;
+    }
+  }
+
+  onPhysics(id: number, vx: number, vy: number, radius: number): void {
+    let existing = this.pending.get(id);
+    if (!existing) {
+      // If we receive Physics before Transform (unlikely but possible), 
+      // we might initialize X/Y to 0? Or should we query WorldState?
+      // For now, init to 0. Ideally, we shouldn't receive Physics without Transform close by.
+      existing = { x: 0, y: 0, vx, vy };
+      this.pending.set(id, existing);
+    } else {
+      existing.vx = vx;
+      existing.vy = vy;
+    }
+    // Note: Radius is ignored by PendingTransform currently. 
+    // If needed, extend PendingTransform.
+  }
+
+  onComponent(id: number, componentId: number, view: DataView, offset: number): void {
+    // Buffer component deltas if needed.
+    // Current implementation flushes buffer via explicit 'flush' relying on 'pending' map.
+    // Component deltas are not in 'pending' map.
+    // TODO: Implement component buffering if race conditions persist for metadata.
+    // For now, we can log or ignore, assuming Unpacker handles them via direct world write (legacy behavior).
+    // Or we can throw error if we strictly forbid direct writes.
   }
 
   /**

@@ -12,6 +12,7 @@ export { Card } from './primitives/Card';
 export { Toast } from './feedback/Toast';
 export { Modal } from './feedback/Modal';
 export { LoadingSpinner } from './feedback/LoadingSpinner';
+export { ErrorBoundary } from './feedback/ErrorBoundary';
 
 // Accessibility
 export { ScreenReader } from './accessibility/ScreenReader';

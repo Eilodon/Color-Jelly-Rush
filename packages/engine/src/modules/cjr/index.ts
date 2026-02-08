@@ -84,6 +84,14 @@ export {
     type ITattooFood,
 } from './tattoos';
 
+// Tattoo Entity Adapter (Zero-Allocation DOD Bridge)
+export {
+    TattooEntityAdapter,
+    tattooEntityAdapter,
+    TattooEntityPool,
+    tattooEntityPool,
+} from './TattooEntityAdapter';
+
 // Win Condition
 export {
     updateWinConditionLogic,

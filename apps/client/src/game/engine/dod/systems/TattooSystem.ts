@@ -1,5 +1,5 @@
 // EIDOLON-V FIX: Import from engine SSOT instead of local duplicates
-import { TattooStore, StatsStore, StateStore } from '@cjr/engine';
+import { TattooStore, StatsAccess, StateStore } from '@cjr/engine';
 import { getWorld } from '../../context';
 import { MAX_ENTITIES, EntityFlags } from '@cjr/engine';
 import { TattooFlag } from '../../statusFlags';

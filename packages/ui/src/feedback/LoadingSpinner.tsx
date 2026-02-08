@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { memo } from 'react';
 
 interface LoadingSpinnerProps {
   size?: 'small' | 'medium' | 'large';
   className?: string;
 }
 
-export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
+/**
+ * EIDOLON-V: Memoized LoadingSpinner component
+ */
+export const LoadingSpinner = memo<LoadingSpinnerProps>(({
   size = 'medium',
   className = '',
 }) => {
@@ -22,4 +25,6 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       aria-label="Loading"
     />
   );
-};
+});
+
+LoadingSpinner.displayName = 'LoadingSpinner';

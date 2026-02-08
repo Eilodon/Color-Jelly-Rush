@@ -14,7 +14,7 @@ import { SpatialHashGrid, SpatialQueryResult } from '../spatial/SpatialHashGrid'
 
 // --- Optimization: Persistent Spatial Grid ---
 // ADAPTER: Wraps the new SOTA SpatialHashGrid to match legacy API used in OptimizedEngine
-import { EntityLookup, TransformStore } from '@cjr/engine';
+import { EntityLookup, TransformAccess } from '@cjr/engine';
 // Note: getWorld() is defined later in this file, so we use it directly
 
 // --- Optimization: Persistent Spatial Grid ---

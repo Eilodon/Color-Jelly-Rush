@@ -16,7 +16,7 @@
 // ============================================
 
 // EIDOLON-V FIX: Import TransformStore for Spatial Audio
-import { TransformStore } from '@cjr/engine';
+import { TransformAccess, STRIDES } from '@cjr/engine';
 import { getWorld } from '../engine/context';
 
 export interface AudioConfig {

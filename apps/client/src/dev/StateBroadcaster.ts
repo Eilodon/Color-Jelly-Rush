@@ -47,7 +47,7 @@ export class StateBroadcaster {
         try {
             this.ws = new WebSocket(this.serverUrl);
             this.ws.onopen = () => {
-                console.log('[StateBroadcaster] Connected to viewer');
+                console.info('[StateBroadcaster] Connected to viewer');
                 if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
             };
             this.ws.onclose = () => {

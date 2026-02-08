@@ -3,7 +3,7 @@
  * Pure tattoo logic - VFX decoupled via eventBuffer
  */
 
-import { TattooId, MutationTier, type PigmentVec3 } from './types';
+import { TattooId, MutationTier, TATTOO_NUMERIC_ID, type PigmentVec3 } from './types';
 import { eventBuffer, EngineEventType, TEXT_IDS } from '../../events/EventRingBuffer';
 import { mixPigment, calcMatchPercentFast, pigmentToInt } from './colorMath';
 
@@ -304,7 +304,7 @@ export const applyTattoo = (entity: ITattooEntity, id: TattooId): boolean => {
             entity.physicsIndex ?? 0,
             entity.position.x,
             entity.position.y,
-            id.charCodeAt(0) // Pack first char of ID for lookup
+            TATTOO_NUMERIC_ID[id] // Use unique numeric ID (fixes 'p' collision)
         );
 
         return true;

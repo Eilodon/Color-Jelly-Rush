@@ -4,7 +4,7 @@ import { createFood, createParticle } from '../engine/factories';
 import { createFloatingText } from '../engine/effects';
 import { StatusFlag, TattooFlag } from '../engine/statusFlags';
 import { vfxSystem } from '../vfx/vfxSystem';
-import { TransformStore, PhysicsStore } from '@cjr/engine';
+import { TransformAccess, PhysicsAccess } from '@cjr/engine';
 import { getWorld } from '../engine/context';
 
 // EIDOLON-V: DOD helpers for tattoo synergies

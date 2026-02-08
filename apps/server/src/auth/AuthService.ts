@@ -14,6 +14,11 @@ import { logger } from '../logging/Logger';
 import { sessionStore, Session } from './SessionStore';
 import { RedisManager } from '../database/RedisManager';
 
+interface JwtPayload extends jwt.JwtPayload {
+  userId: string;
+  username: string;
+}
+
 // Extend Express Request interface
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -155,7 +160,7 @@ export class AuthService {
 
     const signOptions: jwt.SignOptions = {
       algorithm: JWT_ALG as jwt.Algorithm,
-      expiresIn: JWT_EXPIRES_IN as any, // Cast to any to satisfy specific string literal types if needed
+      expiresIn: JWT_EXPIRES_IN as any,
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
     };
@@ -184,7 +189,7 @@ export class AuthService {
         algorithms: [JWT_ALG],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
-      }) as any;
+      }) as JwtPayload;
 
       // Check session exists in Redis-backed store
       const session = await sessionStore.get(token);
@@ -209,7 +214,7 @@ export class AuthService {
         algorithms: [JWT_ALG],
         issuer: JWT_ISSUER,
         audience: JWT_AUDIENCE,
-      }) as any;
+      }) as JwtPayload;
 
       return {
         id: decoded.userId,

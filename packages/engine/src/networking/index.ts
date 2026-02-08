@@ -11,3 +11,4 @@ export * from './ProtocolSchema';
 export * from './DirtyTracker';
 export * from './SchemaBinaryPacker';
 export * from './SchemaBinaryUnpacker';
+export * from './ISnapshotReceiver';

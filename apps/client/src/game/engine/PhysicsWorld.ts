@@ -45,7 +45,7 @@ export class PhysicsWorld {
     TransformAccess.set(this.world, idx, x, y, 0, 1, x, y, 0);
     PhysicsAccess.set(this.world, idx, 0, 0, 0, mass, radius, 0.5, 0.9);
 
-    let flags = EntityFlags.ACTIVE;
+    const flags = EntityFlags.ACTIVE;
     // if (isSolid) flags |= EntityFlags.OBSTACLE; // OBSTACLE not defined in generated flags
     StateAccess.setFlag(this.world, idx, flags);
     // StateAccess in compat.ts uses defaultWorld.

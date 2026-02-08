@@ -29,6 +29,7 @@ import {
   MovementSystem
 } from '@cjr/engine';
 import { networkTransformBuffer } from '../../../network/NetworkTransformBuffer';
+import { networkClient } from '../../../network/NetworkClient';
 
 /**
  * CJR Client Simulation Configuration
@@ -244,17 +245,17 @@ export class CJRClientRunner extends ClientRunner {
     }
 
     try {
-      console.log('[CJRClientRunner] Spawning Physics Worker...');
+      console.info('[CJRClientRunner] Spawning Physics Worker...');
 
       // 2. Create Worker (Vite worker import)
-      this.worker = new Worker(new URL('../../workers/physics.worker.ts', import.meta.url), {
+      this.worker = new Worker(new URL('../../../workers/physics.worker.ts', import.meta.url), {
         type: 'module'
       });
 
       this.worker.onmessage = (e) => {
         const msg = e.data;
         if (msg.type === 'INIT_COMPLETE') {
-          console.log('[CJRClientRunner] Worker Initialized. Switching to Split-Brain Mode.');
+          console.info('[CJRClientRunner] Worker Initialized. Switching to Split-Brain Mode.');
           this.useWorker = true;
           this.worker?.postMessage({ type: 'START' });
         }
@@ -314,7 +315,13 @@ export class CJRClientRunner extends ClientRunner {
     // EIDOLON-V: Split Brain Architecture
     // 0. Flush Network Transforms (Critical: Apply SSOT updates before simulation)
     // Runs on Main Thread regardless of Worker mode (Shared Memory write)
+    // 0. Flush Network Transforms (Critical: Apply SSOT updates before simulation)
+    // Runs on Main Thread regardless of Worker mode (Shared Memory write)
     networkTransformBuffer.flush(this.world);
+
+    // EIDOLON-V: Reconcile Client Prediction (Replay Inputs on top of Server Snapshot)
+    // Now that WorldState has the Server Snapshot (via Flush), we replay pending inputs.
+    networkClient.reconcile();
 
     if (this.useWorker) {
       // WORKER MODE:
@@ -354,7 +361,7 @@ export class CJRClientRunner extends ClientRunner {
   update(dt: number): void {
     // EIDOLON-V DEBUG: Trace update execution (REMOVE AFTER DEBUG)
     if (CJRClientRunner.updateDebugCount++ < 5) {
-      console.log(`[DEBUG] CJRClientRunner.update: gameState=${!!this.gameState}, running=${this.isRunning()}, dt=${dt.toFixed(4)}`);
+      console.info(`[DEBUG] CJRClientRunner.update: gameState=${!!this.gameState}, running=${this.isRunning()}, dt=${dt.toFixed(4)}`);
     }
 
     if (!this.gameState) return;
@@ -457,20 +464,23 @@ export class CJRClientRunner extends ClientRunner {
       this.world // EIDOLON-V: BufferInput needs world now?
     );
 
-    // Store for reconciliation (simplified - just track sequence)
-    this.pendingInputs.push({
-      seq: this.pendingInputs.length,
-      targetX: bi.getMousePosition().x,
-      targetY: bi.getMousePosition().y,
-      space: bi.isKeyPressed('Space') || bi.state.actions.space,
-      w: bi.isKeyPressed('KeyQ') || bi.isKeyPressed('KeyE') || bi.state.actions.w,
-      dt: _dt,
-    });
+    // EIDOLON-V FIX: Send Input via NetworkClient (populates InputRingBuffer for reconciliation)
+    const actions = bi.state.actions;
+    const target = bi.getMousePosition();
+    const networkInputs = {
+      space: bi.isKeyPressed('Space') || actions.space,
+      w: bi.isKeyPressed('KeyQ') || bi.isKeyPressed('KeyE') || actions.w,
+    };
 
-    // Limit buffer size
-    if (this.pendingInputs.length > 256) {
-      this.pendingInputs.shift();
-    }
+    // Events (Entity Death, etc) - currently empty but prepared
+    const events: any[] = [];
+
+    networkClient.sendInput(
+      target,
+      networkInputs,
+      _dt,
+      events
+    );
   }
 
   /**

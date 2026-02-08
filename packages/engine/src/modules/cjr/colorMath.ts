@@ -208,6 +208,7 @@ function sRGB_to_OkLab(rgb: PigmentVec3): { L: number; a: number; b: number } {
 }
 
 // OkLab -> sRGB
+// EIDOLON-V P2 FIX: Clamp output to [0, 1] to prevent out-of-gamut colors
 function OkLab_to_sRGB(lab: { L: number; a: number; b: number }): PigmentVec3 {
     const l_ = lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
     const m_ = lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
@@ -217,10 +218,13 @@ function OkLab_to_sRGB(lab: { L: number; a: number; b: number }): PigmentVec3 {
     const m = m_ * m_ * m_;
     const s = s_ * s_ * s_;
 
+    // EIDOLON-V P2 FIX: Clamp RGB to [0, 1] to prevent canvas/shader issues
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
     return {
-        r: Linear_to_sRGB(4.0766 * l - 3.307711 * m + 0.230969 * s),
-        g: Linear_to_sRGB(-1.268438 * l + 2.609757 * m - 0.341319 * s),
-        b: Linear_to_sRGB(-0.004196 * l - 0.703418 * m + 1.707614 * s),
+        r: clamp01(Linear_to_sRGB(4.0766 * l - 3.307711 * m + 0.230969 * s)),
+        g: clamp01(Linear_to_sRGB(-1.268438 * l + 2.609757 * m - 0.341319 * s)),
+        b: clamp01(Linear_to_sRGB(-0.004196 * l - 0.703418 * m + 1.707614 * s)),
     };
 }
 

@@ -7,23 +7,23 @@ import {
     SkillSystem
 } from '@cjr/engine';
 
-// Define Worker Context
-declare const self: DedicatedWorkerGlobalScope;
+// Define Worker Context with proper global types
+declare const self: Worker;
 
 let world: WorldState | null = null;
-let intervalId: any = null;
-let lastTime = 0;
+let intervalId: ReturnType<typeof setInterval> | null = null;
+let _lastTime = 0;
 const targetTickRate = 60;
 const fixedDt = 1 / targetTickRate;
 
-console.log('[PhysicsWorker] Loaded');
+console.info('[PhysicsWorker] Loaded');
 
 self.onmessage = (e: MessageEvent) => {
     const { type, config, buffers } = e.data;
 
     if (type === 'INIT') {
         try {
-            console.log('[PhysicsWorker] Initializing WorldState...');
+            console.info('[PhysicsWorker] Initializing WorldState...');
 
             // Hydrate WorldState from SharedArrayBuffers
             world = new WorldState({
@@ -42,7 +42,7 @@ self.onmessage = (e: MessageEvent) => {
                 }
             });
 
-            console.log('[PhysicsWorker] WorldState Re-hydrated successfully.');
+            console.info('[PhysicsWorker] WorldState Re-hydrated successfully.');
             self.postMessage({ type: 'INIT_COMPLETE' });
 
         } catch (err) {
@@ -59,13 +59,13 @@ self.onmessage = (e: MessageEvent) => {
 
         if (intervalId) clearInterval(intervalId);
 
-        console.log('[PhysicsWorker] Starting Simulation Loop...');
-        lastTime = performance.now();
+        console.info('[PhysicsWorker] Starting Simulation Loop...');
+        const _lastTime = performance.now();
 
         // Fixed Time Step Loop
         intervalId = setInterval(() => {
             try {
-                const now = performance.now();
+                const _now = performance.now();
                 // Calculate dt? For fixed tick, we trust the interval or use fixedDt?
                 // Physics generally prefers Fixed DT for stability.
 
@@ -90,6 +90,6 @@ self.onmessage = (e: MessageEvent) => {
     if (type === 'STOP') {
         if (intervalId) clearInterval(intervalId);
         intervalId = null;
-        console.log('[PhysicsWorker] Stopped.');
+        console.info('[PhysicsWorker] Stopped.');
     }
 };

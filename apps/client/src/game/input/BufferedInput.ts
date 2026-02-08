@@ -192,19 +192,30 @@ export class BufferedInput {
   ): void {
     if (this.isDisposed) return;
 
-    // 1. Mouse Position -> Target (Convert screen to world coordinates)
-    let targetX = this.mouse.x;
-    let targetY = this.mouse.y;
+    let targetX: number;
+    let targetY: number;
 
-    // Convert screen coordinates to world coordinates if camera is provided
-    if (camera && playerPosition) {
-      // Screen center relative coordinates
-      const screenCenterX = window.innerWidth / 2;
-      const screenCenterY = window.innerHeight / 2;
-      const worldX = camera.x + (this.mouse.x - screenCenterX);
-      const worldY = camera.y + (this.mouse.y - screenCenterY);
-      targetX = worldX;
-      targetY = worldY;
+    // 1. Check for keyboard/joystick input first
+    this.updateMoveVector();
+    const hasKeyboardInput = Math.abs(this.sharedInputBuffer[0]) > 0.01 ||
+      Math.abs(this.sharedInputBuffer[1]) > 0.01;
+
+    if (hasKeyboardInput && playerPosition) {
+      // WASD/Joystick mode: compute target from current position + direction vector
+      const KEYBOARD_TARGET_OFFSET = 250;
+      targetX = playerPosition.x + this.sharedInputBuffer[0] * KEYBOARD_TARGET_OFFSET;
+      targetY = playerPosition.y + this.sharedInputBuffer[1] * KEYBOARD_TARGET_OFFSET;
+    } else {
+      // Mouse mode: use mouse position converted to world coordinates
+      targetX = this.mouse.x;
+      targetY = this.mouse.y;
+
+      if (camera && playerPosition) {
+        const screenCenterX = window.innerWidth / 2;
+        const screenCenterY = window.innerHeight / 2;
+        targetX = camera.x + (this.mouse.x - screenCenterX);
+        targetY = camera.y + (this.mouse.y - screenCenterY);
+      }
     }
 
     if (world) {

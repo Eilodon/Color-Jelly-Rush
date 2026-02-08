@@ -14,14 +14,15 @@ import { mixPigment, calcMatchPercentFast, pigmentToInt, getSnapAlpha } from '..
 import { triggerEmotion } from '../../cjr/emotions';
 import { vfxBuffer, VFX_TYPES, packHex, TEXT_IDS } from '../VFXRingBuffer';
 import {
-  StatsStore,
-  TransformStore,
-  PhysicsStore,
+  StatsAccess,
+  TransformAccess,
+  PhysicsAccess,
   StateStore,
   TattooStore,
   EntityLookup,
   PigmentStore,
   EntityFlags,
+  STRIDES,
 } from '@cjr/engine';
 import { getWorld } from '../context';
 import { audioEngine } from '../../audio/AudioEngine';

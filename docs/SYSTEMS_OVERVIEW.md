@@ -1,6 +1,6 @@
 # Color Jelly Rush - Systems Overview
 
-> **Last Updated:** February 2, 2026
+> **Last Updated:** February 8, 2026
 > **Purpose:** Complete reference for all game systems and their interactions
 
 ---
@@ -14,7 +14,7 @@
 │                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                      ENGINE SYSTEMS (Pure DOD)                       │   │
-│   │                         @cjr/engine                                  │   │
+│   │                         @cjr/engine/systems                          │   │
 │   │                                                                      │   │
 │   │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
 │   │   │ MovementSys │  │ PhysicsSys  │  │  SkillSys   │                 │   │
@@ -27,7 +27,7 @@
 │                                   ▼                                          │
 │   ┌─────────────────────────────────────────────────────────────────────┐   │
 │   │                      CJR GAME SYSTEMS                                │   │
-│   │                         @cjr/engine/cjr                              │   │
+│   │                      @cjr/engine/modules/cjr                         │   │
 │   │                                                                      │   │
 │   │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
 │   │   │ ColorMath   │  │ RingSystem  │  │ WaveSpawner │                 │   │
@@ -44,7 +44,10 @@
 │   │                         apps/client                                  │   │
 │   │                                                                      │   │
 │   │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
-│   │   │ VFXSystem   │  │ AudioEngine │  │ RenderSys   │                 │   │
+│   │   │ JuiceSystem │  │ AudioEngine │  │  AISystem   │                 │   │
+│   │   └─────────────┘  └─────────────┘  └─────────────┘                 │   │
+│   │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
+│   │   │PhysicsCoord │  │ VisualSys   │  │ CombatSys   │                 │   │
 │   │   └─────────────┘  └─────────────┘  └─────────────┘                 │   │
 │   │                                                                      │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
@@ -62,20 +65,28 @@
 
 **Purpose:** Converts player input into velocity
 
-**Reads:**
-- `InputStore` - Target position (targetX, targetY)
-- `TransformStore` - Current position (x, y)
-- `ConfigStore` - Speed multiplier
-
-**Writes:**
-- `PhysicsStore` - Velocity (vx, vy)
+**Data Access (DOD):**
+- **Reads:** `world.input` (targetX, targetY), `world.transform` (x, y), `world.config` (speed)
+- **Writes:** `world.physics` (vx, vy)
 
 **Algorithm:**
-```
-1. Read target position from InputStore
-2. Calculate direction vector: (targetX - x, targetY - y)
-3. Apply acceleration toward target
-4. Cap velocity at maxSpeed * speedMultiplier
+```typescript
+// For each active entity in world.activeEntities
+const inputIdx = id * STRIDES.INPUT;
+const transformIdx = id * STRIDES.TRANSFORM;
+const physicsIdx = id * STRIDES.PHYSICS;
+
+const targetX = world.input[inputIdx];     // Target position X
+const targetY = world.input[inputIdx + 1]; // Target position Y
+const currentX = world.transform[transformIdx];
+const currentY = world.transform[transformIdx + 1];
+
+const dx = targetX - currentX;
+const dy = targetY - currentY;
+// Normalize and apply speed...
+
+world.physics[physicsIdx] = vx;     // Write velocity X
+world.physics[physicsIdx + 1] = vy; // Write velocity Y
 ```
 
 **Constants:**
@@ -93,20 +104,29 @@
 
 **Purpose:** Integrates velocity to update position, applies friction and constraints
 
-**Reads:**
-- `PhysicsStore` - Velocity (vx, vy), radius, friction
-- `StateStore` - Entity flags (ACTIVE)
-
-**Writes:**
-- `TransformStore` - Position (x, y), previous position (prevX, prevY)
-- `PhysicsStore` - Velocity after friction
+**Data Access (DOD):**
+- **Reads:** `world.physics` (vx, vy, radius, friction), `world.stateFlags` (ACTIVE)
+- **Writes:** `world.transform` (x, y, prevX, prevY), `world.physics` (vx, vy after friction)
 
 **Algorithm:**
-```
-1. Apply friction to velocity: v *= friction^timeScale
-2. Store previous position for interpolation
-3. Integrate position: pos += vel * dt * PHYSICS_TIME_SCALE
-4. Apply circular map constraints (bounce off edges)
+```typescript
+// For each active entity
+const t = id * STRIDES.TRANSFORM;
+const p = id * STRIDES.PHYSICS;
+
+// Store previous position for interpolation
+world.transform[t + 4] = world.transform[t];     // prevX = x
+world.transform[t + 5] = world.transform[t + 1]; // prevY = y
+
+// Apply friction
+world.physics[p] *= friction;
+world.physics[p + 1] *= friction;
+
+// Integrate position
+world.transform[t] += world.physics[p] * dt * PHYSICS_TIME_SCALE;
+world.transform[t + 1] += world.physics[p + 1] * dt * PHYSICS_TIME_SCALE;
+
+// Apply circular map constraints (bounce off edges)
 ```
 
 **Constants:**
@@ -125,16 +145,9 @@
 
 **Purpose:** Handles skill activation, cooldowns, and execution
 
-**Reads:**
-- `SkillStore` - Cooldown, max cooldown, shape ID
-- `TransformStore` - Position for skill origin
-- `PhysicsStore` - Velocity for directional skills
-- `StateStore` - Entity flags
-
-**Writes:**
-- `SkillStore` - Cooldown timer
-- `PhysicsStore` - Velocity (for dash/pierce skills)
-- `EventRingBuffer` - VFX events
+**Data Access (DOD):**
+- **Reads:** `world.skill` (cooldown, maxCooldown, shapeId), `world.transform`, `world.physics`
+- **Writes:** `world.skill` (cooldown), `world.physics` (velocity for dash), `eventBuffer`
 
 **Shape Skills:**
 
@@ -147,11 +160,11 @@
 
 **Cooldown Flow:**
 ```
-1. Player presses skill input
-2. Check: cooldown > 0? → Exit
+1. Player presses skill input (world.input[idx+2] === 1)
+2. Check: world.skill[idx] > 0? → Exit (on cooldown)
 3. Execute skill based on shape
-4. Reset cooldown = maxCooldown
-5. Each frame: cooldown -= dt
+4. Reset: world.skill[idx] = maxCooldown
+5. Each frame: world.skill[idx] = max(0, cooldown - dt)
 ```
 
 ---
@@ -160,7 +173,7 @@
 
 ### 3.1 ColorMath
 
-**Location:** `packages/engine/src/cjr/colorMath.ts`
+**Location:** `packages/engine/src/modules/cjr/colorMath.ts`
 
 **Purpose:** Color mixing and matching calculations
 
@@ -170,19 +183,11 @@
 |----------|-------------|
 | `mixPigment(current, consumed, ratio)` | Blend two pigments based on size ratio |
 | `calcMatchPercent(player, target)` | Cosine similarity between pigments (0-1) |
+| `calcMatchPercentFast(pr, pg, pb, tr, tg, tb)` | Optimized version with raw values |
 | `getColorHint(player, target)` | Returns hint like "need more red" |
 | `getSnapAlpha(matchPercent)` | Returns 0-1 boost factor when match >= 80% |
 | `pigmentToInt(pigment)` | Convert RGB pigment to integer |
 | `intToHex(color)` | Convert integer to hex string |
-
-**Pigment Structure:**
-```typescript
-interface Pigment {
-  r: number;  // 0-1
-  g: number;  // 0-1
-  b: number;  // 0-1
-}
-```
 
 **Match Calculation:**
 ```
@@ -195,7 +200,7 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 
 ### 3.2 RingSystem
 
-**Location:** `packages/engine/src/cjr/ringSystem.ts`
+**Location:** `packages/engine/src/modules/cjr/ringSystem.ts`
 
 **Purpose:** Manage ring progression and commit mechanics
 
@@ -204,7 +209,8 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 | Function | Description |
 |----------|-------------|
 | `getRingAtPosition(x, y)` | Returns ring level (1-3) based on distance from center |
-| `updateRingLogic(entity, dt)` | Process ring transitions |
+| `updateRingLogic(world, entity, dt)` | Process ring transitions (DOD version) |
+| `updateRingLogicLegacy(entity, dt)` | Legacy object-based version |
 | `checkRingTransition(entity)` | Check if entity can commit to next ring |
 
 **Ring Thresholds:**
@@ -228,7 +234,7 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 
 ### 3.3 WaveSpawner
 
-**Location:** `packages/engine/src/cjr/waveSpawner.ts`
+**Location:** `packages/engine/src/modules/cjr/waveSpawner.ts`
 
 **Purpose:** Spawn food entities at regular intervals
 
@@ -240,16 +246,12 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 | Ring 2 | 10s | 60% pigment, 25% neutral, 15% special |
 | Ring 3 | 12-14s | 60% pigment, 25% neutral, 15% special |
 
-**Dynamic Bounty (Candy Vein):**
-- Triggers when Ring 3 population drops below 30%
-- Spawns concentrated food cluster at random location
-- Helps losing players catch up
-
 **Key Functions:**
 
 | Function | Description |
 |----------|-------------|
-| `updateWaveSpawner(state, dt)` | Main update loop |
+| `updateWaveSpawner(world, state, dt)` | Main update loop (DOD version) |
+| `updateWaveSpawnerLegacy(state, dt)` | Legacy object-based version |
 | `resetWaveTimers()` | Reset all spawn timers |
 | `spawnFoodAt(x, y, type)` | Create food entity at position |
 
@@ -257,7 +259,7 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 
 ### 3.4 TattooSystem
 
-**Location:** `packages/engine/src/cjr/tattoos.ts`
+**Location:** `packages/engine/src/modules/cjr/tattoos.ts`
 
 **Purpose:** Roguelite upgrade system
 
@@ -287,17 +289,11 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 | `triggerTattooOnConsume(entity, food)` | When entity eats food |
 | `triggerTattooOnUpdate(entity, dt)` | Every frame |
 
-**Tattoo Choice Flow:**
-1. Entity reaches size/XP threshold
-2. `getTattooChoices()` returns 3 random tattoos
-3. Player picks one
-4. `applyTattoo(entity, tattooId)` adds tattoo
-
 ---
 
 ### 3.5 BossCJR
 
-**Location:** `packages/engine/src/cjr/bossCjr.ts`
+**Location:** `packages/engine/src/modules/cjr/bossCjr.ts`
 
 **Purpose:** Boss encounter logic
 
@@ -310,7 +306,6 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 **Contribution System:**
 - Damage dealt to boss is tracked per player
 - Top 8 contributors get tier rewards
-- Rewards: XP bonus, tattoo choice, color boost
 
 | Tier | Contribution | Reward |
 |------|--------------|--------|
@@ -322,13 +317,12 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 **Rush Window:**
 - Duration: 5 seconds after boss death
 - Effect: Match threshold reduced by 10%
-- Purpose: Give players easier progression after boss
 
 ---
 
 ### 3.6 WinCondition
 
-**Location:** `packages/engine/src/cjr/winCondition.ts`
+**Location:** `packages/engine/src/modules/cjr/winCondition.ts`
 
 **Purpose:** Check and handle victory conditions
 
@@ -337,13 +331,8 @@ matchPercent = cosine_similarity(player.pigment, target.pigment)
 2. Match percent >= 90%
 3. Hold for 1.5 seconds
 
-**Heartbeat Mechanic:**
-- Every 0.5s while holding, emit heartbeat VFX
-- Intensity increases with hold time
-- If hit, timer partially resets (not full) for drama
-
 **Algorithm:**
-```
+```typescript
 if (ring === 3 && matchPercent >= 0.9) {
   holdTimer += dt;
 
@@ -363,11 +352,28 @@ if (ring === 3 && matchPercent >= 0.9) {
 
 ## 4. Client Systems
 
-### 4.1 VFX Integration Manager
+### 4.1 AISystem (Bot AI)
 
-**Location:** `apps/client/src/game/vfx/vfxIntegration.ts`
+**Location:** `apps/client/src/game/engine/dod/systems/AISystem.ts`
 
-**Purpose:** Bridge between engine events and visual effects
+**Purpose:** Control bot behavior using DOD patterns
+
+**Data Access:**
+- **Reads:** `world.transform`, `world.physics`, `world.stats`, `world.pigment`
+- **Writes:** `world.input` (bot's target position)
+
+**Features:**
+- O(1) entity lookup via ID maps
+- Personality-based behavior (aggressive, passive, collector)
+- Target selection based on match percent, distance, threat level
+
+---
+
+### 4.2 JuiceSystem (VFX)
+
+**Location:** `apps/client/src/game/visuals/JuiceSystem.ts`
+
+**Purpose:** Apply game "juice" effects (screen shake, particles, etc.)
 
 **Event Handling:**
 ```typescript
@@ -388,7 +394,7 @@ eventBuffer.drain((event) => {
 
 ---
 
-### 4.2 AudioEngine
+### 4.3 AudioEngine
 
 **Location:** `apps/client/src/game/audio/AudioEngine.ts`
 
@@ -414,52 +420,30 @@ eventBuffer.drain((event) => {
 
 ---
 
-### 4.3 Render System
+### 4.4 CJRClientRunner
 
-**Location:** `apps/client/src/game/renderer/`
+**Location:** `apps/client/src/game/engine/runner/CJRClientRunner.ts`
 
-**Purpose:** Abstract rendering backends
+**Purpose:** Main game loop runner for CJR
 
-**Backends:**
-
-| Backend | When Used |
-|---------|-----------|
-| `WebGL2Backend` | Default, hardware accelerated |
-| `WebGPUBackend` | Future, experimental |
-| `Canvas2DBackend` | Fallback for mobile |
-
-**Render Pipeline:**
-1. Read positions from `TransformStore`
-2. Interpolate: `renderPos = lerp(prevPos, currPos, alpha)`
-3. Update sprite positions
-4. Draw with Pixi.js/Canvas2D
+**Responsibilities:**
+- Coordinate system updates
+- Manage game state transitions
+- Handle input synchronization
+- Trigger DOD → OOP sync for UI
 
 ---
 
-### 4.4 Input System (BufferedInput)
+### 4.5 PhysicsCoordinator
 
-**Location:** `apps/client/src/game/input/BufferedInput.ts`
+**Location:** `apps/client/src/game/engine/systems/PhysicsCoordinator.ts`
 
-**Purpose:** Zero-lag input handling with buffering
+**Purpose:** Coordinate physics updates between client and server
 
-**Flow:**
-```
-Keyboard/Mouse/Touch
-       ↓
-  BufferedInput (Ring Buffer)
-       ↓
-  syncToStore(playerIndex, worldPos, cameraPos)
-       ↓
-  InputStore (DOD TypedArray)
-       ↓
-  MovementSystem reads
-```
-
-**Benefits:**
-- Input is immediately captured
-- Converted to world coordinates
-- Written directly to DOD store
-- No intermediate objects (zero GC)
+**Features:**
+- Client-side prediction
+- Server reconciliation
+- Interpolation management
 
 ---
 
@@ -469,35 +453,42 @@ Keyboard/Mouse/Touch
 EACH GAME TICK (60 Hz):
 ┌─────────────────────────────────────────────────────┐
 │                                                      │
-│   1. BufferedInput.syncToStore()                     │
-│      └─ Write input to InputStore                    │
+│   1. Input Phase                                     │
+│      └─ BufferedInput.syncToStore()                  │
+│      └─ world.input[idx * 4 + 0..3] = target, skill  │
 │                                                      │
-│   2. MovementSystem.updateAll(dt)                    │
-│      └─ Read InputStore → Write PhysicsStore (vel)   │
+│   2. Movement Phase                                  │
+│      └─ MovementSystem.update(world, dt)             │
+│      └─ Reads: world.input → Writes: world.physics   │
 │                                                      │
-│   3. PhysicsSystem.update(dt)                        │
-│      └─ Read PhysicsStore → Write TransformStore     │
+│   3. Physics Phase                                   │
+│      └─ PhysicsSystem.update(world, dt)              │
+│      └─ Reads: world.physics → Writes: world.transform│
 │                                                      │
-│   4. SkillSystem.update(dt)                          │
-│      └─ Update cooldowns, emit events                │
+│   4. Skill Phase                                     │
+│      └─ SkillSystem.update(world, dt)                │
+│      └─ Reads: world.skill → Writes: physics, events │
 │                                                      │
-│   5. CJR Systems:                                    │
-│      ├─ updateRingLogic()                            │
-│      ├─ updateWaveSpawner()                          │
-│      ├─ updateBossLogic()                            │
-│      ├─ updateWinCondition()                         │
-│      └─ triggerTattooOnUpdate()                      │
+│   5. CJR Systems                                     │
+│      ├─ updateRingLogic(world, entity, dt)           │
+│      ├─ updateWaveSpawner(world, state, dt)          │
+│      ├─ updateBossLogic(world, state, dt)            │
+│      ├─ updateWinCondition(world, entity, dt)        │
+│      └─ triggerTattooOnUpdate(entity, dt)            │
 │                                                      │
-│   6. Collision Detection                             │
-│      └─ Handle eating, damage, pickups               │
+│   6. Collision/Combat                                │
+│      └─ combat.consumePickupDOD(world, ...)          │
+│      └─ combat.reduceHealthDOD(world, ...)           │
 │                                                      │
-│   7. Sync DOD → Object State (for UI)                │
-│      └─ player.position = TransformStore[playerIdx]  │
+│   7. DOD → OOP Sync (for UI)                         │
+│      └─ EntityStateBridge.syncFromDOD()              │
 │                                                      │
-│   8. VFX/Audio Update (client only)                  │
-│      └─ Drain event buffer, update particles         │
+│   8. VFX/Audio (client only)                         │
+│      └─ JuiceSystem.update(dt)                       │
+│      └─ audioEngine.setListenerPosition(x, y)        │
 │                                                      │
-│   9. Notify Subscribers (React UI)                   │
+│   9. React Notification                              │
+│      └─ gameStateManager.notifySubscribers()         │
 │                                                      │
 └─────────────────────────────────────────────────────┘
 
@@ -508,11 +499,11 @@ EACH RENDER FRAME (Display Hz):
 │      └─ alpha = accumulator / tickRate               │
 │                                                      │
 │   2. Interpolate positions                           │
-│      └─ renderPos = lerp(prevPos, currPos, alpha)    │
+│      └─ getInterpolatedPositionByIndex(idx, alpha)   │
+│      └─ pos = prev + (curr - prev) * alpha           │
 │                                                      │
-│   3. Update sprite transforms                        │
-│                                                      │
-│   4. Render (Pixi.js / Canvas2D)                     │
+│   3. Draw entities                                   │
+│      └─ DrawStrategies.Player(ctx, entity, x, y)     │
 │                                                      │
 └─────────────────────────────────────────────────────┘
 ```
@@ -526,30 +517,27 @@ EACH RENDER FRAME (Display Hz):
 │                           DEPENDENCY GRAPH                                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│   InputStore ────► MovementSystem ────► PhysicsStore                         │
+│   world.input ───► MovementSystem ───► world.physics                         │
 │                                              │                               │
 │                                              ▼                               │
-│   StateStore ◄─── PhysicsSystem ────► TransformStore                         │
-│       │                                      │                               │
-│       │                                      ▼                               │
-│       └──────► SkillSystem ────► EventRingBuffer                             │
-│                    │                         │                               │
-│                    ▼                         ▼                               │
-│              SkillStore              VFXIntegration (client)                 │
-│                    │                                                         │
-│                    ▼                                                         │
+│   world.stateFlags ◄── PhysicsSystem ───► world.transform                    │
+│                                              │                               │
+│                                              ▼                               │
+│   world.skill ◄──── SkillSystem ───► eventBuffer (VFX)                       │
+│                          │                                                   │
+│                          ▼                                                   │
 │   ┌────────────────────────────────────────────────────────┐                │
 │   │                  CJR SYSTEMS                            │                │
 │   │                                                         │                │
-│   │   ColorMath ←───── RingSystem ←───── WinCondition       │                │
-│   │       │                │                    │           │                │
-│   │       ▼                ▼                    ▼           │                │
-│   │   Player.pigment   Player.ring        state.result      │                │
+│   │   colorMath ←─── ringSystem ←─── winCondition           │                │
+│   │       │              │               │                  │                │
+│   │       ▼              ▼               ▼                  │                │
+│   │  world.pigment  world.stats     state.result            │                │
 │   │                                                         │                │
-│   │   TattooSystem ←─── BossCJR ←─── WaveSpawner            │                │
-│   │       │                │               │                │                │
-│   │       ▼                ▼               ▼                │                │
-│   │   TattooStore    bossState         food[]               │                │
+│   │   tattoos ←─── bossCjr ←─── waveSpawner                 │                │
+│   │       │            │              │                     │                │
+│   │       ▼            ▼              ▼                     │                │
+│   │  world.tattoo  bossState     food entities              │                │
 │   │                                                         │                │
 │   └────────────────────────────────────────────────────────┘                │
 │                                                                              │
@@ -566,17 +554,24 @@ EACH RENDER FRAME (Display Hz):
 ```typescript
 // packages/engine/src/systems/MyNewSystem.ts
 
-import { StateStore, MyStore } from '../dod/ComponentStores';
-import { EntityFlags, MAX_ENTITIES } from '../dod/EntityFlags';
+import type { WorldState } from '../generated/WorldState';
+import { STRIDES } from '../generated/WorldState';
 
 export class MyNewSystem {
-  static update(dt: number) {
-    const flags = StateStore.flags;
+  static update(world: WorldState, dt: number) {
+    // Use Sparse Set for O(Active) iteration
+    for (let i = 0; i < world.activeCount; i++) {
+      const id = world.activeEntities[i];
+      const idx = id * STRIDES.TRANSFORM;
 
-    for (let id = 0; id < MAX_ENTITIES; id++) {
-      if ((flags[id] & EntityFlags.ACTIVE) === 0) continue;
+      // Read from DOD arrays
+      const x = world.transform[idx];
+      const y = world.transform[idx + 1];
 
-      // System logic here
+      // System logic here...
+
+      // Write to DOD arrays
+      world.myStore[id] = result;
     }
   }
 }
@@ -590,19 +585,44 @@ export { MyNewSystem } from './MyNewSystem';
 
 3. **Add to Update Loop:**
 ```typescript
-// In OptimizedEngine.updateGameState()
-MyNewSystem.update(dt);
+// In CJRClientRunner.updateEntities()
+MyNewSystem.update(world, dt);
 ```
 
-4. **If System Needs Store:**
+4. **If System Needs Component:**
 ```typescript
-// packages/engine/src/dod/ComponentStores.ts
-export const MyStore = {
-  STRIDE: 4,
-  data: new Float32Array(MAX_ENTITIES * 4),
-  // ... helper methods
-};
+// packages/engine/src/generated/ComponentAccessors.ts
+// Add new Access class (or register via ComponentRegistry)
+
+export class MyAccess {
+  static readonly STRIDE = 4;
+
+  static set(world: WorldState, id: number, a: number, b: number) {
+    const idx = id * MyAccess.STRIDE;
+    world.myStore[idx] = a;
+    world.myStore[idx + 1] = b;
+  }
+
+  static getA(world: WorldState, id: number): number {
+    return world.myStore[id * MyAccess.STRIDE];
+  }
+}
 ```
+
+---
+
+## 8. Data Authority Summary
+
+| Data | DOD Array | Access Class | Read By | Write By |
+|------|-----------|--------------|---------|----------|
+| Position | `world.transform` | `TransformAccess` | Renderer, Physics | PhysicsSystem |
+| Velocity | `world.physics` | `PhysicsAccess` | PhysicsSystem | MovementSystem |
+| Health/Score | `world.stats` | `StatsAccess` | UI, Combat | Combat |
+| Input Target | `world.input` | `InputAccess` | MovementSystem | BufferedInput |
+| Entity Flags | `world.stateFlags` | `StateAccess` | All Systems | Lifecycle |
+| Pigment/Color | `world.pigment` | `PigmentAccess` | ColorMath, Render | Combat |
+| Skill Cooldowns | `world.skill` | `SkillAccess` | SkillSystem | SkillSystem |
+| Tattoos | `world.tattoo` | `TattooAccess` | TattooSystem | Upgrade |
 
 ---
 

@@ -1,6 +1,6 @@
 # Color Jelly Rush - Import Reference Guide
 
-> **Last Updated:** February 2, 2026
+> **Last Updated:** February 8, 2026
 > **Purpose:** Definitive guide for correct import paths after refactoring
 
 ---
@@ -9,9 +9,9 @@
 
 | What You Need | Import From | Example |
 |---------------|-------------|---------|
-| DOD Stores | `@cjr/engine` | `import { TransformStore } from '@cjr/engine'` |
-| Systems | `@cjr/engine` | `import { PhysicsSystem } from '@cjr/engine'` |
-| CJR Game Logic | `@cjr/engine` | `import { mixPigment } from '@cjr/engine'` |
+| WorldState, Access Classes | `@cjr/engine` | `import { WorldState, TransformAccess } from '@cjr/engine'` |
+| Core Systems | `@cjr/engine` | `import { PhysicsSystem } from '@cjr/engine'` |
+| CJR Game Logic | `@cjr/engine` | `import { mixPigment, cjrModule } from '@cjr/engine'` |
 | Shared Types | `@cjr/shared` | `import { EntityType } from '@cjr/shared'` |
 | Shared Constants | `@cjr/shared` | `import { MAX_PLAYERS } from '@cjr/shared'` |
 | Local Components | `@/components/*` | `import { HUD } from '@/components/HUD'` |
@@ -22,44 +22,80 @@
 
 ## 2. Package Imports
 
-### 2.1 From `@cjr/engine`
+### 2.1 From `@cjr/engine` - Generated Module (Primary)
 
 ```typescript
-// === DOD Module ===
+// === WorldState & Access Classes (generated/) ===
 import {
-  // Entity Flags
-  EntityFlags,
+  // WorldState
+  WorldState,
   MAX_ENTITIES,
+  STRIDES,
+  defaultWorld,      // Singleton (prefer getWorld())
+  type IWorldConfig,
+  type IWorldBuffers,
 
-  // Component Stores (TypedArrays)
-  TransformStore,
-  PhysicsStore,
-  StateStore,
-  StatsStore,
-  SkillStore,
-  TattooStore,
-  ProjectileStore,
-  ConfigStore,
-  InputStore,
-  resetAllStores,
+  // Component Access Classes (static methods)
+  StateAccess,       // Entity flags
+  TransformAccess,   // Position, rotation, scale
+  PhysicsAccess,     // Velocity, mass, radius
+  PigmentAccess,     // Color (r, g, b)
+  StatsAccess,       // Health, score, match%
+  InputAccess,       // Target position, skill flag
+  SkillAccess,       // Cooldowns, shape ID
+  ConfigAccess,      // Speed multiplier, etc.
+  ProjectileAccess,  // Projectile data
+  TattooAccess,      // Tattoo flags
+
+  // Network
+  NetworkSerializer,
+  NetworkDeserializer,
+  COMPONENT_IDS,
+  COMPONENT_STRIDES,
+} from '@cjr/engine';
+```
+
+### 2.2 From `@cjr/engine` - Core Module
+
+```typescript
+// === Core Infrastructure ===
+import {
+  // Component Registry
+  ComponentRegistry,
+  getComponentRegistry,
+  type IRegisteredStore,
+  type TypedArray,
 
   // Entity Lookup
   type IEntityLookup,
-  type IEngineEntity,
   createArrayLookup,
   createMapLookup,
 } from '@cjr/engine';
+```
 
-// === Systems Module ===
+### 2.3 From `@cjr/engine` - Systems Module
+
+```typescript
+// === Pure DOD Systems ===
 import {
   PhysicsSystem,
   MovementSystem,
   SkillSystem,
   ShapeEnum,
 } from '@cjr/engine';
+```
 
-// === CJR Game Logic ===
+### 2.4 From `@cjr/engine` - CJR Module
+
+```typescript
+// === CJR Game Module ===
 import {
+  // Module Class
+  CJRModule,
+  cjrModule,           // Singleton instance
+  createCJRModule,
+  registerCJRComponents,
+
   // Color Math
   getColorHint,
   calcMatchPercent,
@@ -75,6 +111,7 @@ import {
   // Ring System
   getRingAtPosition,
   updateRingLogic,
+  updateRingLogicLegacy,
   checkRingTransition,
   type IRingEntity,
 
@@ -90,12 +127,15 @@ import {
   TattooFlag,
   StatusFlag,
   type TattooDefinition,
+  type TattooChoice,
+  type ITattooEntity,
 
   // Win Condition
   updateWinConditionLogic,
   updateWinCondition,
   type IWinEntity,
   type IWinState,
+  type ILevelConfig,
 
   // Boss Logic
   updateBossLogic,
@@ -104,6 +144,8 @@ import {
   getRushThreshold,
   onBossDeath,
   type IBossEntity,
+  type IPlayerEntity,
+  type IBossState,
 
   // Wave Spawner
   updateWaveSpawner,
@@ -111,11 +153,21 @@ import {
   spawnFoodAt,
   type IFood,
   type IWaveState,
-} from '@cjr/engine';
+  type ISpawnResult,
 
+  // CJR Types & Flags
+  CJRFlags,          // CJR-specific entity flags
+  type Pigment,
+} from '@cjr/engine';
+```
+
+### 2.5 From `@cjr/engine` - Other Modules
+
+```typescript
 // === Events Module ===
 import {
   eventBuffer,
+  EventRingBuffer,
   EngineEventType,
   type EngineEvent,
 } from '@cjr/engine';
@@ -137,16 +189,35 @@ import {
   type PackedInput,
 } from '@cjr/engine';
 
+// === Loader Module ===
+import {
+  EntitySpawner,
+  BlueprintLoader,
+  LevelValidator,
+} from '@cjr/engine';
+
 // === Factories Module ===
 import {
   createLogicEntity,
 } from '@cjr/engine';
-
-// === Engine Class ===
-import { Engine } from '@cjr/engine';
 ```
 
-### 2.2 From `@cjr/shared`
+### 2.6 From `@cjr/engine` - Legacy (Deprecated)
+
+```typescript
+// === ⚠️ DEPRECATED: Legacy Store Wrappers (compat.ts) ===
+// These log deprecation warnings in development mode
+// Use Access classes instead
+
+import {
+  TransformStore,    // → Use TransformAccess
+  PhysicsStore,      // → Use PhysicsAccess
+  StatsStore,        // → Use StatsAccess
+  resetAllStores,    // → Use world.reset()
+} from '@cjr/engine';
+```
+
+### 2.7 From `@cjr/shared`
 
 ```typescript
 import {
@@ -154,7 +225,6 @@ import {
   type EntityType,
   type SkillType,
   type ShapeId,
-  type Pigment,
   type Vector2,
 
   // Constants
@@ -184,9 +254,6 @@ import { GameStateManager } from '@/game/engine/GameStateManager';
 // @components/ → apps/client/src/components/
 import { ScreenManager } from '@components/ScreenManager';
 import { MainMenu } from '@components/MainMenu';
-
-// @services/ → apps/client/src/services/
-import { AuthService } from '@services/AuthService';
 ```
 
 ### 3.2 Component Imports
@@ -209,6 +276,7 @@ import { ScreenManager } from '@/components/ScreenManager';
 import { UiOverlayManager } from '@/components/UiOverlayManager';
 import { HUD } from '@/components/HUD';
 import { MainMenu } from '@/components/MainMenu';
+import { GameCanvas } from '@/components/GameCanvas';
 import { MobileControls } from '@/components/MobileControls';
 import { PixiGameCanvas } from '@/components/PixiGameCanvas';
 import { TattooPicker } from '@/components/TattooPicker';
@@ -235,7 +303,10 @@ import { ClientEngineBridge } from '@/game/engine/ClientEngineBridge';
 import { RenderBridge } from '@/game/engine/RenderBridge';
 import { VFXRingBuffer } from '@/game/engine/VFXRingBuffer';
 import { PhysicsWorld } from '@/game/engine/PhysicsWorld';
-import { createInitialState } from '@/game/engine/index';
+import { getWorld } from '@/game/engine/context';
+
+// Game Runner
+import { CJRClientRunner } from '@/game/engine/runner/CJRClientRunner';
 
 // Client DOD
 import { EntityManager } from '@/game/engine/dod/EntityManager';
@@ -244,17 +315,19 @@ import { ConfigStore } from '@/game/engine/dod/ConfigStore';
 import { EntityStateBridge } from '@/game/engine/dod/EntityStateBridge';
 import { DODViewHelpers } from '@/game/engine/dod/DODViewHelpers';
 
-// Client DOD Stores (DUPLICATED for client-specific extensions)
-import {
-  TransformStore,
-  PhysicsStore,
-  InputStore,
-  resetAllStores,
-} from '@/game/engine/dod/ComponentStores';
+// Client DOD Systems
+import { AISystem } from '@/game/engine/dod/systems/AISystem';
+import { TattooSystem } from '@/game/engine/dod/systems/TattooSystem';
 
 // Client Systems
-import { SkillSystem } from '@/game/engine/dod/systems/SkillSystem';
-import { TattooSystem } from '@/game/engine/dod/systems/TattooSystem';
+import { combat } from '@/game/engine/systems/combat';
+import { mechanics } from '@/game/engine/systems/mechanics';
+import { AudioSyncSystem } from '@/game/engine/systems/AudioSyncSystem';
+import { InputSystem } from '@/game/engine/systems/InputSystem';
+import { NetworkSync } from '@/game/engine/systems/NetworkSync';
+import { PhysicsCoordinator } from '@/game/engine/systems/PhysicsCoordinator';
+import { SessionManager } from '@/game/engine/systems/SessionManager';
+import { VisualSystem } from '@/game/engine/systems/VisualSystem';
 ```
 
 ### 3.5 CJR Mechanics Imports
@@ -266,11 +339,6 @@ import { ShapeId, Emotion, TattooId } from '@/game/cjr/cjrTypes';
 // Tattoos
 import { TATTOO_DEFINITIONS, getTattooDefinition } from '@/game/cjr/tattoos';
 import { checkTattooSynergies } from '@/game/cjr/tattooSynergies';
-import { SYNERGY_DEFINITIONS } from '@/game/cjr/synergyDefinitions';
-import { onTattooEvent } from '@/game/cjr/tattooEvents';
-
-// Skills
-import { SHAPE_SKILLS, getShapeSkill } from '@/game/cjr/shapeSkills';
 
 // Emotions
 import { EMOTIONS, getEmotion, updateEmotion } from '@/game/cjr/emotions';
@@ -283,9 +351,6 @@ import { BALANCE } from '@/game/cjr/balance';
 
 // Contribution
 import { calculateContribution, getContributionTier } from '@/game/cjr/contribution';
-
-// Dynamic Bounty
-import { updateDynamicBounty, getCandyVeinState } from '@/game/cjr/dynamicBounty';
 
 // Bot AI
 import { BOT_PERSONALITIES, getBotPersonality } from '@/game/cjr/botPersonalities';
@@ -308,65 +373,25 @@ import { WebGPUBackend } from '@/game/renderer/backends/WebGPUBackend';
 import { createRenderBackend } from '@/game/renderer/backends/index';
 ```
 
-### 3.7 VFX Imports
+### 3.7 Other Client Imports
 
 ```typescript
+// VFX
 import { vfxIntegrationManager } from '@/game/vfx/vfxIntegration';
 import { CrystalVFX } from '@/game/vfx/CrystalVFX';
 import { TattooVFX } from '@/game/vfx/tattooVFX';
-```
 
-### 3.8 Audio Imports
-
-```typescript
+// Audio
 import { AudioEngine, audioEngine } from '@/game/audio/AudioEngine';
-```
 
-### 3.9 Input Imports
-
-```typescript
+// Input
 import { BufferedInput } from '@/game/input/BufferedInput';
-```
 
-### 3.10 Network Imports
-
-```typescript
+// Network
 import { BinaryPacker } from '@/network/BinaryPacker';
 import { InputRingBuffer } from '@/network/InputRingBuffer';
 import { NetworkTransformBuffer } from '@/network/NetworkTransformBuffer';
-```
-
-### 3.11 Core Utilities Imports
-
-```typescript
-// UI
-import { storage, getStorage, setStorage } from '@/core/ui/storage';
-import { useLocalStorageState } from '@/core/ui/useLocalStorageState';
-import { screenMachine } from '@/core/ui/screenMachine';
-
-// Performance
-import { PerformanceMonitor, performanceMonitor } from '@/core/performance/PerformanceMonitor';
-
-// Logging
-import { ClientLogger, clientLogger } from '@/core/logging/ClientLogger';
-
-// Analytics
-import { AnalyticsSystem, analytics } from '@/core/analytics/AnalyticsSystem';
-
-// Monetization
-import { MonetizationSystem } from '@/core/monetization/MonetizationSystem';
-
-// Accessibility
-import { ColorblindMode, colorblindMode } from '@/core/accessibility/ColorblindMode';
-
-// Security
-import { ProductionSecurityManager } from '@/core/security/ProductionSecurityManager';
-
-// Utils
-import { filterInPlace, removeFirst } from '@/core/utils/arrayUtils';
-
-// Meta-game
-import { matchmaking, tournaments, guilds, quests, cosmetics } from '@/core/meta/index';
+import { NetworkClient } from '@/network/NetworkClient';
 ```
 
 ---
@@ -397,10 +422,12 @@ import { ServerEngineBridge } from './engine/ServerEngineBridge';
 
 // From shared engine
 import {
-  Engine,
-  TransformStore,
+  WorldState,
+  TransformAccess,
+  PhysicsAccess,
   PhysicsSystem,
-  BinaryPacker,
+  MovementSystem,
+  STRIDES,
 } from '@cjr/engine';
 ```
 
@@ -410,92 +437,66 @@ import {
 import { GameStateSchema } from './schema/GameState';
 ```
 
-### 4.5 Auth Imports
-
-```typescript
-import { AuthService, authService } from './auth/AuthService';
-import { authRoutes } from './auth/authRoutes';
-import { SessionStore, sessionStore } from './auth/SessionStore';
-```
-
-### 4.6 Security Imports
-
-```typescript
-import { ServerValidator } from './security/ServerValidator';
-import { RateLimiter, rateLimiter } from './security/RateLimiter';
-```
-
-### 4.7 Database Imports
-
-```typescript
-import { dbConfig } from './database/config';
-import { PostgreSQLManager, db } from './database/PostgreSQLManager';
-import { RedisManager, redis } from './database/RedisManager';
-import { CacheService, cache } from './database/CacheService';
-import { MigrationManager } from './database/MigrationManager';
-```
-
-### 4.8 Monitoring Imports
-
-```typescript
-import { ServerMonitor, serverMonitor } from './monitoring/ServerMonitor';
-import { MonitoringService } from './monitoring/MonitoringService';
-import { monitoringRoutes } from './monitoring/monitoringRoutes';
-```
-
 ---
 
 ## 5. Common Import Mistakes (and Fixes)
 
-### 5.1 Wrong: Importing from wrong package
+### 5.1 Wrong: Using deprecated Store wrappers
 
 ```typescript
-// WRONG: Importing client-specific from engine
-import { VFXRingBuffer } from '@cjr/engine';  // VFX is client-only!
+// WRONG: Legacy Store wrappers (deprecated)
+import { TransformStore } from '@cjr/engine';
+TransformStore.set(world, id, x, y, rotation, scale);
 
-// CORRECT: Import from client
+// CORRECT: Use Access classes
+import { TransformAccess } from '@cjr/engine';
+TransformAccess.set(world, id, x, y, rotation, scale, prevX, prevY, prevRot);
+```
+
+### 5.2 Wrong: Importing from wrong module path
+
+```typescript
+// WRONG: Old path
+import { mixPigment } from '@cjr/engine/cjr/colorMath';
+
+// CORRECT: Import from package root
+import { mixPigment } from '@cjr/engine';
+
+// OR explicit module import
+import { mixPigment } from '@cjr/engine/modules/cjr';
+```
+
+### 5.3 Wrong: Using global singleton
+
+```typescript
+// WRONG: Global singleton
+import { defaultWorld } from '@cjr/engine';
+defaultWorld.transform[idx] = x;
+
+// CORRECT: Use instance accessor
+import { getWorld } from '@/game/engine/context';
+const world = getWorld();
+world.transform[idx] = x;
+```
+
+### 5.4 Wrong: Mixing client and engine imports
+
+```typescript
+// WRONG: Client imports in engine package
+import { VFXRingBuffer } from '@cjr/engine';
+
+// CORRECT: VFX is client-only
 import { VFXRingBuffer } from '@/game/engine/VFXRingBuffer';
 ```
 
-### 5.2 Wrong: Using relative paths for packages
+### 5.5 Wrong: Using relative paths for packages
 
 ```typescript
 // WRONG: Relative path to package
-import { Engine } from '../../packages/engine/src/Engine';
+import { WorldState } from '../../packages/engine/src/generated/WorldState';
 
 // CORRECT: Use alias
-import { Engine } from '@cjr/engine';
-```
-
-### 5.3 Wrong: Importing internal module directly
-
-```typescript
-// WRONG: Importing internal file
-import { TransformStore } from '@cjr/engine/dod/ComponentStores';
-
-// CORRECT: Import from package root
-import { TransformStore } from '@cjr/engine';
-```
-
-### 5.4 Wrong: Circular dependency
-
-```typescript
-// WRONG: Client imports server
-import { GameRoom } from '../../../apps/server/src/rooms/GameRoom';
-
-// CORRECT: Use shared types
-import { RoomState } from '@cjr/shared';
-```
-
-### 5.5 Wrong: Mixing DOD stores
-
-```typescript
-// WRONG: Using client DOD in engine package
-// In packages/engine/src/systems/PhysicsSystem.ts
-import { TransformStore } from '@/game/engine/dod/ComponentStores';
-
-// CORRECT: Use package's own stores
-import { TransformStore } from '../dod/ComponentStores';
+import { WorldState } from '@cjr/engine';
 ```
 
 ---
@@ -535,28 +536,7 @@ import { TransformStore } from '../dod/ComponentStores';
 
 ---
 
-## 7. Vite Alias Configuration
-
-```typescript
-// apps/client/vite.config.ts
-import path from 'path';
-
-export default defineConfig({
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@cjr/shared': path.resolve(__dirname, '../../packages/shared/src'),
-      '@cjr/engine': path.resolve(__dirname, '../../packages/engine/src'),
-      '@services': path.resolve(__dirname, './src/services'),
-      '@components': path.resolve(__dirname, './src/components'),
-    },
-  },
-});
-```
-
----
-
-## 8. Import Order Convention
+## 7. Import Order Convention
 
 ```typescript
 // 1. External packages (node_modules)
@@ -565,7 +545,7 @@ import { Application } from 'pixi.js';
 import { Client } from 'colyseus.js';
 
 // 2. Monorepo packages (@cjr/*)
-import { Engine, TransformStore } from '@cjr/engine';
+import { WorldState, TransformAccess } from '@cjr/engine';
 import { EntityType, MAX_PLAYERS } from '@cjr/shared';
 
 // 3. Absolute imports (@/*)
@@ -583,27 +563,28 @@ import './styles.css';
 
 ---
 
-## 9. Re-export Pattern
+## 8. Re-export Pattern
 
 When creating module index files:
 
 ```typescript
-// packages/engine/src/dod/index.ts
+// packages/engine/src/generated/index.ts
 
 // Named exports (preferred)
-export { EntityFlags, MAX_ENTITIES } from './EntityFlags';
-export { TransformStore, PhysicsStore } from './ComponentStores';
+export { WorldState, MAX_ENTITIES, STRIDES, defaultWorld } from './WorldState';
+export * from './ComponentAccessors';   // Access classes
 
-// Type exports
-export type { IEntityLookup, IEngineEntity } from './IEntityLookup';
-
-// Factory exports
-export { createArrayLookup, createMapLookup } from './IEntityLookup';
+// packages/engine/src/modules/cjr/index.ts
+export { CJRModule, cjrModule, createCJRModule } from './CJRModule';
+export { registerCJRComponents } from './index';
+export * from './colorMath';
+export * from './ringSystem';
+export * from './tattoos';
 ```
 
 ---
 
-## 10. Troubleshooting
+## 9. Troubleshooting
 
 ### "Cannot find module '@cjr/engine'"
 
@@ -616,12 +597,20 @@ export { createArrayLookup, createMapLookup } from './IEntityLookup';
 1. Check the export exists in the package's `index.ts`
 2. Check for typos in the import name
 3. Verify the function/type is actually exported (not internal)
+4. **New exports might be in `generated/` or `modules/cjr/`**
 
 ### "Circular dependency detected"
 
 1. Move shared types to `@cjr/shared`
 2. Use interfaces instead of concrete implementations
 3. Use dependency injection pattern
+
+### "Using deprecated Store wrapper"
+
+1. Replace `TransformStore` → `TransformAccess`
+2. Replace `PhysicsStore` → `PhysicsAccess`
+3. Replace `StatsStore` → `StatsAccess`
+4. Replace `resetAllStores()` → `world.reset()`
 
 ---
 

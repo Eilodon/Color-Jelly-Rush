@@ -1,6 +1,6 @@
 # Color Jelly Rush - Project Structure
 
-> **Last Updated:** February 2, 2026
+> **Last Updated:** February 8, 2026
 > **Purpose:** Complete reference for project folder organization
 
 ---
@@ -10,10 +10,10 @@
 ```
 Color-Jelly-Rush/
 ├── apps/                    # Applications (client & server)
-│   ├── client/              # React + Pixi.js game client
+│   ├── client/              # React + Canvas/Pixi.js game client
 │   └── server/              # Colyseus multiplayer server
 ├── packages/                # Shared packages (monorepo)
-│   ├── engine/              # @cjr/engine - Core game logic
+│   ├── engine/              # @cjr/engine - Core game logic (headless)
 │   ├── shared/              # @cjr/shared - Types & constants
 │   └── ui/                  # @cjr/ui - Shared UI components
 ├── tests/                   # Test suites
@@ -31,7 +31,6 @@ Color-Jelly-Rush/
 ```
 apps/client/
 ├── public/                          # Static assets
-│   └── favicon.svg
 ├── src/
 │   ├── index.tsx                    # Entry point
 │   ├── App.tsx                      # Root component
@@ -39,7 +38,7 @@ apps/client/
 │   │
 │   ├── components/                  # React UI Components
 │   │   ├── screens/                 # Full-screen views
-│   │   │   ├── BootScreen.tsx       # Initial loading screen
+│   │   │   ├── BootScreen.tsx
 │   │   │   ├── MatchmakingScreen.tsx
 │   │   │   ├── LevelSelectScreen.tsx
 │   │   │   ├── GameOverScreen.tsx
@@ -48,11 +47,12 @@ apps/client/
 │   │   │   ├── PauseOverlay.tsx
 │   │   │   ├── TutorialOverlay.tsx
 │   │   │   └── SettingsOverlay.tsx
-│   │   ├── ScreenManager.tsx        # Screen state machine
-│   │   ├── UiOverlayManager.tsx     # Overlay orchestration
-│   │   ├── HUD.tsx                  # In-game heads-up display
+│   │   ├── ScreenManager.tsx
+│   │   ├── UiOverlayManager.tsx
+│   │   ├── HUD.tsx
 │   │   ├── MainMenu.tsx
 │   │   ├── MobileControls.tsx
+│   │   ├── GameCanvas.tsx           # Canvas2D renderer
 │   │   ├── PixiGameCanvas.tsx       # Pixi.js canvas wrapper
 │   │   ├── TattooPicker.tsx
 │   │   └── ColorblindOverlay.tsx
@@ -72,11 +72,17 @@ apps/client/
 │   │   │   ├── RenderBridge.ts
 │   │   │   ├── VFXRingBuffer.ts
 │   │   │   ├── PhysicsWorld.ts
+│   │   │   ├── WorkerSimulation.ts  # Web Worker integration
 │   │   │   ├── factories.ts
 │   │   │   ├── effects.ts
 │   │   │   ├── statusFlags.ts
-│   │   │   ├── context.ts
+│   │   │   ├── context.ts           # getWorld() accessor
 │   │   │   ├── index.ts
+│   │   │   │
+│   │   │   ├── runner/              # Game Runner
+│   │   │   │   ├── CJRClientRunner.ts  # Main game runner
+│   │   │   │   └── index.ts
+│   │   │   │
 │   │   │   ├── dod/                 # Client DOD layer
 │   │   │   │   ├── EntityManager.ts
 │   │   │   │   ├── EntityFlags.ts
@@ -84,26 +90,29 @@ apps/client/
 │   │   │   │   ├── EntityStateBridge.ts
 │   │   │   │   ├── DODViewHelpers.ts
 │   │   │   │   └── systems/
-│   │   │   │       ├── SkillSystem.ts
+│   │   │   │       ├── AISystem.ts      # Bot AI (DOD)
 │   │   │   │       └── TattooSystem.ts
+│   │   │   │
 │   │   │   └── systems/             # Client-specific systems
-│   │   │       ├── skills.ts
+│   │   │       ├── combat.ts
 │   │   │       ├── mechanics.ts
-│   │   │       └── ai.ts
+│   │   │       ├── AudioSyncSystem.ts
+│   │   │       ├── InputSystem.ts
+│   │   │       ├── NetworkSync.ts
+│   │   │       ├── PhysicsCoordinator.ts
+│   │   │       ├── SessionManager.ts
+│   │   │       └── VisualSystem.ts
 │   │   │
 │   │   ├── cjr/                     # CJR Game Mechanics
 │   │   │   ├── cjrTypes.ts          # CJR type definitions
 │   │   │   ├── tattoos.ts           # Tattoo definitions
-│   │   │   ├── tattooEvents.ts
-│   │   │   ├── tattooSynergies.ts
-│   │   │   ├── synergyDefinitions.ts
-│   │   │   ├── shapeSkills.ts       # Shape-based skills
+│   │   │   ├── tattooSynergies.ts   # Synergy system
 │   │   │   ├── emotions.ts          # Emotion system
 │   │   │   ├── levels.ts            # Level configurations
 │   │   │   ├── balance.ts           # Balance parameters
 │   │   │   ├── contribution.ts      # Contribution tier system
-│   │   │   ├── dynamicBounty.ts     # Candy Vein system
 │   │   │   ├── botPersonalities.ts  # AI personalities
+│   │   │   ├── colorMath.ts         # Color math (re-exports)
 │   │   │   └── shaders.ts           # GLSL shaders
 │   │   │
 │   │   ├── renderer/                # Rendering System
@@ -116,7 +125,10 @@ apps/client/
 │   │   │       ├── WebGPUBackend.ts
 │   │   │       └── index.ts
 │   │   │
-│   │   ├── vfx/                     # Visual Effects
+│   │   ├── visuals/                 # Visual Effects
+│   │   │   └── JuiceSystem.ts
+│   │   │
+│   │   ├── vfx/                     # VFX Integration
 │   │   │   ├── vfxIntegration.ts
 │   │   │   ├── CrystalVFX.ts
 │   │   │   └── tattooVFX.ts
@@ -127,24 +139,25 @@ apps/client/
 │   │   ├── input/                   # Input Handling
 │   │   │   └── BufferedInput.ts
 │   │   │
+│   │   ├── math/                    # Client Math Utils
+│   │   │   └── FastMath.ts
+│   │   │
+│   │   ├── spatial/                 # Spatial Queries
+│   │   │   └── SpatialHashGrid.ts
+│   │   │
 │   │   ├── mobile/                  # Mobile Optimization
-│   │   │   └── MobilePerformanceTester.ts
+│   │   │   └── MobileOptimizer.ts
+│   │   │
+│   │   ├── pooling/                 # Object Pooling
+│   │   │   └── ObjectPool.ts
 │   │   │
 │   │   ├── logging/                 # Client Logging
 │   │   │   └── ClientLogger.ts
 │   │   │
-│   │   ├── testing/                 # Testing Utilities
-│   │   │   └── ProductionTestSuite.ts
-│   │   │
-│   │   ├── core/utils/
-│   │   │   └── arrayUtils.ts
-│   │   │
-│   │   ├── combatRules.ts
-│   │   ├── haptics.ts
-│   │   ├── AssetLoader.ts
 │   │   └── __tests__/
 │   │
 │   ├── network/                     # Networking
+│   │   ├── NetworkClient.ts
 │   │   ├── BinaryPacker.ts
 │   │   ├── InputRingBuffer.ts
 │   │   ├── NetworkTransformBuffer.ts
@@ -152,23 +165,13 @@ apps/client/
 │   │
 │   ├── core/                        # Cross-cutting Concerns
 │   │   ├── ui/                      # UI utilities
-│   │   │   ├── storage.ts
-│   │   │   ├── useLocalStorageState.ts
-│   │   │   └── screenMachine.ts
 │   │   ├── performance/
-│   │   │   └── PerformanceMonitor.ts
 │   │   ├── logging/
-│   │   │   └── ClientLogger.ts
 │   │   ├── analytics/
-│   │   │   └── AnalyticsSystem.ts
 │   │   ├── monetization/
-│   │   │   └── MonetizationSystem.ts
 │   │   ├── accessibility/
-│   │   │   └── ColorblindMode.ts
 │   │   ├── security/
-│   │   │   └── ProductionSecurityManager.ts
 │   │   ├── utils/
-│   │   │   └── arrayUtils.ts
 │   │   └── meta/                    # Meta-game systems
 │   │       ├── index.ts
 │   │       ├── matchmaking.ts
@@ -179,10 +182,9 @@ apps/client/
 │   │
 │   └── types/                       # TypeScript Definitions
 │
-├── vite.config.ts                   # Vite build config
-├── tsconfig.json                    # TypeScript config
-├── tailwind.config.js               # Tailwind CSS config
-├── postcss.config.js
+├── vite.config.ts
+├── tsconfig.json
+├── tailwind.config.js
 └── package.json
 ```
 
@@ -196,57 +198,26 @@ apps/server/
 │   ├── cjrTypes.ts
 │   │
 │   ├── rooms/                       # Colyseus Rooms
-│   │   ├── GameRoom.ts              # Main game room
+│   │   ├── GameRoom.ts              # Main game room (authoritative)
 │   │   └── GameRoom.test.ts
 │   │
 │   ├── schema/                      # Colyseus Schema
 │   │   └── GameState.ts             # Sync state schema
 │   │
 │   ├── engine/                      # Server Engine
-│   │   └── ServerEngineBridge.ts    # Engine integration
+│   │   └── ServerEngineBridge.ts
 │   │
 │   ├── systems/                     # Server-side Systems
 │   │   └── ColorMixingSystem.ts
 │   │
 │   ├── auth/                        # Authentication
-│   │   ├── AuthService.ts
-│   │   ├── authRoutes.ts
-│   │   └── SessionStore.ts
-│   │
 │   ├── security/                    # Security Layer
-│   │   ├── ServerValidator.ts       # Input validation
-│   │   └── RateLimiter.ts
-│   │
-│   ├── validation/
-│   │   └── InputValidator.ts
-│   │
+│   ├── validation/                  # Input Validation
 │   ├── database/                    # Database Layer
-│   │   ├── config.ts
-│   │   ├── PostgreSQLManager.ts
-│   │   ├── RedisManager.ts
-│   │   ├── CacheService.ts
-│   │   ├── MigrationManager.ts
-│   │   ├── DataMigrationService.ts
-│   │   └── migrations/
-│   │       └── 001_initial_schema.sql
-│   │
 │   ├── monitoring/                  # Server Monitoring
-│   │   ├── ServerMonitor.ts
-│   │   ├── MonitoringService.ts
-│   │   └── monitoringRoutes.ts
-│   │
 │   ├── performance/
-│   │   ├── Profiler.ts
-│   │   └── Optimizer.ts
-│   │
 │   ├── logging/
-│   │   └── Logger.ts
-│   │
-│   ├── testing/
-│   │   ├── LoadTester.ts
-│   │   └── eidolon_benchmark.ts
-│   │
-│   └── __tests__/
+│   └── testing/
 │
 ├── tsconfig.json
 └── package.json
@@ -265,13 +236,34 @@ apps/server/
 packages/engine/
 ├── src/
 │   ├── index.ts                     # Public API exports
-│   ├── Engine.ts                    # Core engine class
+│   ├── compat.ts                    # Legacy compatibility layer
 │   │
-│   ├── dod/                         # Data-Oriented Design
+│   ├── core/                        # Core Infrastructure
 │   │   ├── index.ts
-│   │   ├── ComponentStores.ts       # TypedArray stores
-│   │   ├── EntityFlags.ts           # Entity bitmask flags
-│   │   └── IEntityLookup.ts         # Lookup interface
+│   │   ├── BaseSimulation.ts        # Abstract simulation class
+│   │   ├── ComponentRegistry.ts     # Dynamic component registration
+│   │   ├── CoreRegistry.ts          # Core module registry
+│   │   └── IEntityLookup.ts         # Entity lookup interface
+│   │
+│   ├── generated/                   # Code-generated Files
+│   │   ├── index.ts
+│   │   ├── WorldState.ts            # WorldState class (instance-based)
+│   │   ├── ComponentAccessors.ts    # TransformAccess, PhysicsAccess, etc.
+│   │   ├── NetworkDeserializer.ts
+│   │   └── NetworkPacker.ts
+│   │
+│   ├── interfaces/                  # Type Interfaces
+│   │   ├── IComponent.ts
+│   │   ├── IModule.ts
+│   │   ├── ISystem.ts
+│   │   ├── IWorld.ts
+│   │   └── index.ts
+│   │
+│   ├── loader/                      # Entity Loading
+│   │   ├── index.ts
+│   │   ├── BlueprintLoader.ts       # Level blueprint loader
+│   │   ├── EntitySpawner.ts         # Entity spawning
+│   │   └── LevelValidator.ts        # Level validation
 │   │
 │   ├── systems/                     # Pure System Functions
 │   │   ├── index.ts
@@ -279,15 +271,17 @@ packages/engine/
 │   │   ├── MovementSystem.ts
 │   │   └── SkillSystem.ts
 │   │
-│   ├── cjr/                         # CJR Game Logic
+│   ├── modules/                     # Game Modules
 │   │   ├── index.ts
-│   │   ├── types.ts
-│   │   ├── colorMath.ts             # Color mixing/matching
-│   │   ├── ringSystem.ts            # Ring progression
-│   │   ├── waveSpawner.ts           # Entity spawning
-│   │   ├── winCondition.ts          # Victory logic
-│   │   ├── bossCjr.ts               # Boss mechanics
-│   │   └── tattoos.ts               # Tattoo upgrades
+│   │   └── cjr/                     # CJR Module
+│   │       ├── index.ts
+│   │       ├── CJRModule.ts         # Module registration
+│   │       ├── colorMath.ts         # Color mixing/matching
+│   │       ├── ringSystem.ts        # Ring progression
+│   │       ├── waveSpawner.ts       # Entity spawning
+│   │       ├── winCondition.ts      # Victory logic
+│   │       ├── bossCjr.ts           # Boss mechanics
+│   │       └── tattoos.ts           # Tattoo upgrades
 │   │
 │   ├── events/                      # Event System
 │   │   ├── index.ts
@@ -311,11 +305,16 @@ packages/engine/
 │   │   ├── BinaryPacker.ts
 │   │   └── types.ts
 │   │
+│   ├── client/                      # Client-specific exports
+│   │   └── index.ts
+│   │
 │   └── __tests__/
 │       ├── DODStores.test.ts
 │       ├── PhysicsSystem.test.ts
-│       ├── EventRingBuffer.test.ts
-│       └── BinaryPacker.test.ts
+│       └── EventRingBuffer.test.ts
+│
+├── scripts/
+│   └── generate.js                  # Code generator
 │
 ├── tsconfig.json
 ├── vitest.config.ts
@@ -330,11 +329,11 @@ packages/engine/
 ```
 packages/shared/
 ├── src/
-│   ├── index.ts                     # Re-exports all
-│   ├── types.ts                     # Core type definitions
-│   ├── constants.ts                 # Shared constants
+│   ├── index.ts
+│   ├── types.ts
+│   ├── constants.ts
 │   ├── engine/
-│   │   └── types.ts                 # Engine-specific types
+│   │   └── types.ts
 │   └── config/
 │       └── PhysicsConfig.ts
 │
@@ -349,6 +348,8 @@ packages/shared/
 ```
 tests/
 ├── integration/                     # Integration tests
+│   ├── physicsAccuracy.test.ts
+│   └── clientServerSync.test.ts
 ├── performance/                     # Load & perf tests
 └── e2e/                            # Playwright E2E tests
 ```
@@ -361,11 +362,11 @@ tests/
 
 ```
 k8s/
-├── base/                            # Base manifests
+├── base/
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   ├── configmap.yaml
-│   └── hpa.yaml                     # Horizontal Pod Autoscaler
+│   └── hpa.yaml
 ├── overlays/
 │   ├── staging/
 │   └── production/
@@ -376,7 +377,7 @@ k8s/
 
 ```
 infrastructure/
-└── terraform/                       # AWS infrastructure
+└── terraform/
     ├── main.tf
     ├── variables.tf
     └── outputs.tf
@@ -384,31 +385,31 @@ infrastructure/
 
 ---
 
-## 5. Root Configuration Files
+## 5. Key Architecture Changes (Feb 2026)
 
-| File | Purpose |
-|------|---------|
-| `package.json` | Monorepo root config, workspaces |
-| `tsconfig.json` | Root TypeScript config |
-| `Dockerfile` | Multi-stage Docker build |
-| `docker-compose.yml` | Local dev environment |
-| `.github/workflows/` | CI/CD pipelines |
-| `.eslintrc.js` | ESLint configuration |
-| `.prettierrc` | Prettier formatting rules |
-| `vitest.workspace.ts` | Vitest workspace config |
+| Before (Feb 2) | After (Feb 8) | Notes |
+|----------------|---------------|-------|
+| `TransformStore` class | `TransformAccess` static methods | Legacy wrappers in `compat.ts` |
+| Global stores | Instance-based `WorldState` | `getWorld()` accessor |
+| `dod/ComponentStores.ts` | `generated/ComponentAccessors.ts` | Code-generated |
+| `ai.ts` system | `dod/systems/AISystem.ts` class | Proper DOD integration |
+| N/A | `runner/CJRClientRunner.ts` | Game loop runner |
+| N/A | `core/ComponentRegistry.ts` | Dynamic registration |
+| N/A | `loader/EntitySpawner.ts` | Entity lifecycle |
 
 ---
 
 ## 6. Module Ownership
 
-| Directory | Owner | Responsibility |
-|-----------|-------|----------------|
-| `apps/client/src/components/` | UI Team | React components |
-| `apps/client/src/game/engine/` | Engine Team | Client engine |
-| `apps/client/src/game/cjr/` | Game Design | CJR mechanics |
-| `apps/server/src/rooms/` | Backend Team | Multiplayer rooms |
-| `packages/engine/` | Engine Team | Core engine |
-| `packages/shared/` | All Teams | Shared contracts |
+| Directory | Responsibility |
+|-----------|----------------|
+| `apps/client/src/components/` | React UI components |
+| `apps/client/src/game/engine/` | Client engine integration |
+| `apps/client/src/game/cjr/` | CJR game mechanics |
+| `apps/server/src/rooms/` | Multiplayer rooms |
+| `packages/engine/` | Core headless engine |
+| `packages/engine/generated/` | Code-generated (DO NOT EDIT) |
+| `packages/shared/` | Shared contracts |
 
 ---
 
@@ -418,11 +419,11 @@ infrastructure/
 |------|---------|---------|
 | React Component | `PascalCase.tsx` | `GameCanvas.tsx` |
 | React Hook | `useCamelCase.ts` | `useGameSession.ts` |
-| System | `PascalCaseSystem.ts` | `PhysicsSystem.ts` |
-| Store | `PascalCaseStore.ts` | `TransformStore.ts` |
+| System Class | `PascalCaseSystem.ts` | `AISystem.ts` |
+| Access Class | `PascalCaseAccess` | `TransformAccess` |
 | Types | `camelCase.ts` | `cjrTypes.ts` |
-| Constants | `camelCase.ts` | `constants.ts` |
 | Tests | `*.test.ts` | `PhysicsSystem.test.ts` |
+| Generated | `PascalCase.ts` | In `generated/` folder |
 
 ---
 

@@ -13,6 +13,7 @@ import { InputRingBuffer } from './InputRingBuffer';
 import { clientLogger } from '../core/logging/ClientLogger';
 // EIDOLON-V: Dev tooling
 import { PacketInterceptor } from '../dev/PacketInterceptor';
+import { networkTransformBuffer } from './NetworkTransformBuffer';
 
 // EIDOLON-V P4: Module-level reusable vectors (zero allocation after init)
 const _serverPos = { x: 0, y: 0 };
@@ -223,12 +224,48 @@ export class NetworkClient {
       return;
     }
 
-    // 1. Unpack Server Truth into WorldState (Overwrites Predicted State)
-    const timestamp = SchemaBinaryUnpacker.unpack(data, this.localState.engine.world);
+    // 1. Unpack Server Truth into NetworkTransformBuffer (Thread Safe)
+    // EIDOLON-V FIX: Decouple network read from physics write
+    // The packet now contains [Ack(4)] + [Body]
+    // We must manually offset the DataView to skip Ack?
+    // Actually, we can read Ack first.
+
+    const view = new DataView(data);
+
+    // EIDOLON-V PROTOCOL: Check if packet is large enough for Ack header
+    if (view.byteLength < 4) return;
+
+    // Read Ack (Last Processed Input Sequence)
+    const ack = view.getUint32(0, true);
+
+    // EIDOLON-V RECONCILIATION: Filter processed inputs immediately
+    this.pendingInputs.filterProcessed(ack);
+
+    // Slice the buffer to exclude Ack? 
+    // DataView offset is cheap. Creating new ArrayBuffer slice is expensive.
+    // SchemaBinaryUnpacker takes ArrayBuffer. It creates a DataView(buffer).
+    // It reads from offset 0.
+    // We should modify SchemaBinaryUnpacker to accept offset? 
+    // Or just slice it. For 5-10KB, slice is okay but not ideal.
+    // Wait, `SchemaBinaryUnpacker.unpack` creates `new DataView(buffer)`.
+    // If we pass a sliced buffer, it's fine.
+    // `data.slice(4)` (if available on ArrayBuffer/Uint8Array)
+
+    // Let's optimize: SchemaBinaryUnpacker.unpack takes ArrayBuffer.
+    // We can change Unpacker to take DataView or Offset?
+    // For now, let's just slice to ensure correctness.
+    const bodyBuffer = data.slice(4);
+
+    // Unpack into Buffer
+    const timestamp = SchemaBinaryUnpacker.unpack(
+      bodyBuffer,
+      this.localState.engine.world,
+      networkTransformBuffer // Pass receiver to buffer updates
+    );
 
     // 2. Immediate Re-simulation for Local Player (Client-Side Prediction)
     if (this.room?.sessionId) {
-      this.reconcileFromWorldState(this.room.sessionId);
+      this.reconcile(this.room.sessionId);
     }
 
     if (timestamp === null) return;
@@ -236,7 +273,9 @@ export class NetworkClient {
 
   // EIDOLON-V: Binary-Compatible Reconciliation
   // Replays inputs on top of the fresh Server Snapshot in WorldState
-  private reconcileFromWorldState(sessionId: string) {
+  public reconcile(sessionId?: string) {
+    if (!sessionId) sessionId = this.room?.sessionId;
+    if (!sessionId) return;
     if (!this.localState || !this.localState.engine.world) return;
 
     const worldState = this.localState.engine.world;
@@ -257,23 +296,13 @@ export class NetworkClient {
     _resimVel.y = PhysicsAccess.getVy(worldState, pIdx);
 
     // 2. Filter Processed Inputs
-    // We need to know the Last Processed Input Sequence from Server.
-    // SchemaBinaryUnpacker MIGHT unpack this if it's in the packet.
-    // If not, we rely on the Schema Object `sPlayer.lastProcessedInput` which might be stale (tick rate mismatch).
-    // Ideally, Binary Packet includes `ack` field.
-    // Assuming Schema Object is the only source for `ack` for now.
-    // We use the cached `localPlayer.lastProcessedInput` (which we need to sync from Schema!)
-    // Wait, I disabled syncPlayers position, but I should keep `lastProcessedInput` sync?
-    // Yes, `activeIds.forEach` in `syncPlayers` iterates Schema.
+    // EIDOLON-V FIX: Already filtered in handleBinaryUpdate using explicit Ack!
+    // We can trust pendingInputs is now correct.
 
-    // Let's ensure we get `lastProcessedInput` from somewhere.
-    // Accessing `localPlayer` object for Ack is fine.
-    // But verify `syncPlayers` updates it?
-    // `syncPlayers` iterates `serverPlayers` (Schema).
-    // I removed position sync. I should check if I removed `lastProcessedInput`.
-    // I didn't see `lastProcessedInput` in the removed block specifically.
+    // Legacy comment cleanup:
+    // "We need to know the Last Processed Input Sequence from Server..."
+    // NOW WE HAVE IT via Unicast Ack.
 
-    // ... logic continues ...
 
     // 3. Replay Loop
     // Reuse _replayTarget, etc.

@@ -43,12 +43,12 @@ export class PacketInterceptor {
         try {
             this.ws = new WebSocket(this.serverUrl);
             this.ws.onopen = () => {
-                console.log('[PacketInterceptor] Connected to inspector');
+                console.info('[PacketInterceptor] Connected to inspector');
                 if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
             };
 
             this.ws.onclose = () => {
-                console.log('[PacketInterceptor] Disconnected');
+                console.info('[PacketInterceptor] Disconnected');
                 this.scheduleReconnect();
             };
 
@@ -71,7 +71,7 @@ export class PacketInterceptor {
     public install(networkClient: NetworkClient) {
         if (!import.meta.env.DEV) return;
 
-        console.log('[PacketInterceptor] Installing hook into NetworkClient');
+        console.info('[PacketInterceptor] Installing hook into NetworkClient');
 
         // Hook 'send' (We need to access the client inside NetworkClient, but it's private.
         // Instead, we can wrap the colyseus client methods if possible, 

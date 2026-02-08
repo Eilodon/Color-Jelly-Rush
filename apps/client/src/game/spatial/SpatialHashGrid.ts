@@ -3,7 +3,7 @@
 
 import { fastMath } from '../math/FastMath';
 import { Entity } from '../../types';
-import { TransformStore, PhysicsStore, EntityLookup } from '@cjr/engine';
+import { TransformAccess, PhysicsAccess, EntityLookup, STRIDES } from '@cjr/engine';
 import { getWorld } from '../engine/context';
 
 // EIDOLON-V P0 FIX: __DEV__ guard for hot path warnings

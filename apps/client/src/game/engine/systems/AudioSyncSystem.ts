@@ -1,6 +1,6 @@
 import { AudioEngine } from '../../audio/AudioEngine';
 import { GameState } from '../../../types';
-import { TransformStore } from '@cjr/engine';
+import { TransformAccess } from '@cjr/engine';
 import { getWorld } from '../context';
 
 export class AudioSyncSystem {

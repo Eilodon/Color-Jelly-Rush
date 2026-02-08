@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 
 interface KeyboardNavProps {
   children: React.ReactNode;
@@ -8,7 +8,10 @@ interface KeyboardNavProps {
   onArrowDown?: () => void;
 }
 
-export const KeyboardNav: React.FC<KeyboardNavProps> = ({
+/**
+ * EIDOLON-V: Memoized KeyboardNav for accessibility
+ */
+export const KeyboardNav = memo<KeyboardNavProps>(({
   children,
   onEscape,
   onEnter,
@@ -38,4 +41,6 @@ export const KeyboardNav: React.FC<KeyboardNavProps> = ({
   }, [onEscape, onEnter, onArrowUp, onArrowDown]);
 
   return <>{children}</>;
-};
+});
+
+KeyboardNav.displayName = 'KeyboardNav';

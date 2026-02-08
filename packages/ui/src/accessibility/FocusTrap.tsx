@@ -1,11 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 
 interface FocusTrapProps {
   children: React.ReactNode;
   isActive?: boolean;
 }
 
-export const FocusTrap: React.FC<FocusTrapProps> = ({
+/**
+ * EIDOLON-V: Memoized FocusTrap for accessibility
+ */
+export const FocusTrap = memo<FocusTrapProps>(({
   children,
   isActive = true,
 }) => {
@@ -44,4 +47,6 @@ export const FocusTrap: React.FC<FocusTrapProps> = ({
   }, [isActive]);
 
   return <div ref={containerRef}>{children}</div>;
-};
+});
+
+FocusTrap.displayName = 'FocusTrap';

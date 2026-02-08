@@ -24,7 +24,7 @@ export async function createRenderBackend(canvas: HTMLCanvasElement): Promise<IR
     if (preferredType === RenderBackendType.WEBGPU) {
         const webgpu = new WebGPUBackend();
         if (await webgpu.init(canvas)) {
-            console.log('[RenderBackend] Using WebGPU');
+            console.info('[RenderBackend] Using WebGPU');
             return webgpu;
         }
         console.warn('[RenderBackend] WebGPU init failed, falling back to WebGL2');
@@ -33,7 +33,7 @@ export async function createRenderBackend(canvas: HTMLCanvasElement): Promise<IR
     // Try WebGL2
     const webgl2 = new WebGL2Backend();
     if (await webgl2.init(canvas)) {
-        console.log('[RenderBackend] Using WebGL2');
+        console.info('[RenderBackend] Using WebGL2');
         return webgl2;
     }
 

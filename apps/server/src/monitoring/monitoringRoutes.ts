@@ -6,6 +6,7 @@
 import express from 'express';
 import { authMiddleware } from '../auth/AuthService';
 import { monitoringService } from './MonitoringService';
+import { logger } from '../logging/Logger';
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/metrics', (req, res) => {
       metrics,
     });
   } catch (error) {
-    console.error('📊 PHASE1: Metrics error:', error);
+    logger.error('📊 PHASE1: Metrics error:', error);
     res.status(500).json({ error: 'Failed to collect metrics' });
   }
 });
@@ -33,7 +34,7 @@ router.get('/metrics/history', (req, res) => {
       metrics,
     });
   } catch (error) {
-    console.error('📊 PHASE1: Metrics history error:', error);
+    logger.error('📊 PHASE1: Metrics history error:', error);
     res.status(500).json({ error: 'Failed to get metrics history' });
   }
 });
@@ -47,7 +48,7 @@ router.get('/alerts', (req, res) => {
       alerts,
     });
   } catch (error) {
-    console.error('📊 PHASE1: Alerts error:', error);
+    logger.error('📊 PHASE1: Alerts error:', error);
     res.status(500).json({ error: 'Failed to get alerts' });
   }
 });
@@ -69,7 +70,7 @@ router.post('/alerts/:alertId/resolve', (req, res) => {
       });
     }
   } catch (error) {
-    console.error('📊 PHASE1: Alert resolution error:', error);
+    logger.error('📊 PHASE1: Alert resolution error:', error);
     res.status(500).json({ error: 'Failed to resolve alert' });
   }
 });
@@ -90,7 +91,7 @@ router.get('/health', (req, res) => {
       timestamp: Date.now(),
     });
   } catch (error) {
-    console.error('📊 PHASE1: Health check error:', error);
+    logger.error('📊 PHASE1: Health check error:', error);
     res.status(500).json({
       error: 'Failed to get health status',
       status: 'critical',
@@ -117,7 +118,7 @@ router.post('/security-event', authMiddleware, (req, res) => {
       message: 'Security event recorded',
     });
   } catch (error) {
-    console.error('📊 PHASE1: Security event error:', error);
+    logger.error('📊 PHASE1: Security event error:', error);
     res.status(500).json({ error: 'Failed to record security event' });
   }
 });

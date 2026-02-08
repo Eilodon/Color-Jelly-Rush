@@ -6,22 +6,22 @@ import { PhysicsWorld } from '../game/engine/PhysicsWorld';
 export interface ISpatialGrid {
   clear(): void;
   clearDynamic(): void;
-  insert(entity: Entity): void;
-  insertStatic(entity: Entity): void;
-  removeStatic(entity: Entity): void;
-  getNearby(entity: Entity, maxDistance?: number): Entity[];
+  insert(_entity: Entity): void;
+  insertStatic(_entity: Entity): void;
+  removeStatic(_entity: Entity): void;
+  getNearby(_entity: Entity, _maxDistance?: number): Entity[];
   getNearbyInto(
-    entity: Entity,
-    outArray: Entity[],
-    indices: number[],
-    maxDistance?: number
+    _entity: Entity,
+    _outArray: Entity[],
+    _indices: number[],
+    _maxDistance?: number
   ): number;
 }
 
 // Define interface for ParticlePool used in context.ts
 export interface IParticlePool {
-  get(x: number, y: number, color: string, speed: number): Particle;
-  release(particle: Particle): void;
+  get(_x: number, _y: number, _color: string, _speed: number): Particle;
+  release(_particle: Particle): void;
 }
 
 import { WorldState } from '@cjr/engine';

@@ -15,7 +15,7 @@ export class LevelHotReload {
 
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[LevelHotReload] Already connected');
+      console.info('[LevelHotReload] Already connected');
       return;
     }
 
@@ -23,7 +23,7 @@ export class LevelHotReload {
       this.ws = new WebSocket(this.serverUrl);
 
       this.ws.onopen = () => {
-        console.log('[LevelHotReload] Connected to config server');
+        console.info('[LevelHotReload] Connected to config server');
         if (this.reconnectTimer) {
           clearTimeout(this.reconnectTimer);
           this.reconnectTimer = null;
@@ -40,7 +40,7 @@ export class LevelHotReload {
       };
 
       this.ws.onclose = () => {
-        console.log('[LevelHotReload] Disconnected from config server');
+        console.info('[LevelHotReload] Disconnected from config server');
         this.scheduleReconnect();
       };
 
@@ -56,7 +56,7 @@ export class LevelHotReload {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     
-    console.log(`[LevelHotReload] Reconnecting in ${this.reconnectInterval}ms...`);
+    console.info(`[LevelHotReload] Reconnecting in ${this.reconnectInterval}ms...`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
@@ -74,13 +74,13 @@ export class LevelHotReload {
           msg.levels.forEach(level => {
             this.levelConfigs.set(level.id, level);
           });
-          console.log(`[LevelHotReload] Loaded ${msg.levels.length} levels`);
+          console.info(`[LevelHotReload] Loaded ${msg.levels.length} levels`);
         }
         break;
 
       case 'LEVEL_UPDATED':
         if (msg.levelId && msg.level) {
-          console.log(`[LevelHotReload] Level ${msg.levelId} updated`);
+          console.info(`[LevelHotReload] Level ${msg.levelId} updated`);
           this.levelConfigs.set(msg.levelId, msg.level);
           this.notifyListeners(msg.levelId, msg.level);
         }

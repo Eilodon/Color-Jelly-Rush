@@ -71,9 +71,11 @@ export class SchemaBinaryPacker {
     private static acquire(): IPacketBuffer {
         this.initPool();
         if (this._pool.length > 0) {
-            const entry = this._pool.pop()!;
-            entry.offset = 0;
-            return entry;
+            const entry = this._pool.pop();
+            if (entry) {
+                entry.offset = 0;
+                return entry;
+            }
         }
         // Fallback if empty
         const buffer = new ArrayBuffer(this.BUFFER_SIZE);
@@ -170,7 +172,7 @@ export class SchemaBinaryPacker {
         ];
 
         // Inverse map for ID string
-        const compIds = COMPONENT_IDS as any;
+        const compIds: Record<string, number | undefined> = COMPONENT_IDS;
 
         for (const compName of components) {
             const compId = compIds[compName] as number;

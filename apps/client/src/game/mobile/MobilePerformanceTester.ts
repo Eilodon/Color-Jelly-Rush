@@ -173,15 +173,15 @@ export class MobilePerformanceTester {
     const deviceProfile = this.detectDeviceProfile();
     const results: number[] = [];
 
-    console.log(`🧪 Running performance test for ${deviceProfile.name}...`);
+    console.info(`🧪 Running performance test for ${deviceProfile.name}...`);
 
     // Run all benchmarks
     for (const benchmark of this.BENCHMARK_SUITES) {
       try {
-        console.log(`📊 Running ${benchmark.name}...`);
+        console.info(`📊 Running ${benchmark.name}...`);
         const score = await benchmark.test();
         results.push(score);
-        console.log(`✅ ${benchmark.name}: ${score.toFixed(2)}`);
+        console.info(`✅ ${benchmark.name}: ${score.toFixed(2)}`);
       } catch (error) {
         console.error(`❌ ${benchmark.name} failed:`, error);
         results.push(0);

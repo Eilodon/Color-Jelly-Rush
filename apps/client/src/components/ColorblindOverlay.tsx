@@ -78,10 +78,8 @@ const ColorblindOverlay: React.FC<ColorblindOverlayProps> = ({
   }, [enabled, config]);
 
   const toggleColorblindMode = () => {
-    onConfigChange({
-      ...config,
-      enabled: !config.enabled,
-    });
+    colorblindMode.toggle();
+    onConfigChange(colorblindMode.getConfig());
   };
 
   const changeColorblindType = (type: ColorblindConfig['type']) => {

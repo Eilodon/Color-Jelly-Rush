@@ -179,7 +179,7 @@ export class InputValidator {
             errors.push(`Pigment ${channel} must be a number between 0 and 1`);
             pigmentError = true;
           } else {
-            (sanitizedPigment as any)[channel] = Math.max(0, Math.min(1, value));
+            sanitizedPigment[channel as keyof typeof sanitizedPigment] = Math.max(0, Math.min(1, value));
           }
         });
 

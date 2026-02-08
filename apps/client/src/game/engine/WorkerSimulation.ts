@@ -13,11 +13,11 @@ import { BaseSimulation, MovementSystem } from '@cjr/engine';
 
 export class WorkerSimulation extends BaseSimulation {
     protected onInitialize(): void {
-        console.log('[PhysicsWorker] Simulation initialized');
+        console.info('[PhysicsWorker] Simulation initialized');
     }
 
     protected onShutdown(): void {
-        console.log('[PhysicsWorker] Simulation shutdown');
+        console.info('[PhysicsWorker] Simulation shutdown');
     }
 
     /**
