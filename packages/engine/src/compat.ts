@@ -1,10 +1,11 @@
 /**
  * @cjr/engine - Compatibility Layer
- * 
+ *
  * EIDOLON-V: Keeps the lights on for legacy code while we migrate to WorldState.
  * Proxies legacy static access (TransformStore.data, etc.) to generated WorldState.
- * 
- * @deprecated Migrate to usage of 'generated/WorldState' and 'generated/ComponentAccessors'
+ *
+ * CLEANUP NOTE: Kept wrapper classes to maintain backward API compatibility.
+ * The wrappers adapt legacy 6-arg signatures to new 9-arg Access classes.
  */
 
 import {
@@ -12,7 +13,7 @@ import {
     defaultWorld,
     STRIDES,
     MAX_ENTITIES,
-    type IWorldConfig
+    type IWorldConfig,
 } from './generated/WorldState';
 
 import {
@@ -29,23 +30,39 @@ import {
     TattooAccess,
 } from './generated/ComponentAccessors';
 
-// Re-export generated types
+// =============================================================================
+// RE-EXPORTS FROM GENERATED
+// =============================================================================
+
 export {
     WorldState,
     defaultWorld,
     STRIDES,
     MAX_ENTITIES,
-    type IWorldConfig
+    type IWorldConfig,
 };
 
 export {
     NetworkSerializer,
     COMPONENT_IDS,
-    COMPONENT_STRIDES
+    COMPONENT_STRIDES,
 } from './generated/NetworkPacker';
 
-// Re-export EntityFlags
 export { GeneratedEntityFlags as EntityFlags };
+
+// Also re-export Access classes directly for new code
+export {
+    TransformAccess,
+    PhysicsAccess,
+    StatsAccess,
+    InputAccess,
+    ConfigAccess,
+    SkillAccess,
+    ProjectileAccess,
+    StateAccess,
+    PigmentAccess,
+    TattooAccess,
+};
 
 // Reserved flags offset for engine use (bits 0-7 used by engine, 8+ available for modules)
 export const ENGINE_FLAG_OFFSET = 8;
@@ -54,26 +71,43 @@ export const ENGINE_FLAG_OFFSET = 8;
 export * from './modules/cjr/flags';
 
 // =============================================================================
+// DEPRECATION WARNING HELPER
+// =============================================================================
+
+declare const __DEV__: boolean | undefined;
+
+const warnedMessages = new Set<string>();
+
+function warnOnce(msg: string): void {
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && typeof console !== 'undefined') {
+        if (warnedMessages.has(msg)) return;
+        warnedMessages.add(msg);
+        console.warn(`[EIDOLON-V DEPRECATION] ${msg}`);
+    }
+}
+
+// =============================================================================
 // LEGACY ENTITY LOOKUP
 // =============================================================================
+
 /**
  * Global entity lookup array for legacy client code.
  * @deprecated Use IEntityLookup interface and dependency injection where possible.
  */
 export const EntityLookup: any[] = new Array(MAX_ENTITIES).fill(null);
 
-
 // =============================================================================
-// COMPATIBILITY STORES
-// Proxies that maintain the old API (static .data, .set without world arg)
+// COMPATIBILITY STORES (Wrapper Classes)
+// These adapt legacy API signatures to new Access classes
+// @deprecated Use TransformAccess, PhysicsAccess, etc. directly
 // =============================================================================
 
+/**
+ * @deprecated Use TransformAccess directly for new code.
+ * TransformStore is a legacy wrapper and will be removed in a future version.
+ */
 export class TransformStore {
     static readonly STRIDE = STRIDES.TRANSFORM;
-
-    static get data(): Float32Array {
-        throw new Error("TransformStore.data is deprecated. Use WorldState.transform directly.");
-    }
 
     static getX(world: WorldState, id: number): number {
         return TransformAccess.getX(world, id);
@@ -83,23 +117,29 @@ export class TransformStore {
         return TransformAccess.getY(world, id);
     }
 
+    /** 
+     * @deprecated Use TransformAccess.set() directly
+     * Legacy signature: (world, id, x, y, rotation, scale?) 
+     */
     static set(world: WorldState, id: number, x: number, y: number, rotation: number, scale: number = 1): void {
-        // Init prev values to current values
+        warnOnce('TransformStore.set() is deprecated. Use TransformAccess.set() instead.');
         TransformAccess.set(world, id, x, y, rotation, scale, x, y, rotation);
     }
 
+    /** @deprecated Use TransformAccess.setX/setY directly */
     static setPosition(world: WorldState, id: number, x: number, y: number): void {
+        warnOnce('TransformStore.setPosition() is deprecated. Use TransformAccess.setX/setY() instead.');
         TransformAccess.setX(world, id, x);
         TransformAccess.setY(world, id, y);
     }
 }
 
+/**
+ * @deprecated Use PhysicsAccess directly for new code.
+ * PhysicsStore is a legacy wrapper and will be removed in a future version.
+ */
 export class PhysicsStore {
     static readonly STRIDE = STRIDES.PHYSICS;
-
-    static get data(): Float32Array {
-        throw new Error("PhysicsStore.data is deprecated. Use WorldState.physics directly.");
-    }
 
     static getVx(world: WorldState, id: number): number {
         return PhysicsAccess.getVx(world, id);
@@ -121,26 +161,31 @@ export class PhysicsStore {
         return PhysicsAccess.getVy(world, id);
     }
 
+    /** 
+     * @deprecated Use PhysicsAccess.set() directly
+     * Legacy signature: (world, id, vx, vy, mass, radius, restitution?, friction?) 
+     */
     static set(world: WorldState, id: number, vx: number, vy: number, mass: number, radius: number, restitution: number = 0.5, friction: number = 0.9): void {
+        warnOnce('PhysicsStore.set() is deprecated. Use PhysicsAccess.set() instead.');
         PhysicsAccess.set(world, id, vx, vy, 0, mass, radius, restitution, friction);
     }
 
+    /** @deprecated Use PhysicsAccess.setVx/setVy directly */
     static setVelocity(world: WorldState, id: number, vx: number, vy: number): void {
+        warnOnce('PhysicsStore.setVelocity() is deprecated. Use PhysicsAccess.setVx/setVy() instead.');
         PhysicsAccess.setVx(world, id, vx);
         PhysicsAccess.setVy(world, id, vy);
     }
 
+    /** @deprecated Use PhysicsAccess.setRadius() directly */
     static setRadius(world: WorldState, id: number, radius: number): void {
+        warnOnce('PhysicsStore.setRadius() is deprecated. Use PhysicsAccess.setRadius() instead.');
         PhysicsAccess.setRadius(world, id, radius);
     }
 }
 
 export class StatsStore {
     static readonly STRIDE = STRIDES.STATS;
-
-    static get data(): Float32Array {
-        throw new Error("StatsStore.data is deprecated. Use WorldState.stats directly.");
-    }
 
     static getCurrentHealth(world: WorldState, id: number): number {
         return StatsAccess.getHp(world, id);
@@ -176,14 +221,6 @@ export class StatsStore {
 }
 
 export class StateStore {
-    static get flags(): Uint8Array {
-        throw new Error("StateStore.flags is deprecated. Use WorldState.stateFlags directly.");
-    }
-
-    static get data(): Uint8Array {
-        throw new Error("StateStore.data is deprecated. Use WorldState.stateFlags directly.");
-    }
-
     static isActive(world: WorldState, id: number): boolean {
         return StateAccess.isActive(world, id);
     }
@@ -193,7 +230,6 @@ export class StateStore {
     }
 
     static setFlag(world: WorldState, id: number, flag: number): void {
-        // EIDOLON-V FIX: If setting ACTIVE flag, also add to Sparse Set
         if ((flag & GeneratedEntityFlags.ACTIVE) !== 0) {
             StateAccess.activate(world, id);
         }
@@ -201,7 +237,6 @@ export class StateStore {
     }
 
     static clearFlag(world: WorldState, id: number, flag: number): void {
-        // EIDOLON-V FIX: If clearing ACTIVE flag, also remove from Sparse Set
         if ((flag & GeneratedEntityFlags.ACTIVE) !== 0) {
             StateAccess.deactivate(world, id);
         }
@@ -212,65 +247,79 @@ export class StateStore {
 export class InputStore {
     static readonly STRIDE = STRIDES.INPUT;
 
-    static get data(): Float32Array {
-        throw new Error("InputStore.data is deprecated. Use WorldState.input directly.");
-    }
-
     static setTarget(world: WorldState, id: number, x: number, y: number): void {
         InputAccess.setTargetX(world, id, x);
         InputAccess.setTargetY(world, id, y);
     }
 
-    static getTarget(world: WorldState, id: number, out: { x: number, y: number }): void {
+    static getTarget(world: WorldState, id: number, out: { x: number; y: number }): void {
         out.x = InputAccess.getTargetX(world, id);
         out.y = InputAccess.getTargetY(world, id);
     }
 
     static setAction(world: WorldState, id: number, bit: number, active: boolean): void {
-        let actions = world.inputView.getUint32(id * STRIDES.INPUT * 4 + 8, true);
-        if (active) actions |= (1 << bit);
+        let actions = InputAccess.getActions(world, id);
+        if (active) actions |= 1 << bit;
         else actions &= ~(1 << bit);
-        world.inputView.setUint32(id * STRIDES.INPUT * 4 + 8, actions, true);
+        InputAccess.setActions(world, id, actions);
     }
 
     static isActionActive(world: WorldState, id: number, bit: number): boolean {
-        let actions = world.inputView.getUint32(id * STRIDES.INPUT * 4 + 8, true);
+        const actions = InputAccess.getActions(world, id);
         return (actions & (1 << bit)) !== 0;
+    }
+
+    /** NEW: InputAccess-compatible set */
+    static set(world: WorldState, id: number, targetX: number, targetY: number, actions: number): void {
+        InputAccess.set(world, id, targetX, targetY, actions);
     }
 }
 
 export class ConfigStore {
     static readonly STRIDE = STRIDES.CONFIG;
-    static get data(): Float32Array { throw new Error("ConfigStore.data is deprecated. Use WorldState.config directly."); }
 
-    static setMaxSpeed(world: WorldState, id: number, speed: number) { /* unused in generated? */ }
-    static setSpeedMultiplier(world: WorldState, id: number, value: number) { ConfigAccess.setSpeedMult(world, id, value); }
-    static setMagnetRadius(world: WorldState, id: number, value: number) { ConfigAccess.setMagneticRadius(world, id, value); }
+    static setSpeedMultiplier(world: WorldState, id: number, value: number): void {
+        ConfigAccess.setSpeedMult(world, id, value);
+    }
 
-    static set(world: WorldState, id: number, magneticRadius: number, damageMult: number, speedMult: number, pickupRange: number, visionRange: number) {
+    /** @deprecated Use setSpeedMultiplier - this method just updates speed multiplier */
+    static setMaxSpeed(world: WorldState, id: number, value: number): void {
+        // Legacy: setMaxSpeed actually sets speed multiplier relative to base
+        ConfigAccess.setSpeedMult(world, id, value / 400); // Normalize to multiplier
+    }
+
+    static setMagnetRadius(world: WorldState, id: number, value: number): void {
+        ConfigAccess.setMagneticRadius(world, id, value);
+    }
+
+    static set(world: WorldState, id: number, magneticRadius: number, damageMult: number, speedMult: number, pickupRange: number, visionRange: number): void {
         ConfigAccess.set(world, id, magneticRadius, damageMult, speedMult, pickupRange, visionRange);
     }
 }
 
 export class SkillStore {
     static readonly STRIDE = STRIDES.SKILL;
-    static get data(): Float32Array { throw new Error("SkillStore.data is deprecated. Use WorldState.skill directly."); }
 
-    static update(dt: number) { /* Global update logic moved to System? This store just proxies data */ }
-
-    // Required by legacy usage
     static set(world: WorldState, id: number, cooldown: number, maxCooldown: number, activeTimer: number): void {
         SkillAccess.set(world, id, cooldown, maxCooldown, activeTimer, 0);
     }
 
-    static setCooldown(world: WorldState, id: number, val: number) { SkillAccess.setCooldown(world, id, val); }
-    static setMaxCooldown(world: WorldState, id: number, val: number) { SkillAccess.setMaxCooldown(world, id, val); }
-    static setActiveTimer(world: WorldState, id: number, val: number) { SkillAccess.setActiveTimer(world, id, val); }
+    static setCooldown(world: WorldState, id: number, val: number): void {
+        SkillAccess.setCooldown(world, id, val);
+    }
+
+    static setMaxCooldown(world: WorldState, id: number, val: number): void {
+        SkillAccess.setMaxCooldown(world, id, val);
+    }
+
+    static setActiveTimer(world: WorldState, id: number, val: number): void {
+        SkillAccess.setActiveTimer(world, id, val);
+    }
 }
 
 export class ProjectileStore {
     static readonly STRIDE = STRIDES.PROJECTILE;
-    static get data(): Float32Array { throw new Error("ProjectileStore.data is deprecated. Use WorldState.projectile directly."); }
+
     static set(world: WorldState, id: number, ownerId: number, damage: number, duration: number, typeId: number): void {
         ProjectileAccess.set(world, id, ownerId, damage, duration, typeId);
     }
@@ -278,13 +327,10 @@ export class ProjectileStore {
 
 export class PigmentStore {
     static readonly STRIDE = STRIDES.PIGMENT;
-    // Helper constants for array access (Legacy code uses [idx + R], etc.)
     static readonly R = 0;
     static readonly G = 1;
     static readonly B = 2;
     static readonly MATCH = 3;
-
-    static get data(): Float32Array { throw new Error("PigmentStore.data is deprecated. Use WorldState.pigment directly."); }
 
     static getColorInt(world: WorldState, id: number): number {
         const r = Math.floor(PigmentAccess.getR(world, id) * 255);
@@ -297,6 +343,7 @@ export class PigmentStore {
         return PigmentAccess.getMatchPercent(world, id);
     }
 
+    /** Legacy signature: (world, id, r, g, b) */
     static set(world: WorldState, id: number, r: number, g: number, b: number): void {
         PigmentAccess.setR(world, id, r);
         PigmentAccess.setG(world, id, g);
@@ -315,23 +362,34 @@ export class PigmentStore {
 }
 
 export class TattooStore {
-    // Legacy flags support
+    static readonly STRIDE = STRIDES.TATTOO;
     private static _flags = new Uint8Array(MAX_ENTITIES);
 
     static get flags(): Uint8Array {
         return this._flags;
     }
 
-    // New Float32 data from WorldState
+    /** 
+     * @deprecated REMOVED - Use WorldState.tattoo directly
+     * @throws Error Always throws - migrate to instance-based access
+     */
     static get data(): Float32Array {
-        throw new Error("TattooStore.data is deprecated. Use WorldState.tattoo directly.");
+        throw new Error(
+            '[EIDOLON-V] TattooStore.data is deprecated. ' +
+            'Use getWorld().tattoo or world.tattoo for instance-based access.'
+        );
     }
 }
 
+// =============================================================================
+// RESET FUNCTION
+// =============================================================================
+
 /**
  * Reset all stores
- * @deprecated Use defaultWorld.reset()
+ * @deprecated Use world.reset() directly for instance-based architecture
  */
 export function resetAllStores(): void {
+    warnOnce('resetAllStores() is deprecated. Use world.reset() directly for instance-based architecture.');
     defaultWorld.reset();
 }

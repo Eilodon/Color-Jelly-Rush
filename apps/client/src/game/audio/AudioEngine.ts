@@ -490,7 +490,10 @@ export class AudioEngine {
     source.onended = () => {
       const index = this.activeSounds.indexOf(activeSound);
       if (index !== -1) {
-        this.activeSounds.splice(index, 1);
+        // EIDOLON-V FIX: Swap-remove pattern (O(1) instead of O(n) splice)
+        const last = this.activeSounds[this.activeSounds.length - 1];
+        this.activeSounds[index] = last;
+        this.activeSounds.pop();
       }
     };
   }
@@ -503,7 +506,10 @@ export class AudioEngine {
     }
     const index = this.activeSounds.indexOf(sound);
     if (index !== -1) {
-      this.activeSounds.splice(index, 1);
+      // EIDOLON-V FIX: Swap-remove pattern (O(1) instead of O(n) splice)
+      const last = this.activeSounds[this.activeSounds.length - 1];
+      this.activeSounds[index] = last;
+      this.activeSounds.pop();
     }
   }
 

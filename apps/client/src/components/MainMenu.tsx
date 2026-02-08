@@ -6,7 +6,7 @@ interface MainMenuProps {
   unlockedLevel: number;
   usePixi: boolean;
   useMultiplayer: boolean;
-  networkStatus: 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error';
+  networkStatus: 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error' | 'offline_mode';
   name: string;
   shape: ShapeId;
   onTogglePixi: (usePixi: boolean) => void;

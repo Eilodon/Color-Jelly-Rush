@@ -24,8 +24,8 @@ import {
 import { StatusFlag } from './statusFlags';
 import { entityManager } from './dod/EntityManager';
 import {
-  TransformStore,
-  PhysicsStore,
+  TransformAccess,    // PHASE 3: Migrated from TransformStore
+  PhysicsAccess,      // PHASE 3: Migrated from PhysicsStore
   StateStore,
   StatsStore,
   SkillStore,
@@ -77,8 +77,8 @@ export const createPlayer = (
 
   // 2. Initialize DOD State (Single Source of Truth)
   // 2.1 Transform & Physics
-  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
-  PhysicsStore.set(getWorld(), entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  TransformAccess.set(getWorld(), entId, position.x, position.y, 0, 1, position.x, position.y, 0);
+  PhysicsAccess.set(getWorld(), entId, 0, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
 
   // 2.2 Stats
   StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1); // Health=100, Def=1, Dmg=1
@@ -238,8 +238,8 @@ export const createBot = (id: string, spawnTime: number = 0): Bot | null => {
   engine.physicsWorld.indexToId.set(entId, id);
 
   // 2. Initialize DOD State (Single Source of Truth)
-  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
-  PhysicsStore.set(getWorld(), entId, 0, 0, 10, PLAYER_START_RADIUS); // Mass 10
+  TransformAccess.set(getWorld(), entId, position.x, position.y, 0, 1, position.x, position.y, 0);
+  PhysicsAccess.set(getWorld(), entId, 0, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
   StatsStore.set(getWorld(), entId, 100, 100, 0, 0, 1, 1);
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.BOT);
 
@@ -373,7 +373,7 @@ export const createBoss = (spawnTime: number = 0): Bot | null => {
 
   if (boss.physicsIndex !== undefined) {
     // Update Physics Store radius/mass - use WorldState accessors
-    PhysicsStore.setRadius(getWorld(), boss.physicsIndex, 80);
+    PhysicsAccess.setRadius(getWorld(), boss.physicsIndex, 80);
     // Update Stats Store
     StatsStore.set(getWorld(), boss.physicsIndex, 2000, 2000, boss.score, boss.matchPercent, 2, 1.5); // Boss Def=2, Dmg=1.5
   }
@@ -448,8 +448,8 @@ export const createFood = (pos?: Vector2, isEjected: boolean = false): Food | nu
   }
 
   // Initialize DOD State
-  TransformStore.set(getWorld(), entId, startPos.x, startPos.y, 0);
-  PhysicsStore.set(getWorld(), entId, 0, 0, 1, FOOD_RADIUS); // Mass 1
+  TransformAccess.set(getWorld(), entId, startPos.x, startPos.y, 0, 1, startPos.x, startPos.y, 0);
+  PhysicsAccess.set(getWorld(), entId, 0, 0, 0, 1, FOOD_RADIUS, 0.5, 0.9);
   // Determine Type Flag
   let typeFlag = EntityFlags.FOOD;
   if (food.kind === 'catalyst') typeFlag |= CJRFoodFlags.FOOD_CATALYST;
@@ -553,8 +553,8 @@ export const createProjectile = (
   projectile.velocity = { x: vx, y: vy };
 
   // DOD Stores
-  TransformStore.set(getWorld(), entId, position.x, position.y, 0);
-  PhysicsStore.set(getWorld(), entId, vx, vy, 0.5, 8, 0.5, 1.0);
+  TransformAccess.set(getWorld(), entId, position.x, position.y, 0, 1, position.x, position.y, 0);
+  PhysicsAccess.set(getWorld(), entId, vx, vy, 0, 0.5, 8, 0.5, 1.0);
   StateStore.setFlag(getWorld(), entId, EntityFlags.ACTIVE | EntityFlags.PROJECTILE);
   StatsStore.set(getWorld(), entId, 1, 1, 0, 0, 0, 1);
 
@@ -597,8 +597,9 @@ export const createProjectile = (
 // Binds object properties directly to DOD Stores via Getters/Setters
 // FIXED: Uses getWorld() for instance-based access (migration from defaultWorld)
 const bindToLiveView = (entity: any, entId: number) => {
-  const pBase = entId * TransformStore.STRIDE;
-  const vBase = entId * PhysicsStore.STRIDE;
+  const w = getWorld();
+  const pBase = entId * 8; // STRIDES.TRANSFORM = 8
+  const vBase = entId * 8; // STRIDES.PHYSICS = 8
 
   // EIDOLON-V: Pre-create proxy objects ONCE (cached)
   const posProxy = Object.create(null);

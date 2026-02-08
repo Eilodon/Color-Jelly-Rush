@@ -7,8 +7,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   PhysicsSystem,
   MovementSystem,
-  TransformStore,
-  PhysicsStore,
+  TransformStore,  // Legacy wrapper - proxies to TransformAccess
+  PhysicsStore,    // Legacy wrapper - proxies to PhysicsAccess
   InputStore,
   StateStore,
   ConfigStore,

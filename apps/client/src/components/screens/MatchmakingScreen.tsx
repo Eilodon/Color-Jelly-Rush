@@ -9,7 +9,7 @@ type Props = {
   region: string;
   status: MatchmakingStatus;
   queuedAt?: number;
-  networkStatus: 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error';
+  networkStatus: 'offline' | 'connecting' | 'online' | 'reconnecting' | 'error' | 'offline_mode';
   onRegionChange: (region: string) => void;
   onQueue: () => void;
   onCancel: () => void;

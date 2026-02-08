@@ -5,15 +5,15 @@
  * Bridges high-level entity concepts to low-level DOD storage.
  */
 
-import { MAX_ENTITIES, EntityFlags } from '../compat';
+import { MAX_ENTITIES, EntityFlags, STRIDES } from '../compat';
 import {
-    TransformStore,
-    PhysicsStore,
+    TransformAccess,   // PHASE 3: Migrated from TransformStore
+    PhysicsAccess,     // PHASE 3: Migrated from PhysicsStore
     StatsStore,
     StateStore,
     SkillStore,
     InputStore,
-    WorldState, // EIDOLON-V: Added WorldState
+    WorldState,
 } from '../compat';
 import { PLAYER_START_RADIUS } from '../config/constants';
 import type { EntityTemplate } from './BlueprintLoader';
@@ -97,10 +97,10 @@ export class EntitySpawner {
 
         // Initialize transform (random position in ring 1)
         const pos = this.randomPosInRing(1);
-        TransformStore.set(world, entityId, pos.x, pos.y, 0, 1.0);
+        TransformAccess.set(world, entityId, pos.x, pos.y, 0, 1.0, pos.x, pos.y, 0);
 
         // Initialize physics
-        PhysicsStore.set(world, entityId, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
+        PhysicsAccess.set(world, entityId, 0, 0, 0, 10, PLAYER_START_RADIUS, 0.5, 0.9);
 
         // Initialize stats
         StatsStore.set(world, entityId, 100, 100, 0, 0, 1, 1);
@@ -136,10 +136,10 @@ export class EntitySpawner {
         StateStore.setFlag(world, entityId, EntityFlags.BOSS);
 
         // Initialize transform (center position)
-        TransformStore.set(world, entityId, 0, 0, 0, 1.5);
+        TransformAccess.set(world, entityId, 0, 0, 0, 1.5, 0, 0, 0);
 
         // Initialize physics (larger radius)
-        PhysicsStore.set(world, entityId, 0, 0, 50, 80, 0.5, 0.9);
+        PhysicsAccess.set(world, entityId, 0, 0, 0, 50, 80, 0.5, 0.9);
 
         // Initialize stats with boss health
         StatsStore.set(world, entityId, options.health, options.health, 0, 0, 1, 1);
@@ -202,27 +202,31 @@ export class EntitySpawner {
             // Transform component
             if (template.components.Transform) {
                 const t = template.components.Transform;
-                TransformStore.set(
+                TransformAccess.set(
                     world,
                     entityId,
                     x + (t.x || 0),
                     y + (t.y || 0),
                     t.rotation || 0,
-                    t.scale || 1.0
+                    t.scale || 1.0,
+                    x + (t.x || 0),
+                    y + (t.y || 0),
+                    t.rotation || 0
                 );
             } else {
                 // Default transform
-                TransformStore.set(world, entityId, x, y, 0, 1.0);
+                TransformAccess.set(world, entityId, x, y, 0, 1.0, x, y, 0);
             }
 
             // Physics component
             if (template.components.Physics) {
                 const p = template.components.Physics;
-                PhysicsStore.set(
+                PhysicsAccess.set(
                     world,
                     entityId,
                     p.vx || 0,
                     p.vy || 0,
+                    0, // vRotation
                     p.mass || 10,
                     p.radius || PLAYER_START_RADIUS,
                     p.restitution || 0.5,
@@ -263,14 +267,14 @@ export class EntitySpawner {
         world.stateFlags[entityId] = 0;
 
         // Reset component data
-        const transformIdx = entityId * TransformStore.STRIDE;
-        world.transform.fill(0, transformIdx, transformIdx + TransformStore.STRIDE);
+        const transformIdx = entityId * STRIDES.TRANSFORM;
+        world.transform.fill(0, transformIdx, transformIdx + STRIDES.TRANSFORM);
 
-        const physicsIdx = entityId * PhysicsStore.STRIDE;
-        world.physics.fill(0, physicsIdx, physicsIdx + PhysicsStore.STRIDE);
+        const physicsIdx = entityId * STRIDES.PHYSICS;
+        world.physics.fill(0, physicsIdx, physicsIdx + STRIDES.PHYSICS);
 
-        const statsIdx = entityId * StatsStore.STRIDE;
-        world.stats.fill(0, statsIdx, statsIdx + StatsStore.STRIDE);
+        const statsIdx = entityId * STRIDES.STATS;
+        world.stats.fill(0, statsIdx, statsIdx + STRIDES.STATS);
 
         // Clear skill cooldown
         SkillStore.setCooldown(world, entityId, 0);

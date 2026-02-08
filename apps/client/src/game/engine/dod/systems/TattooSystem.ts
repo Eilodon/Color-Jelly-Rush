@@ -10,7 +10,8 @@ export class TattooSystem {
     const count = MAX_ENTITIES;
     const flags = w.stateFlags;
     const tFlags = TattooStore.flags;
-    const tData = TattooStore.data;
+    // EIDOLON-V FIX: Use instance-based world.tattoo instead of deprecated TattooStore.data
+    const tData = w.tattoo;
 
     for (let id = 0; id < count; id++) {
       if ((flags[id] & EntityFlags.ACTIVE) === 0) continue;

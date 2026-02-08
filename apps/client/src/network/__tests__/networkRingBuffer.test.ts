@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 // EIDOLON-V AUDIT FIX: Corrected import path (was ../game/networking/ which doesn't exist)
 import { NetworkClient } from '../NetworkClient';
-import type { GameState } from '../types';
+import type { GameState } from '../../types/state';
 
 describe('NetworkClient - Ring Buffer Optimization', () => {
   let client: NetworkClient;
@@ -114,6 +114,18 @@ describe('NetworkClient - Ring Buffer Optimization', () => {
       const clientAny = client as any;
       const now = clientAny.nowMs();
 
+      // EIDOLON-V FIX: Register player in playerMap (required by applyEntityInterpolation)
+      const mockPlayer = {
+        id: 'p1',
+        position: { x: 0, y: 0 },
+        velocity: { x: 0, y: 0 },
+        radius: 10,
+        trail: [],
+        isDead: false,
+      } as any;
+      mockGameState.players.push(mockPlayer);
+      clientAny.playerMap.set('p1', mockPlayer);
+
       // Push 3 snapshots at different times
       clientAny.snapshotBuffer[0].time = now - 300;
       clientAny.snapshotBuffer[0].players = new Map([
@@ -132,17 +144,6 @@ describe('NetworkClient - Ring Buffer Optimization', () => {
 
       clientAny.snapshotHead = 3;
       clientAny.snapshotCount = 3;
-
-      // Add a player to gamestate
-      const mockPlayer = {
-        id: 'p1',
-        position: { x: 0, y: 0 },
-        velocity: { x: 0, y: 0 },
-        radius: 10,
-        trail: [],
-        isDead: false,
-      } as any;
-      mockGameState.players.push(mockPlayer);
 
       // Interpolate at time that should be between snapshot 1 and 2
       const renderTime = now - 150; // Between 200ms and 100ms ago
@@ -167,20 +168,22 @@ describe('NetworkClient - Ring Buffer Optimization', () => {
       const clientAny = client as any;
       const now = clientAny.nowMs();
 
-      // All snapshots are in the future
-      clientAny.snapshotBuffer[0].time = now + 1000;
-      clientAny.snapshotHead = 1;
-      clientAny.snapshotCount = 1;
-
+      // EIDOLON-V FIX: Register player in playerMap (required by applySnapshot)
       const mockPlayer = {
         id: 'p1',
         position: { x: 0, y: 0 },
         velocity: { x: 0, y: 0 },
       } as any;
       mockGameState.players.push(mockPlayer);
+      clientAny.playerMap.set('p1', mockPlayer);
+
+      // All snapshots are in the future
+      clientAny.snapshotBuffer[0].time = now + 1000;
       clientAny.snapshotBuffer[0].players = new Map([
         ['p1', { x: 999, y: 999, vx: 0, vy: 0, radius: 10 }],
       ]);
+      clientAny.snapshotHead = 1;
+      clientAny.snapshotCount = 1;
 
       // Should apply most recent snapshot as fallback
       clientAny.interpolateState(mockGameState, now - 100);

@@ -25,20 +25,20 @@ import {
   MovementSystem,
   GameConfig,
   SkillSystem,
-  TransformStore,
-  PhysicsStore,
-  StateStore, // Restored
-  InputStore, // Restored
-  StatsStore, // Restored
+  TransformAccess,  // PHASE 3: Migrated from TransformStore
+  PhysicsAccess,    // PHASE 3: Migrated from PhysicsStore
+  StateStore,
+  InputStore,
+  StatsStore,
   ConfigStore,
-  StateAccess, // EIDOLON-V: Added StateAccess
-  SkillAccess, // EIDOLON-V P1: For server-authoritative cooldown check
+  StateAccess,
+  SkillAccess,
   checkRingTransition,
   calcMatchPercentFast,
   updateWaveSpawner,
   WAVE_CONFIG,
   type IFood,
-  WorldState, // EIDOLON-V FIX: Removed invalid 'Type' import
+  WorldState,
 } from '@cjr/engine';
 // Import EntityFlags from engine root (exported via compat/generated)
 import { EntityFlags } from '@cjr/engine';
@@ -180,7 +180,10 @@ export class GameRoom extends Room<GameRoomState> {
     logger.info('GameRoom created!', { options });
 
     // EIDOLON-V P6 FIX: Instantiate WorldState per room
-    this.world = new WorldState();
+    // EIDOLON-V MEMORY OPTIMIZATION: Limit to 1000 entities per room
+    // (50 players + ~500 food + ~100 projectiles + buffer = ~1000)
+    // This reduces memory from ~2.3MB to ~230KB per room (90% reduction)
+    this.world = new WorldState({ maxEntities: 1000 });
 
     // EIDOLON-V P4 FIX: Periodic Cleanup Interval
     this.clock.setInterval(() => {
@@ -322,11 +325,11 @@ export class GameRoom extends Room<GameRoomState> {
 
     // Initialize DOD Component Stores
     // Transform: [x, y, rotation, scale, prevX, prevY, prevRotation, _pad]
-    TransformStore.set(this.world, entityIndex, x, y, angle, 1.0);
+    TransformAccess.set(this.world, entityIndex, x, y, angle, 1.0, x, y, angle);
 
     // Physics: [vx, vy, vRotation, mass, radius, restitution, friction, _pad]
     const mass = Math.PI * PLAYER_START_RADIUS * PLAYER_START_RADIUS;
-    PhysicsStore.set(this.world, entityIndex, 0, 0, mass, PLAYER_START_RADIUS, 0.5, 0.93);
+    PhysicsAccess.set(this.world, entityIndex, 0, 0, 0, mass, PLAYER_START_RADIUS, 0.5, 0.93);
 
     // Stats: [currentHealth, maxHealth, score, matchPercent, defense, damageMultiplier, _pad, _pad]
     StatsStore.set(this.world, entityIndex, 100, 100, 0, player.matchPercent, 1, 1);
@@ -506,12 +509,12 @@ export class GameRoom extends Room<GameRoomState> {
       const ringEntity = {
         physicsIndex: entityIndex,
         position: {
-          x: TransformStore.getX(this.world, entityIndex),
-          y: TransformStore.getY(this.world, entityIndex),
+          x: TransformAccess.getX(this.world, entityIndex),
+          y: TransformAccess.getY(this.world, entityIndex),
         },
         velocity: {
-          x: PhysicsStore.getVelocityX(this.world, entityIndex),
-          y: PhysicsStore.getVelocityY(this.world, entityIndex),
+          x: PhysicsAccess.getVx(this.world, entityIndex),
+          y: PhysicsAccess.getVy(this.world, entityIndex),
         },
         ring: player.ring as 1 | 2 | 3,
         matchPercent: player.matchPercent,
@@ -536,8 +539,10 @@ export class GameRoom extends Room<GameRoomState> {
 
       // Sync position/velocity back from ring logic
       if (ringEntity.physicsIndex !== undefined) {
-        TransformStore.setPosition(this.world, entityIndex, ringEntity.position.x, ringEntity.position.y);
-        PhysicsStore.setVelocity(this.world, entityIndex, ringEntity.velocity.x, ringEntity.velocity.y);
+        TransformAccess.setX(this.world, entityIndex, ringEntity.position.x);
+        TransformAccess.setY(this.world, entityIndex, ringEntity.position.y);
+        PhysicsAccess.setVx(this.world, entityIndex, ringEntity.velocity.x);
+        PhysicsAccess.setVy(this.world, entityIndex, ringEntity.velocity.y);
       }
     });
   }
@@ -643,8 +648,8 @@ export class GameRoom extends Room<GameRoomState> {
     }
 
     // Initialize DOD stores
-    TransformStore.set(this.world, entityIndex, x, y, 0, 1.0);
-    PhysicsStore.set(this.world, entityIndex, 0, 0, 100, PLAYER_START_RADIUS);
+    TransformAccess.set(this.world, entityIndex, x, y, 0, 1.0, x, y, 0);
+    PhysicsAccess.set(this.world, entityIndex, 0, 0, 0, 100, PLAYER_START_RADIUS, 0.5, 0.9);
     StatsStore.set(this.world, entityIndex, 100, 100, 0, 0, 1, 1);
     ConfigStore.setMaxSpeed(this.world, entityIndex, GameRoom.MAX_SPEED_BASE * 0.8); // Bots slightly slower
     StateAccess.activate(this.world, entityIndex);
@@ -790,8 +795,10 @@ export class GameRoom extends Room<GameRoomState> {
 
       // Sync respawn to DOD stores
       if (entityIndex !== undefined) {
-        TransformStore.setPosition(this.world, entityIndex, x, y);
-        PhysicsStore.setVelocity(this.world, entityIndex, 0, 0);
+        TransformAccess.setX(this.world, entityIndex, x);
+        TransformAccess.setY(this.world, entityIndex, y);
+        PhysicsAccess.setVx(this.world, entityIndex, 0);
+        PhysicsAccess.setVy(this.world, entityIndex, 0);
         StatsStore.setCurrentHealth(this.world, entityIndex, 100);
       }
 

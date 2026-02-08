@@ -9,4 +9,4 @@ export type {
   ShapeId,
 } from '@cjr/engine';
 
-export { TattooId, MutationTier } from '@cjr/engine';
+export { TattooId } from '@cjr/engine';
